@@ -13,6 +13,8 @@
 (unwind-protect
      (progn
        (write-line "protected")
+       (py-run-simple-string "x = 72")
+       (py-run-simple-string "print(x + 5)")
        (py-run-simple-string "print(3 + 5)"))
   (progn
     (py-finalize)
