@@ -8,6 +8,8 @@ Use the built-in Python AST parsing module. Invoke Python from Common Lisp (SBCL
 
 From https://www.linuxjournal.com/article/8497
 
+Docs are here: https://docs.python.org/3/library/ast.html
+
 Run `python-config` for compile/link flags if needed.
 
 ```
