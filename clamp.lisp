@@ -1,8 +1,10 @@
 #!/usr/bin/sbcl --script
 
+(require :uiop)
+
 (defpackage "CLAMP"
-  (:use "SB-ALIEN"))
-				;
+  (:use "SB-ALIEN" "UIOP"))
+
 (load-shared-object "/usr/lib/python3.12/config-3.12-x86_64-linux-gnu/libpython3.12.so")
 
 (define-alien-routine ("Py_Initialize" py-initialize) void)
@@ -13,9 +15,12 @@
   ;; Demonstration that we can access command line arguments from
   ;; when the Lisp core file is executed. The output changes with
   ;; each invocation.
-  (princ "Command line arguments: ")
-  (princ *posix-argv*)
-  (write-line "")
+  (let ((args (uiop:command-line-arguments)))
+    (if (> (length args) 0)
+	(progn
+	  (princ "Command line arguments: ")
+	  (princ args)
+	  (write-line ""))))
 
   ;; Start up Python inside this process and execute some Python code.
   (py-initialize)
