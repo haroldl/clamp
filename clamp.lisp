@@ -10,6 +10,14 @@
 (define-alien-routine ("PyRun_SimpleString" py-run-simple-string) int (str c-string))
 
 (defun main ()
+  ;; Demonstration that we can access command line arguments from
+  ;; when the Lisp core file is executed. The output changes with
+  ;; each invocation.
+  (princ "Command line arguments: ")
+  (princ *posix-argv*)
+  (write-line "")
+
+  ;; Start up Python inside this process and execute some Python code.
   (py-initialize)
   (unwind-protect
        (progn
