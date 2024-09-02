@@ -5,6 +5,8 @@
 (defpackage "CLAMP"
   (:use "SB-ALIEN" "UIOP"))
 
+
+;; https://docs.python.org/3/c-api/veryhigh.html
 (load-shared-object "/usr/lib/python3.12/config-3.12-x86_64-linux-gnu/libpython3.12.so")
 
 (define-alien-routine ("Py_Initialize" py-initialize) void)
@@ -12,27 +14,39 @@
 (define-alien-routine ("PyRun_SimpleString" py-run-simple-string) int (str c-string))
 
 (defun main ()
-  ;; Demonstration that we can access command line arguments from
-  ;; when the Lisp core file is executed. The output changes with
-  ;; each invocation.
-  (let ((args (uiop:command-line-arguments)))
+  (let ((interactive t) (done nil) (args (uiop:command-line-arguments)))
+    ;; Demonstration that we can access command line arguments from
+    ;; when the Lisp core file is executed. The output changes with
+    ;; each invocation.
     (if (> (length args) 0)
 	(progn
+	  (setf interactive nil)
 	  (princ "Command line arguments: ")
 	  (princ args)
-	  (write-line ""))))
+	  (write-line "")))
 
-  ;; Start up Python inside this process and execute some Python code.
-  (py-initialize)
-  (unwind-protect
-       (progn
-	 (write-line "protected")
-	 (py-run-simple-string "x = 72")
-	 (py-run-simple-string "print(x + 5)")
-	 (py-run-simple-string "print(3 + 5)"))
-    (progn
-      (py-finalize)
-      (write-line "cleaned up"))))
+    ;; TODO: non-interactive mode: use PyRun_File[Ex][Flags] to run files from the command line params.
+
+    ;; Start up Python inside this process and execute some Python code.
+    (py-initialize)
+    (unwind-protect
+	 (progn
+	   (write-line "protected")
+	   (py-run-simple-string "x = 72")
+	   (py-run-simple-string "print(x + 5)")
+	   (py-run-simple-string "print(3 + 5)")
+	   (loop while (not done)
+		 do (progn
+		      (format t ">>> ")
+		      (finish-output)
+		      (let ((code (read-line)))
+			(if (string-equal code "quit")
+			    (setf done t)
+			    ;; TODO: switch to PyRun_StringFlags which returns the result and print it out.
+			    (py-run-simple-string code))))))
+      (progn
+	(py-finalize)
+	(write-line "cleaned up")))))
 
 ;; Save a core file named clamp which, when run, will
 ;; execute the main function above. It can be run as a
