@@ -13,6 +13,9 @@
 (define-alien-routine ("Py_Finalize" py-finalize) void)
 (define-alien-routine ("PyRun_SimpleString" py-run-simple-string) int (str c-string))
 
+;; Read in the Python -> Lisp compiler so that it will be in memory, even in the saved lisp core.
+(defvar *clamp-compiler-source* (uiop:read-file-string "clamp_compiler.py"))
+
 (defun main ()
   (let ((interactive t) (done nil) (args (uiop:command-line-arguments)))
     ;; Demonstration that we can access command line arguments from
@@ -32,6 +35,11 @@
     (unwind-protect
 	 (progn
 	   (write-line "protected")
+
+	   ;; Someday clamp will be self-hosting, but not today, so...
+	   ;; Send the compiler code to the Python system to compile the compiler :-P
+	   (py-run-simple-string *clamp-compiler-source*)
+
 	   (py-run-simple-string "x = 72")
 	   (py-run-simple-string "print(x + 5)")
 	   (py-run-simple-string "print(3 + 5)")

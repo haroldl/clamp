@@ -1,4 +1,4 @@
-clamp: clamp.lisp
+clamp: clamp.lisp clamp_compiler.py
 	./clamp.lisp
 
 clean:
