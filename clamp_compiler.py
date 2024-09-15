@@ -20,9 +20,12 @@ def codegen(node, top_level_stmt = False, indent_level = 0):
             raise Exception("TODO: destructuring bind")
     elif typ == ast.FunctionDef:
         params = codegen_args(node.args)
-        hed = "(setf #'" + node.name + " (" + params + ")\n"
+        # Python is a Lisp-1, Common Lisp is a Lisp-2
+        # For compiled Python code running in SBCL, we'll put functions and other variables in the
+        # same namespace which means we need to use funcall/apply to invoke compiled Python functions.
+        hed = "(setf " + node.name + " (lambda (" + params + ")\n"
         bod = "\n".join([codegen(n, top_level_stmt, indent_level + 2) for n in node.body])
-        return hed + bod + ")\n"
+        return hed + bod + "))\n"
     elif typ == ast.BinOp:
         return prefix + "(" + codegen(node.op) + " " + codegen(node.left) + " " + codegen(node.right) + ")"
     elif typ == ast.Return:
