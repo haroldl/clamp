@@ -2,9 +2,12 @@
 
 (require :uiop)
 
-(defpackage "CLAMP"
-  (:use "SB-ALIEN" "UIOP"))
+;; Define the __builtins__ module.
+(load "clamp-builtins.lisp")
 
+;; This Lisp package models the top level nameless Python module.
+(defpackage "CLAMP"
+  (:use "SB-ALIEN" "UIOP" "CLAMP.__builtins__"))
 
 ;; https://docs.python.org/3/c-api/veryhigh.html
 (load-shared-object "/usr/lib/python3.12/config-3.12-x86_64-linux-gnu/libpython3.12.so")
@@ -50,7 +53,8 @@
 		      (let ((code (read-line)))
 			(if (string-equal code "quit")
 			    (setf done t)
-			    ;; TODO: switch to PyRun_StringFlags which returns the result and print it out.
+			    ;; TODO: switch to PyRun_StringFlags which
+			    ;; returns the result and print it out.
 			    (py-run-simple-string code))))))
       (progn
 	(py-finalize)
