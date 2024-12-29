@@ -1,6 +1,17 @@
 clamp
 =====
 
+TL;DR
+-----
+
+`./clamp_driver.py some_file.py` : Compile `some_file.py` from Python 3 to Common Lisp and print out the resulting code.
+
+`make clean; make` : Ye olde Makefile based build :-P
+
+`./clamp` : Interactive mode (kinda wonky at the moment)
+
+`./clamp some_file.py` : Run `some_file.py`.
+
 Parsing Python
 --------------
 

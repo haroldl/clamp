@@ -1,7 +1,5 @@
-
-#
-# Python to Common Lisp Compiler
-#
+""" Python to Common Lisp Compiler
+"""
 
 import ast
 import sys
