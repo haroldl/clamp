@@ -76,7 +76,7 @@
     ;; each invocation.
     (if (> (length args) 0)
 	(progn
-	  (setf done t)
+	  (setf interactive nil)
 	  (princ "Command line arguments: ")
 	  (princ args)
 	  (write-line "")))
@@ -106,25 +106,36 @@
 		      ;;(write-line (python-to-lisp-string py-globals))
 		      ;;(write-line "Locals:")
 		      ;;(write-line (python-to-lisp-string py-locals))
-		      (format t ">>> ")
-		      (finish-output)
-		      (let ((code (read-line *standard-input* nil)))
-			(if (or (not code) (string-equal code "quit"))
-			    (setf done t)
+		      (let ((code nil))
+			(if interactive
+			    ;; Read input from stdin with a prompt:
 			    (progn
-			      ;; Set a local variable to hold the code to be compiled:
-			      (py-dict-set-item py-locals (py-unicode-from-string "python_source_to_compile") (py-unicode-from-string code))
-			      ;;(py-run-simple-string code)
-			      (let ((result (py-run-string "compile(python_source_to_compile)" py-eval-input py-globals py-locals)))
-				(if (py-err-occurred)
-				    (py-err-print))
-				(let ((generated-lisp-code (python-to-lisp-string result)))
-				  (write-line "Generated Lisp code:")
-				  (write-line generated-lisp-code)
-				  (print
-				   (eval
-				    (read-from-string generated-lisp-code)))
-				  (write-line "")))))))))
+			      (format t ">>> ")
+			      (finish-output)
+			      (setf code (read-line *standard-input* nil))
+			      (if (or (not code) (string-equal code "quit"))
+				  (setf done t)))
+			    ;; Read input from the filename on the command line:
+			    (progn
+			      (write-line (concatenate 'string "Reading code from " (car args)))
+			      (setf code (uiop:read-file-string (car args)))
+			      (write-line code)
+			      (setf done t)))
+
+			;; Set a local variable to hold the code to be compiled:
+			(py-dict-set-item py-locals (py-unicode-from-string "python_source_to_compile") (py-unicode-from-string code))
+
+			;; Invoke the Python code to compile the input Python code to Common Lisp:
+			(let ((result (py-run-string "compile(python_source_to_compile)" py-eval-input py-globals py-locals)))
+			  (if (py-err-occurred)
+			      (py-err-print))
+			  (let ((generated-lisp-code (python-to-lisp-string result)))
+			    (write-line "Generated Lisp code:")
+			    (write-line generated-lisp-code)
+			    (print
+			     (eval
+			      (read-from-string generated-lisp-code)))
+			    (write-line "")))))))
       (progn
 	(py-finalize)))))
 
