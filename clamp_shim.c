@@ -59,21 +59,32 @@ int clamp_shim_print_exception() {
   }
 }
 
-PyObject * clamp_shim_eval_python(const char *python_code) {
+/*
+  Run some Python code for building state in the globals and locals, e.g. define the
+  functions for the compiler.
+ */
+void clamp_shim_run_python(const char *python_code) {
   /*
     Use Py_single_input instead of Py_eval_input because the former persists the state
     between invocations of PyRun_String in the locals and the latter discards the state.
+    But in this case, it always just returns the Python None value.
    */
-  return PyRun_String(python_code, Py_single_input, clamp_python_globals, clamp_python_locals);
+  PyRun_String(python_code, Py_single_input, clamp_python_globals, clamp_python_locals);
+}
+
+/*
+  Evaluate an expression and return the value, e.g. call the compiler to compile some
+  Python code to Common Lisp and return the output code.
+ */
+PyObject * clamp_shim_eval_python(const char *python_code) {
+  /*
+    Py_eval_input does not persist the state but does return the evaluated value.
+   */
+  return PyRun_String(python_code, Py_eval_input, clamp_python_globals, clamp_python_locals);
 }
 
 /*
   For now let's just try stuff out...
-
-  TODO:
-  - use PyRun_SimpleString to define a function
-  - use PyRun_String to call the function and save the output
-  - convert the result to a C string and printf it to stdout
  */
 int main() {
   clamp_shim_init();
@@ -90,32 +101,24 @@ int main() {
 
   PyObject *pobj = NULL;
 
-  pobj = clamp_shim_eval_python("def f(x):\n    return (2 * x + 1)");
-  if (!clamp_shim_print_exception()) {
-    printf("All good!\n\n");
-  } else {
+  clamp_shim_run_python("def f(x):\n    return (2 * x + 1)");
+  if (clamp_shim_print_exception()) {
+    return 1;
+  }
+
+  pobj = clamp_shim_eval_python("f(41 + 2)");
+  if (clamp_shim_print_exception()) {
     return 1;
   }
 
   clamp_shim_debug_print("pobj1", pobj);
 
-  pobj = clamp_shim_eval_python("f(41 + 2)");
-  if (!clamp_shim_print_exception()) {
-    printf("All good!\n\n");
-  } else {
+  pobj = clamp_shim_eval_python("f(42*2)");
+  if (clamp_shim_print_exception()) {
     return 1;
   }
 
   clamp_shim_debug_print("pobj2", pobj);
-
-  pobj = clamp_shim_eval_python("41 + 2");
-  if (!clamp_shim_print_exception()) {
-    printf("All good!\n\n");
-  } else {
-    return 1;
-  }
-
-  clamp_shim_debug_print("pobj3", pobj);
 
   /* Call Py_DECREF(x) an any values returned from Python when done with the value. */
   /* TODO: check the reference count to see if it is 0 */
