@@ -36,11 +36,13 @@ def codegen_function(node, top_level_stmt):
     return hed + bod + "))\n"
 
 
+codegen_handlers[ast.Expr] = lambda node, top_level_stmt: codegen(node.value, top_level_stmt)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.FunctionDef] = codegen_function
 codegen_handlers[ast.Name] = lambda node, _: node.id
 codegen_handlers[ast.Module] = lambda node, _: "\n".join([codegen(n) for n in node.body])
 codegen_handlers[ast.Add] = lambda node, _: "+"
+codegen_handlers[ast.Mult] = lambda node, _: "*"
 codegen_handlers[ast.BinOp] = lambda node, _: "(" + codegen(node.op) + " " + codegen(node.left) + " " + codegen(node.right) + ")"
 codegen_handlers[ast.Constant] = lambda node, _: codegen(node.value)
 codegen_handlers[ast.Return] = lambda node, top_level_stmt: codegen(node.value, top_level_stmt)
@@ -59,6 +61,7 @@ def codegen_args(args):
 
 
 def compile(code):
+    print("Preparing to compile:", code)
     code_tree = ast.parse(code)
     return codegen(code_tree, True)
 

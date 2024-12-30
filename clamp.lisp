@@ -22,13 +22,49 @@
 
 (define-alien-routine ("Py_Initialize" py-initialize) void)
 (define-alien-routine ("Py_Finalize" py-finalize) void)
+
 (define-alien-routine ("PyRun_SimpleString" py-run-simple-string) int (str c-string))
 
 (define-alien-routine ("PyDict_New" py-new-dict) (* t))
 
+;; https://docs.python.org/3/c-api/unicode.html
+(define-alien-routine ("PyUnicode_FromString" py-unicode-from-string) (* t) (input c-string))
+
+;; The int* is an output parameter for the string length which we don't need;
+;; it is safe to just pass in nil.
+(define-alien-routine ("PyUnicode_AsUTF8AndSize" py-value-to-utf8) c-string
+  (python-value (* t)) (output-size (* int)))
+
+;; Call the str() function on a value to convert it to a Python string value.
+(define-alien-routine ("PyObject_Str" py-str) (* t) (python-object (* t)))
+
+(defun python-to-lisp-string (python-value)
+  (py-value-to-utf8 (py-str python-value) nil))
+
 ;; PyObject *PyRun_String(const char *str, int start, PyObject *globals, PyObject *locals)
+;; The `start` param should be one of the constants below:
+;; (py-single-input, py-file-input, py-eval-input)
 (define-alien-routine ("PyRun_String" py-run-string) (* t)
   (str c-string) (start int) (globals (* t)) (locals (* t)))
+
+;; Constants from the Python.h include file and its friends that we need:
+(defconstant py-single-input 256)
+(defconstant py-file-input 257)
+(defconstant py-eval-input 258)
+
+(define-alien-routine ("PyTuple_New" py-tuple-new) (* t) (arity int))
+(define-alien-routine ("PyTuple_SetItem" py-tuple-set-item) int (tuple (* t)) (position int) (value (* t)))
+
+(define-alien-routine ("PyObject_Call" py-call) (* t) (callable (* t)) (args (* t)) (kwargs (* t)))
+
+;; https://docs.python.org/3/c-api/dict.html
+(define-alien-routine ("PyDict_SetItem" py-dict-set-item) int (dict (* t)) (key (* t)) (value (* t)))
+(define-alien-routine ("PyDict_Merge" py-dict-merge) int (target-dict (* t)) (source-dict (* t)) (override int))
+
+;; Exception handling
+;; https://docs.python.org/3/c-api/exceptions.html
+(define-alien-routine ("PyErr_Occurred" py-err-occurred) (* t))
+(define-alien-routine ("PyErr_Print" py-err-print) void)
 
 ;; Read in the Python -> Lisp compiler so that it will be in memory, even in the saved lisp core.
 (defvar *clamp-compiler-source* (uiop:read-file-string "clamp_compiler.py"))
@@ -50,30 +86,45 @@
     ;; Start up Python inside this process and execute some Python code.
     (py-initialize)
     (unwind-protect
-	 (progn
+	 (let ((py-globals (py-new-dict))
+	       (py-locals (py-new-dict)))
 	   ;;(write-line "protected")
-
-	   ;; Need to wait until after py-initialize to start making calls:
-	   (defvar *py-empty-dict* (py-new-dict))
-	   (defun py-eval (code)
-	     (py-run-string code 0 *py-empty-dict* *py-empty-dict*))
-
-	   (py-run-simple-string "x = 42")
 
 	   ;; Someday clamp will be self-hosting, but not today, so...
 	   ;; Send the compiler code to the Python system to compile the compiler :-P
-	   (py-run-simple-string *clamp-compiler-source*)
+	   (py-run-string *clamp-compiler-source* py-file-input py-globals py-locals)
+	   (if (py-err-occurred)
+	       (py-err-print))
+
+	   ;; Copy all of the locals into the globals for future use:
+	   (py-dict-merge py-globals py-locals 1)
+	   (setf py-locals (py-new-dict))
 
 	   (loop while (not done)
 		 do (progn
+		      ;;(write-line "Globals:")
+		      ;;(write-line (python-to-lisp-string py-globals))
+		      ;;(write-line "Locals:")
+		      ;;(write-line (python-to-lisp-string py-locals))
 		      (format t ">>> ")
 		      (finish-output)
 		      (let ((code (read-line *standard-input* nil)))
 			(if (or (not code) (string-equal code "quit"))
 			    (setf done t)
-			    ;; TODO: switch to using py-eval to invoke the compiler
-			    ;;       and get back Common Lisp code, then read/eval it.
-			    (py-run-simple-string code))))))
+			    (progn
+			      ;; Set a local variable to hold the code to be compiled:
+			      (py-dict-set-item py-locals (py-unicode-from-string "python_source_to_compile") (py-unicode-from-string code))
+			      ;;(py-run-simple-string code)
+			      (let ((result (py-run-string "compile(python_source_to_compile)" py-eval-input py-globals py-locals)))
+				(if (py-err-occurred)
+				    (py-err-print))
+				(let ((generated-lisp-code (python-to-lisp-string result)))
+				  (write-line "Generated Lisp code:")
+				  (write-line generated-lisp-code)
+				  (print
+				   (eval
+				    (read-from-string generated-lisp-code)))
+				  (write-line "")))))))))
       (progn
 	(py-finalize)))))
 
