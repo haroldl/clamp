@@ -31,6 +31,8 @@ void clamp_shim_init() {
 
 void clamp_shim_shutdown() {
   Py_Finalize();
+  clamp_python_globals = NULL;
+  clamp_python_locals = NULL;
 }
 
 void clamp_shim_debug_print(const char *label, PyObject *pobj) {
@@ -113,12 +115,32 @@ int main() {
 
   clamp_shim_debug_print("pobj1", pobj);
 
+  if (pobj != NULL) {
+    /*
+      This reference count is very large, indicating it is
+      an immortal value - a numeric constant in this case.
+
+      https://docs.python.org/3/c-api/refcounting.html
+     */
+    printf("pobj reference count = %ld\n\n", Py_REFCNT(pobj));
+  }
+
   pobj = clamp_shim_eval_python("f(42*2)");
   if (clamp_shim_print_exception()) {
     return 1;
   }
 
   clamp_shim_debug_print("pobj2", pobj);
+
+  pobj = clamp_shim_eval_python("\"hello\" + \" world\"");
+  if (clamp_shim_print_exception()) {
+    return 1;
+  }
+
+  clamp_shim_debug_print("pobj3", pobj);
+  printf("pobj reference count = %ld\n\n", Py_REFCNT(pobj));
+  /* The returned value is a newly created string and we need to remove our reference to it: */
+  Py_DECREF(pobj);
 
   /* Call Py_DECREF(x) an any values returned from Python when done with the value. */
   /* TODO: check the reference count to see if it is 0 */
