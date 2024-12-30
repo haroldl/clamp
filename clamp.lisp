@@ -100,15 +100,15 @@
   ;; Invoke the Python code to compile the input Python code to Common Lisp:
   (let ((result (py-run-string "compile(python_source_to_compile)" py-eval-input py-globals py-locals)))
     (if (py-err-occurred)
-	(py-err-print))
-    (if result
-	(let ((generated-lisp-code (python-to-lisp-string result)))
-	  (write-line "Generated Lisp code:")
-	  (write-line generated-lisp-code)
-	  (print
-	   (eval
-	    (read-from-string generated-lisp-code)))
-	  (write-line "")))))
+	(py-err-print)
+	(if result
+	    (let ((generated-lisp-code (python-to-lisp-string result)))
+	      (write-line "Generated Lisp code:")
+	      (write-line generated-lisp-code)
+	      (print
+	       (eval
+		(read-from-string generated-lisp-code)))
+	      (write-line ""))))))
 
 (defun main ()
   (let ((interactive t) (done nil) (args (uiop:command-line-arguments)))
