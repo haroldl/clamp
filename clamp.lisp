@@ -50,6 +50,10 @@
 (define-alien-routine ("PyRun_String" py-run-string) (* t)
   (str c-string) (start int) (globals (* t)) (locals (* t)))
 
+;; Need to get a reference after initializing Python.
+;; For some reason, (define-alien-variable "Py_None" (* t)) does not work.
+(defvar *py-none* nil)
+
 ;; Constants from the Python.h include file and its friends that we need:
 (defconstant py-single-input 256)
 (defconstant py-file-input 257)
@@ -100,15 +104,17 @@
   ;; Invoke the Python code to compile the input Python code to Common Lisp:
   (let ((result (py-run-string "compile(python_source_to_compile)" py-eval-input py-globals py-locals)))
     (if (py-err-occurred)
-	(py-err-print)
-	(if result
-	    (let ((generated-lisp-code (python-to-lisp-string result)))
-	      (write-line "Generated Lisp code:")
-	      (write-line generated-lisp-code)
-	      (print
-	       (eval
-		(read-from-string generated-lisp-code)))
-	      (write-line ""))))))
+	(py-err-print))
+    (if (and result (not (eq *py-none* result)))
+	(let ((generated-lisp-code (python-to-lisp-string result)))
+	  (if (not (string= "<NULL>" generated-lisp-code))
+	      (progn
+		(write-line "Generated Lisp code:")
+		(write-line generated-lisp-code)
+		(print
+		 (eval
+		  (read-from-string generated-lisp-code)))
+		(write-line "")))))))
 
 (defun main ()
   (let ((interactive t) (done nil) (args (uiop:command-line-arguments)))
@@ -127,6 +133,8 @@
     (unwind-protect
 	 (let ((py-globals (py-new-dict))
 	       (py-locals (py-new-dict)))
+	   (setf *py-none* (py-run-string "None" py-eval-input py-globals py-locals))
+	   ;;(write-line (python-to-lisp-string *py-none*))
 
 	   ;; Someday clamp will be self-hosting, but not today, so...
 	   ;; Send the compiler code to the Python system to compile the compiler :-P
@@ -146,7 +154,7 @@
 			  (progn
 			    (setf code new-code)
 			    (setf done new-done)))
-			(if code
+			(if (and code (not done))
 			    (clamp-compile-and-run code py-globals py-locals))))))
       (progn
 	(py-finalize)))))
