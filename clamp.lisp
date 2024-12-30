@@ -12,6 +12,9 @@
 ;; https://docs.python.org/3/c-api/veryhigh.html
 (load-shared-object "/usr/lib/python3.12/config-3.12-x86_64-linux-gnu/libpython3.12.so")
 
+;; Read in the Python -> Lisp compiler so that it will be in memory, even in the saved lisp core.
+(defconstant *clamp-compiler-source* (uiop:read-file-string "clamp_compiler.py"))
+
 ;;
 ;; Map the Python C API into Lisp:
 ;;
@@ -66,8 +69,46 @@
 (define-alien-routine ("PyErr_Occurred" py-err-occurred) (* t))
 (define-alien-routine ("PyErr_Print" py-err-print) void)
 
-;; Read in the Python -> Lisp compiler so that it will be in memory, even in the saved lisp core.
-(defvar *clamp-compiler-source* (uiop:read-file-string "clamp_compiler.py"))
+(defun read-code (interactive filename)
+  (let ((code nil) (done nil))
+    (if interactive
+	;; Read input from stdin with a prompt:
+	(progn
+	  (format t ">>> ")
+	  (finish-output)
+	  (setf code (read-line *standard-input* nil))
+	  (if (or (not code) (string-equal code "quit"))
+	      (setf done t)))
+	;; Read input from the filename on the command line:
+	(progn
+	  (write-line (concatenate 'string "Reading code from " filename))
+	  (setf code (uiop:read-file-string filename))
+	  (write-line code)
+	  (setf done t)))
+    (list code done)))
+
+(defun debug-print-globals-and-locals (py-globals py-locals)
+  (write-line "Globals:")
+  (write-line (python-to-lisp-string py-globals))
+  (write-line "Locals:")
+  (write-line (python-to-lisp-string py-locals)))
+
+(defun clamp-compile-and-run (python-code py-globals py-locals)
+  ;; Set a local variable to hold the code to be compiled:
+  (py-dict-set-item py-locals (py-unicode-from-string "python_source_to_compile") (py-unicode-from-string python-code))
+
+  ;; Invoke the Python code to compile the input Python code to Common Lisp:
+  (let ((result (py-run-string "compile(python_source_to_compile)" py-eval-input py-globals py-locals)))
+    (if (py-err-occurred)
+	(py-err-print))
+    (if result
+	(let ((generated-lisp-code (python-to-lisp-string result)))
+	  (write-line "Generated Lisp code:")
+	  (write-line generated-lisp-code)
+	  (print
+	   (eval
+	    (read-from-string generated-lisp-code)))
+	  (write-line "")))))
 
 (defun main ()
   (let ((interactive t) (done nil) (args (uiop:command-line-arguments)))
@@ -81,14 +122,11 @@
 	  (princ args)
 	  (write-line "")))
 
-    ;; TODO: non-interactive mode: use PyRun_File[Ex][Flags] to run files from the command line params.
-
     ;; Start up Python inside this process and execute some Python code.
     (py-initialize)
     (unwind-protect
 	 (let ((py-globals (py-new-dict))
 	       (py-locals (py-new-dict)))
-	   ;;(write-line "protected")
 
 	   ;; Someday clamp will be self-hosting, but not today, so...
 	   ;; Send the compiler code to the Python system to compile the compiler :-P
@@ -102,40 +140,14 @@
 
 	   (loop while (not done)
 		 do (progn
-		      ;;(write-line "Globals:")
-		      ;;(write-line (python-to-lisp-string py-globals))
-		      ;;(write-line "Locals:")
-		      ;;(write-line (python-to-lisp-string py-locals))
 		      (let ((code nil))
-			(if interactive
-			    ;; Read input from stdin with a prompt:
-			    (progn
-			      (format t ">>> ")
-			      (finish-output)
-			      (setf code (read-line *standard-input* nil))
-			      (if (or (not code) (string-equal code "quit"))
-				  (setf done t)))
-			    ;; Read input from the filename on the command line:
-			    (progn
-			      (write-line (concatenate 'string "Reading code from " (car args)))
-			      (setf code (uiop:read-file-string (car args)))
-			      (write-line code)
-			      (setf done t)))
-
-			;; Set a local variable to hold the code to be compiled:
-			(py-dict-set-item py-locals (py-unicode-from-string "python_source_to_compile") (py-unicode-from-string code))
-
-			;; Invoke the Python code to compile the input Python code to Common Lisp:
-			(let ((result (py-run-string "compile(python_source_to_compile)" py-eval-input py-globals py-locals)))
-			  (if (py-err-occurred)
-			      (py-err-print))
-			  (let ((generated-lisp-code (python-to-lisp-string result)))
-			    (write-line "Generated Lisp code:")
-			    (write-line generated-lisp-code)
-			    (print
-			     (eval
-			      (read-from-string generated-lisp-code)))
-			    (write-line "")))))))
+			(destructuring-bind (new-code new-done)
+			    (read-code interactive (car args))
+			  (progn
+			    (setf code new-code)
+			    (setf done new-done)))
+			(if code
+			    (clamp-compile-and-run code py-globals py-locals))))))
       (progn
 	(py-finalize)))))
 
