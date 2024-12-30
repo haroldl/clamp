@@ -82,7 +82,9 @@
 	  (finish-output)
 	  (setf code (read-line *standard-input* nil))
 	  (if (or (not code) (string-equal code "quit"))
-	      (setf done t)))
+	      (progn
+		(setf done t)
+		(setf code nil))))
 	;; Read input from the filename on the command line:
 	(progn
 	  (write-line (concatenate 'string "Reading code from " filename))
@@ -154,7 +156,7 @@
 			  (progn
 			    (setf code new-code)
 			    (setf done new-done)))
-			(if (and code (not done))
+			(if code
 			    (clamp-compile-and-run code py-globals py-locals))))))
       (progn
 	(py-finalize)))))
