@@ -12,6 +12,24 @@ TL;DR
 
 `./clamp some_file.py` : Run `some_file.py`.
 
+```mermaid
+sequenceDiagram
+  participant user
+
+  box clamp process
+  participant clamp as clamp (Common Lisp)
+  participant comp as compiler (embedded Python)
+  participant eval as Lisp eval
+  end
+
+  user->>clamp: f(x)
+  clamp->>comp: compile("f(x)")
+  comp->>clamp: (funcall f x)
+  clamp->>eval: (funcall f x)
+  eval->>clamp: 42
+  clamp->>user: 42
+```
+
 Parsing Python
 --------------
 
