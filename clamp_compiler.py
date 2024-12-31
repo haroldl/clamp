@@ -14,7 +14,7 @@ def codegen(node, top_level_stmt = False):
     if typ in codegen_handlers:
         return codegen_handlers[typ](node, top_level_stmt)
     else:
-        raise Exception("Do not have support to codegen " + str(type(node)) + " node with value " + str(node))
+        raise Exception("Do not have support to codegen " + str(type(node)) + " node with value " + ast.dump(node))
 
 
 def codegen_assign(node, top_level_stmt):
@@ -36,9 +36,15 @@ def codegen_function(node, top_level_stmt):
     return hed + bod + "))\n"
 
 
+def codegen_funcall(node, top_level_stmt):
+    args_str = " ".join([codegen(a, False) for a in node.args])
+    return "(funcall " + codegen(node.func, top_level_stmt) + " " + args_str + ")"
+
+
 codegen_handlers[ast.Expr] = lambda node, top_level_stmt: codegen(node.value, top_level_stmt)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.FunctionDef] = codegen_function
+codegen_handlers[ast.Call] = codegen_funcall
 codegen_handlers[ast.Name] = lambda node, _: node.id
 codegen_handlers[ast.Module] = lambda node, _: "\n".join([codegen(n) for n in node.body])
 codegen_handlers[ast.Add] = lambda node, _: "+"
@@ -47,6 +53,7 @@ codegen_handlers[ast.BinOp] = lambda node, _: "(" + codegen(node.op) + " " + cod
 codegen_handlers[ast.Constant] = lambda node, _: codegen(node.value)
 codegen_handlers[ast.Return] = lambda node, top_level_stmt: codegen(node.value, top_level_stmt)
 codegen_handlers[int] = lambda node, _: str(node)
+codegen_handlers[float] = lambda node, _: str(node)
 codegen_handlers[str] = lambda node, _: '"' + str(node) + '"' # TODO: escape nested quotes correctly
 
 def codegen_args(args):
