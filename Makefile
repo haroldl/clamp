@@ -1,6 +1,6 @@
 all: clamp
 
-clamp: clamp.lisp clamp_compiler.py
+clamp: clamp.lisp clamp_compiler.py clamp-builtins.lisp
 	./clamp.lisp
 
 clean:

@@ -57,6 +57,11 @@ Lisp-1 versus Lisp-2
 
 Just treat Python functions as normal variables and always use #'apply or #'funcall to invoke them in the generated Lisp code.
 
+Variable Assignment
+-------------------
+
+Python keywords like True and None may not be assigned to. Common Lisp `defconstant` will prevent assignment to the value in the `CLAMP.__builtins__` package. Need to make sure that assignment to constants fails instead of creating a new symbol in the local package.
+
 Packages versus Modules
 -----------------------
 
@@ -106,3 +111,52 @@ Python's `print` is a function in the `__builtins__` module. `__builtins__` is s
 2. Those symbols do not show up as part of those modules (e.g. via `dir()`)
 
 we will use Common Lisp's `USE-PACKAGE` function for these precise semantics. This is the only place we will use `USE-PACKAGE` because this is the only place in Python (that I have discovered so far) that we want these semantics. We need to use the `CLAMP.__builtins__` package in the root (nameless) Python module and in any other module that we load.
+
+```
+sbcl
+
+* (load "clamp-builtins.lisp")
+T
+* (use-package "CLAMP.__builtins__")
+T
+* test
+#<FUNCTION (LAMBDA () :IN "/home/harold/code/clamp/clamp-builtins.lisp") {5349613B}>
+* dir
+#<FUNCTION (LAMBDA (&OPTIONAL |CLAMP.__builtins__|::PACKAGE-OBJECT-OR-NAME)
+             :IN
+             "/home/harold/code/clamp/clamp-builtins.lisp") {5349620B}>
+* (funcall dir)
+COMMON-LISP-USER
+NIL
+* (funcall dir "CLAMP.__builtins__")
+CLAMP.__builtins__
+TEST
+DIR
+NIL
+*
+```
+
+Boolean Logic
+-------------
+
+Common Lisp uses the `nil` value for the same purposes that Python uses `None` and `False`. This means we need a special value for one of them. The presence of 2 different false values cannot be represented in Common Lisp; even 0 is true to Lisp.
+
+But Python boolean logic is not like SQL TRUE/FALSE/NULL boolean values in that None values do not override other values the way NULL values do in SQL.
+
+That means that we need to
+1) Define a special None value in Common Lisp.
+2) Write our own logic functions, including a way to coerce values to booleans for use in predicates. Let's call that `(coerce-to-boolean v)`.
+
+```
+if None or 42:
+   ...
+```
+
+should compile to
+
+```
+(if (coerce-to-boolean (or CLAMP.__builtins__::None 42))
+    ...)
+```
+
+and `#'COERCE-TO-BOOLEAN` should convert `None` to `nil`.

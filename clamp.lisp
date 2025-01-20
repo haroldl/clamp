@@ -6,8 +6,10 @@
 (load "clamp-builtins.lisp")
 
 ;; This Lisp package models the top level nameless Python module.
-(defpackage "CLAMP"
-  (:use "SB-ALIEN" "UIOP" "CLAMP.__builtins__"))
+(defpackage :clamp
+  (:use :cl "SB-ALIEN" "UIOP" "CLAMP.__builtins__"))
+
+(in-package :clamp)
 
 ;; https://docs.python.org/3/c-api/veryhigh.html
 (load-shared-object "/usr/lib/python3.12/config-3.12-x86_64-linux-gnu/libpython3.12.so")

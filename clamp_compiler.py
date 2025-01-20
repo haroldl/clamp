@@ -41,12 +41,19 @@ def codegen_funcall(node, top_level_stmt):
     return "(funcall " + codegen(node.func, top_level_stmt) + " " + args_str + ")"
 
 
+def codegen_module(node, top_level_stmt):
+    header_code = """(use-package "CLAMP.__builtins__")\n"""
+    name_code = """(defvar __name__ "__main__")\n"""
+    body_code = "\n".join([codegen(n) for n in node.body])
+    return (header_code + name_code + body_code)
+
+
 codegen_handlers[ast.Expr] = lambda node, top_level_stmt: codegen(node.value, top_level_stmt)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.FunctionDef] = codegen_function
 codegen_handlers[ast.Call] = codegen_funcall
 codegen_handlers[ast.Name] = lambda node, _: node.id
-codegen_handlers[ast.Module] = lambda node, _: "\n".join([codegen(n) for n in node.body])
+codegen_handlers[ast.Module] = codegen_module
 codegen_handlers[ast.Add] = lambda node, _: "+"
 codegen_handlers[ast.Mult] = lambda node, _: "*"
 codegen_handlers[ast.BinOp] = lambda node, _: "(" + codegen(node.op) + " " + codegen(node.left) + " " + codegen(node.right) + ")"
