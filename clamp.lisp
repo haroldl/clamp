@@ -3,13 +3,28 @@
 (require :uiop)
 
 ;; Define the __builtins__ module.
-(load "clamp-builtins.lisp")
+;;(load "clamp-builtins.lisp")
+(defpackage "CLAMP.__builtins__"
+  (:use :cl)
+  (:export :test :dir))
+
+(in-package "CLAMP.__builtins__")
+
+(defvar test
+  (lambda ()
+    (write-line "__builtins__.test() invoked")))
+
+(defvar dir
+  (lambda (&optional (package-object-or-name *package*))
+    (write-line (package-name package-object-or-name))
+    (do-external-symbols (sym package-object-or-name)
+      (write-line (symbol-name sym)))))
 
 ;; This Lisp package models the top level nameless Python module.
-(defpackage :clamp
-  (:use :cl "SB-ALIEN" "UIOP" "CLAMP.__builtins__"))
+(defpackage :clamp-impl
+  (:use :cl "SB-ALIEN" "UIOP"))
 
-(in-package :clamp)
+(in-package :clamp-impl)
 
 ;; https://docs.python.org/3/c-api/veryhigh.html
 (load-shared-object "/usr/lib/python3.12/config-3.12-x86_64-linux-gnu/libpython3.12.so")
@@ -115,12 +130,29 @@
 	      (progn
 		(write-line "Generated Lisp code:")
 		(write-line generated-lisp-code)
-		(print
-		 (eval
-		  (read-from-string generated-lisp-code)))
+		(let ((code-to-run (read-from-string
+				    (concatenate 'string "(cl::progn " generated-lisp-code ")"))))
+		  (write-line "code-to-run:")
+		  (print code-to-run)
+		  (write-line "")
+		  (write-line "running:")
+		  (let (result (eval code-to-run))
+		    (write-line "")
+		    (write-line "Result:")
+		    (print result)
+		    (write-line "")))
 		(write-line "")))))))
 
 (defun main ()
+  ;; save-lisp-and-die does not save the current package info
+  (defpackage :clamp (:use "CLAMP.__builtins__"))
+  (in-package :clamp)
+  (write-line "Startup")
+  (print *package*)
+
+  ;;https://stackoverflow.com/questions/2535478/how-do-i-disable-warnings-in-lisp-sbcl
+  (declaim (sb-ext:muffle-conditions cl:warning))
+
   (let ((interactive t) (done nil) (args (uiop:command-line-arguments)))
     ;; Demonstration that we can access command line arguments from
     ;; when the Lisp core file is executed. The output changes with

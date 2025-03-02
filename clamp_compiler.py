@@ -42,7 +42,7 @@ def codegen_funcall(node, top_level_stmt):
 
 
 def codegen_module(node, top_level_stmt):
-    header_code = """(use-package "CLAMP.__builtins__")\n"""
+    header_code = """(in-package :clamp) (use-package "CLAMP.__builtins__")\n"""
     name_code = """(defvar __name__ "__main__")\n"""
     body_code = "\n".join([codegen(n) for n in node.body])
     return (header_code + name_code + body_code)
