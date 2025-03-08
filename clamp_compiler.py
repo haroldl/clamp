@@ -14,12 +14,12 @@ def codegen(node, top_level_stmt = False):
     if typ in codegen_handlers:
         return codegen_handlers[typ](node, top_level_stmt)
     else:
-        raise Exception("Do not have support to codegen " + str(type(node)) + " node with value " + ast.dump(node))
+        raise Exception(f"Do not have support to codegen {str(type(node))} node with value {ast.dump(node)}")
 
 
 def codegen_assign(node, top_level_stmt):
     if len(node.targets) == 1:
-        return "(setf " + codegen(node.targets[0]) + " " + codegen(node.value) + ")"
+        return f"(setf {codegen(node.targets[0])} {codegen(node.value)})"
     else:
         raise Exception("TODO: destructuring bind")
 
@@ -30,7 +30,7 @@ def codegen_function(node, top_level_stmt):
     # Python is a Lisp-1, Common Lisp is a Lisp-2
     # For compiled Python code running in SBCL, we'll put functions and other variables in the
     # same namespace which means we need to use funcall/apply to invoke compiled Python functions.
-    hed = "(setf " + node.name + " (lambda (" + params + ") "
+    hed = f"(setf {node.name} (lambda ({params}) "
     bod = "\n".join([codegen(n, top_level_stmt) for n in node.body])
 
     return hed + bod + "))\n"
