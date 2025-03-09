@@ -85,12 +85,21 @@ def codegen_binary_operator(node, context : Context):
     return f"({op} {lhs} {rhs})"
 
 
+def codegen_if(node, context : Context):
+    child_context = context.child()
+    conditional = codegen(node.test, child_context)
+    true_branch = "\n".join([codegen(n, child_context) for n in node.body])
+    false_branch = "\n".join([codegen(n, child_context) for n in node.orelse])
+    return f"(if {conditional} {true_branch} {false_branch})"
+
+
 codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.FunctionDef] = codegen_function
 codegen_handlers[ast.Call] = codegen_funcall
 codegen_handlers[ast.Name] = lambda node, _: node.id
 codegen_handlers[ast.Module] = codegen_module
+codegen_handlers[ast.If] = codegen_if
 codegen_handlers[ast.Add] = lambda node, _: "+"
 codegen_handlers[ast.Mult] = lambda node, _: "*"
 codegen_handlers[ast.BinOp] = codegen_binary_operator
@@ -124,6 +133,13 @@ y = 2
 
 def f(x):
   return x + 1
+
+# prior to this, run (setf even #'evenp)
+def g(x, y, z):
+    if even(x):
+        return y
+    else:
+        return z
 """)
     print(v)
 
