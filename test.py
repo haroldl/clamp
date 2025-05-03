@@ -1,3 +1,4 @@
+import pytest
 
 x = 1 + 2
 
