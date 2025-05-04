@@ -7,7 +7,7 @@ Python to Common Lisp Compiler
 import ast
 from dataclasses import dataclass, replace
 import sys
-
+from pathlib import Path
 
 codegen_handlers = {}
 
@@ -144,4 +144,12 @@ def g(x, y, z):
     print(v)
 
 if __name__ == '__main__':
-    demo()
+    if len(sys.argv) > 1:
+        filename = sys.argv[1]
+        print(f"Compiling {filename}")
+        contents = Path(filename).read_text()
+        result = compile(contents)
+        print("Result:\n")
+        print(result)
+    else:
+        demo()

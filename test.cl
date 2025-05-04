@@ -7,7 +7,7 @@
 (defvar p-in)
 (defvar p-out)
 
-(setq p (run-program "/usr/bin/python" '("test.py") :wait nil :input :stream :output :stream))
+(setq p (run-program "/usr/bin/python" '("test_clamp.py") :wait nil :input :stream :output :stream))
 
 (setq p-in (process-input p))
 (setq p-out (process-output p))
