@@ -121,7 +121,7 @@
   (py-dict-set-item py-locals (py-unicode-from-string "python_source_to_compile") (py-unicode-from-string python-code))
 
   ;; Invoke the Python code to compile the input Python code to Common Lisp:
-  (let ((result (py-run-string "compile(python_source_to_compile)" py-eval-input py-globals py-locals)))
+  (let ((result (py-run-string "clamp_compiler(python_source_to_compile)" py-eval-input py-globals py-locals)))
     (if (py-err-occurred)
 	(py-err-print))
     (if (and result (not (eq *py-none* result)))
@@ -134,6 +134,7 @@
 				    (concatenate 'string "(cl::progn " generated-lisp-code ")"))))
 		  (write-line "code-to-run:")
 		  (print code-to-run)
+		  (write-line "")
 		  (write-line "")
 		  (write-line "running:")
 		  (let (result (eval code-to-run))
@@ -167,20 +168,15 @@
     ;; Start up Python inside this process and execute some Python code.
     (py-initialize)
     (unwind-protect
-	 (let ((py-globals (py-new-dict))
-	       (py-locals (py-new-dict)))
-	   (setf *py-none* (py-run-string "None" py-eval-input py-globals py-locals))
+	 (let ((py-globals-and-locals (py-new-dict)))
+	   (setf *py-none* (py-run-string "None" py-eval-input py-globals-and-locals py-globals-and-locals))
 	   ;;(write-line (python-to-lisp-string *py-none*))
 
 	   ;; Someday clamp will be self-hosting, but not today, so...
 	   ;; Send the compiler code to the Python system to compile the compiler :-P
-	   (py-run-string *clamp-compiler-source* py-file-input py-globals py-locals)
+	   (py-run-string *clamp-compiler-source* py-file-input py-globals-and-locals py-globals-and-locals)
 	   (if (py-err-occurred)
 	       (py-err-print))
-
-	   ;; Copy all of the locals into the globals for future use:
-	   (py-dict-merge py-globals py-locals 1)
-	   (setf py-locals (py-new-dict))
 
 	   (loop while (not done)
 		 do (progn
@@ -191,7 +187,7 @@
 			    (setf code new-code)
 			    (setf done new-done)))
 			(if code
-			    (clamp-compile-and-run code py-globals py-locals))))))
+			    (clamp-compile-and-run code py-globals-and-locals py-globals-and-locals))))))
       (progn
 	(py-finalize)))))
 

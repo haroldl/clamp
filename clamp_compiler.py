@@ -120,14 +120,14 @@ def codegen_args(args, context: Context):
     return " ".join([a.arg for a in args.args])
 
 
-def compile(code):
+def clamp_compiler(code):
     print("Preparing to compile:", code)
     code_tree = ast.parse(code)
     return codegen(code_tree, Context(top_level_stmt=True))
 
 
 def demo():
-    v = compile("""
+    v = clamp_compiler("""
 x = 1
 y = 2
 
@@ -148,7 +148,7 @@ if __name__ == '__main__':
         filename = sys.argv[1]
         print(f"Compiling {filename}")
         contents = Path(filename).read_text()
-        result = compile(contents)
+        result = clamp_compiler(contents)
         print("Result:\n")
         print(result)
     else:

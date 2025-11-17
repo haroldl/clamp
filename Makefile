@@ -7,7 +7,7 @@ clean:
 	-rm clamp
 
 run: clamp
-	./clamp
+	rlwrap ./clamp
 
 deps: requirements.txt
 	pip install -r requirements.txt
