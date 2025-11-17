@@ -59,13 +59,13 @@ def codegen_funcall(node, context : Context):
     child_context = context.child()
     target = codegen(node.func, child_context)
     args_str = " ".join([codegen(a, child_context) for a in node.args])
-    return f"(funcall {target} {args_str})"
+    return f"(common-lisp:funcall {target} {args_str})"
 
 
 def codegen_module(node, context : Context):
     child_context = context.child()
-    header_code = """(in-package :clamp) (use-package "CLAMP.__builtins__")\n"""
-    name_code = """(defvar __name__ "__main__")\n"""
+    header_code = """(common-lisp:in-package :clamp) (common-lisp:use-package "CLAMP.__builtins__")\n"""
+    name_code = """(common-lisp:setq __name__ "__main__")\n"""
     body_code = "\n".join([codegen(n, child_context) for n in node.body])
     return (header_code + name_code + body_code)
 

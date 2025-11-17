@@ -6,7 +6,8 @@
 
 (defvar test
   (lambda ()
-    (write-line "__builtins__.test() invoked")))
+    (write-line "__builtins__.test() invoked")
+    42))
 
 (defvar dir
   (lambda (&optional (package-object-or-name *package*))

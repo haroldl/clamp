@@ -12,7 +12,8 @@
 
 (defvar test
   (lambda ()
-    (write-line "__builtins__.test() invoked")))
+    (write-line "__builtins__.test() invoked")
+    42))
 
 (defvar dir
   (lambda (&optional (package-object-or-name *package*))
@@ -137,7 +138,7 @@
 		  (write-line "")
 		  (write-line "")
 		  (write-line "running:")
-		  (let (result (eval code-to-run))
+		  (let ((result (eval code-to-run)))
 		    (write-line "")
 		    (write-line "Result:")
 		    (print result)
