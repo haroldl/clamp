@@ -1,8 +1,16 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
-  (:export :test :dir))
+  (:export :test :dir :plus :times))
 
 (in-package "CLAMP.__builtins__")
+
+(defvar plus
+  (lambda (&rest xs)
+    (apply #'+ xs)))
+
+(defvar times
+  (lambda (&rest xs)
+    (apply #'* xs)))
 
 (defvar test
   (lambda ()
