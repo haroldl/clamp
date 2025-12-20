@@ -59,6 +59,8 @@ def codegen_funcall(node, context : Context):
     child_context = context.child()
     target = codegen(node.func, child_context)
     args_str = " ".join([codegen(a, child_context) for a in node.args])
+    if target == "PRINT":
+        target = "CLAMP.__builtins__:PRINT"
     return f"(common-lisp:funcall {target} {args_str})"
 
 
@@ -97,11 +99,11 @@ codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.FunctionDef] = codegen_function
 codegen_handlers[ast.Call] = codegen_funcall
-codegen_handlers[ast.Name] = lambda node, _: node.id
+codegen_handlers[ast.Name] = lambda node, _: map_name(node.id)
 codegen_handlers[ast.Module] = codegen_module
 codegen_handlers[ast.If] = codegen_if
-codegen_handlers[ast.Add] = lambda node, _: "+"
-codegen_handlers[ast.Mult] = lambda node, _: "*"
+codegen_handlers[ast.Add] = lambda node, _: "COMMON-LISP::+"
+codegen_handlers[ast.Mult] = lambda node, _: "COMMON-LISP::*"
 codegen_handlers[ast.BinOp] = codegen_binary_operator
 codegen_handlers[ast.Constant] = lambda node, _: codegen(node.value)
 codegen_handlers[ast.Return] = codegen_return

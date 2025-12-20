@@ -1,6 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
-  (:export :test :dir :plus :times))
+  (:shadow :print)
+  (:export :test :dir :plus :times :print))
 
 (in-package "CLAMP.__builtins__")
 
@@ -22,3 +23,7 @@
     (write-line (package-name package-object-or-name))
     (do-external-symbols (sym package-object-or-name)
       (write-line (symbol-name sym)))))
+
+(defvar print
+  (lambda (&rest xs)
+    (apply cl:print xs)))
