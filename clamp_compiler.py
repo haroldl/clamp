@@ -90,9 +90,18 @@ def codegen_binary_operator(node, context : Context):
 def codegen_if(node, context : Context):
     child_context = context.child()
     conditional = codegen(node.test, child_context)
-    true_branch = "\n".join([codegen(n, child_context) for n in node.body])
-    false_branch = "\n".join([codegen(n, child_context) for n in node.orelse])
-    return f"(if {conditional} {true_branch} {false_branch})"
+    print(f"{node=} {node.body=} {type(node.body)=}")
+    true_branch = (
+        node.body.value
+        if isinstance(node.body, ast.Constant)
+        else "\n".join([codegen(n, child_context) for n in node.body])
+    )
+    false_branch = (
+        node.orelse.value
+        if isinstance(node.orelse, ast.Constant)
+        else "\n".join([codegen(n, child_context) for n in node.orelse])
+    )
+    return f"(COMMON-LISP::if {conditional} {true_branch} {false_branch})"
 
 
 codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
@@ -102,14 +111,22 @@ codegen_handlers[ast.Call] = codegen_funcall
 codegen_handlers[ast.Name] = lambda node, _: map_name(node.id)
 codegen_handlers[ast.Module] = codegen_module
 codegen_handlers[ast.If] = codegen_if
+codegen_handlers[ast.IfExp] = codegen_if
 codegen_handlers[ast.Add] = lambda node, _: "COMMON-LISP::+"
+codegen_handlers[ast.Sub] = lambda node, _: "COMMON-LISP::-"
 codegen_handlers[ast.Mult] = lambda node, _: "COMMON-LISP::*"
+codegen_handlers[ast.Div] = lambda node, _: "COMMON-LISP::/"
+codegen_handlers[ast.Pow] = lambda node, _: "COMMON-LISP::expt"
 codegen_handlers[ast.BinOp] = codegen_binary_operator
 codegen_handlers[ast.Constant] = lambda node, _: codegen(node.value)
 codegen_handlers[ast.Return] = codegen_return
 codegen_handlers[int] = lambda node, _: str(node)
 codegen_handlers[float] = lambda node, _: str(node)
 codegen_handlers[str] = lambda node, _: '"' + str(node) + '"' # TODO: escape nested quotes correctly
+codegen_handlers[bool] = lambda node, _: "COMMON-LISP::t" if node else "COMMON-LISP::nil"
+
+# TODO:
+# Exception: Do not have support to codegen <class 'ast.Compare'> node with value Compare(left=Constant(value=5), ops=[Eq()], comparators=[Constant(value=2)])
 
 def codegen_args(args, context: Context):
     #print(args.args)
