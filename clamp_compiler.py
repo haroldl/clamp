@@ -27,7 +27,9 @@ def codegen(node, context : Context = Context(top_level_stmt=False)):
     if typ in codegen_handlers:
         return codegen_handlers[typ](node, context)
     else:
-        raise Exception(f"Do not have support to codegen {str(type(node))} node with value {ast.dump(node)}")
+        raise Exception(
+            f"Do not have support to codegen {str(type(node))} node with value {ast.dump(node)}"
+        )
 
 
 def codegen_assign(node, context : Context):
@@ -104,6 +106,7 @@ def codegen_if(node, context : Context):
     return f"(COMMON-LISP::if {conditional} {true_branch} {false_branch})"
 
 
+codegen_handlers[type(None)] = lambda node, _: "COMMON-LISP::nil"
 codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.FunctionDef] = codegen_function
