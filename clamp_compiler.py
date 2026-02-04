@@ -9,6 +9,44 @@ from dataclasses import dataclass, replace
 import sys
 from pathlib import Path
 
+PYTHON_KEYWORDS = {
+    "and",
+    "as",
+    "assert",
+    "async",
+    "await",
+    "break",
+    "class",
+    "continue",
+    "def",
+    "del",
+    "elif",
+    "else",
+    "except",
+    "False",
+    "finally",
+    "for",
+    "from",
+    "global",
+    "if",
+    "import",
+    "in",
+    "is",
+    "lambda",
+    "None",
+    "nonlocal",
+    "not",
+    "or",
+    "pass",
+    "raise",
+    "return",
+    "True",
+    "try",
+    "while",
+    "with",
+    "yield",
+}
+
 codegen_handlers = {}
 
 
@@ -36,7 +74,7 @@ def codegen_assign(node, context : Context):
     if len(node.targets) == 1:
         lhs = codegen(node.targets[0], context.child())
         rhs = codegen(node.value, context.child())
-        return f"(setf {lhs} {rhs})"
+        return f"(common-lisp:setf {lhs} {rhs})"
     else:
         raise Exception("TODO: destructuring bind")
 
@@ -49,7 +87,7 @@ def codegen_function(node, context : Context):
     # Python is a Lisp-1, Common Lisp is a Lisp-2
     # For compiled Python code running in SBCL, we'll put functions and other variables in the
     # same namespace which means we need to use funcall/apply to invoke compiled Python functions.
-    hed = f"(setf {node.name} (lambda ({params}) (block {node.name} "
+    hed = f"(common-lisp:setf {node.name} (lambda ({params}) (block {node.name} "
 
     body_context = replace(child_context, block_name=node.name)
     bod = "\n".join([codegen(n, body_context) for n in node.body])
@@ -106,6 +144,10 @@ def codegen_if(node, context : Context):
     return f"(COMMON-LISP::if {conditional} {true_branch} {false_branch})"
 
 
+def map_name(name: str) -> str:
+    return name
+
+
 codegen_handlers[type(None)] = lambda node, _: "COMMON-LISP::nil"
 codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
 codegen_handlers[ast.Assign] = codegen_assign
@@ -156,7 +198,7 @@ y = 2
 def f(x):
   return x + 1
 
-# prior to this, run (setf even #'evenp)
+# prior to this, run (setq/setf even #'evenp)
 def g(x, y, z):
     if even(x):
         return y
