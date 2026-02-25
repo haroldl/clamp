@@ -50,4 +50,4 @@
 
 (defvar print
   (lambda (&rest xs)
-    (apply cl:print xs)))
+    (apply #'cl:print xs)))
