@@ -44,6 +44,12 @@ def test_verbose_run_shows_compiler_diagnostics():
     assert "Generated Lisp code:" in result.stdout
 
 
+def test_compile_only_prints_generated_lisp_without_running_program():
+    result = run_clamp(EXAMPLE_1, "--compile-only")
+    assert '(common-lisp:funcall |CLAMP.__builtins__|:PRINT "hello, clamp")' in result.stdout
+    assert "hello, clamp\n\n" not in result.stdout
+
+
 def test_examples_match_expected_output():
     for sample in sorted(TEST_DIR.glob("example_*.py")):
         expected = sample.with_suffix(".expected")

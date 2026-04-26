@@ -17,6 +17,7 @@
 ;; Read in the Python -> Lisp compiler so that it will be in memory, even in the saved lisp core.
 (defconstant *clamp-compiler-source* (uiop:read-file-string "clamp_compiler.py"))
 (defparameter *verbose* nil)
+(defparameter *compile-only* nil)
 
 ;;
 ;; Map the Python C API into Lisp:
@@ -85,7 +86,9 @@
   (write-line "")
   (write-line "Options:")
   (write-line "  -h, --help     Print this help message and exit.")
-  (write-line "  -v, --verbose  Print compiler diagnostics and generated Lisp code."))
+  (write-line "  -v, --verbose  Print compiler diagnostics and generated Lisp code.")
+  (write-line "  -c, --compile-only")
+  (write-line "                 Compile Python to Lisp and print the generated code without running it."))
 
 (defun read-code (interactive filename)
   (let ((code nil) (done nil))
@@ -130,20 +133,22 @@
 		(when *verbose*
 		  (write-line "Generated Lisp code:")
 		  (write-line generated-lisp-code))
-		(let ((code-to-run (read-from-string
-				    (concatenate 'string "(cl::progn " generated-lisp-code ")"))))
-		  (when *verbose*
-		    (write-line "code-to-run:")
-		    (print code-to-run)
-		    (write-line "")
-		    (write-line "")
-		    (write-line "running:"))
-		  (let ((result (eval code-to-run)))
-		    (when *verbose*
-		      (write-line "")
-		      (write-line "Result:")
-		      (print result)
-		      (write-line ""))))
+		(if *compile-only*
+		    (write-line generated-lisp-code)
+		    (let ((code-to-run (read-from-string
+					(concatenate 'string "(cl::progn " generated-lisp-code ")"))))
+		      (when *verbose*
+			(write-line "code-to-run:")
+			(print code-to-run)
+			(write-line "")
+			(write-line "")
+			(write-line "running:"))
+		      (let ((result (eval code-to-run)))
+			(when *verbose*
+			  (write-line "")
+			  (write-line "Result:")
+			  (print result)
+			  (write-line "")))))
 		(when *verbose*
 		  (write-line ""))))))))
 
@@ -156,10 +161,14 @@
 	 (raw-args (uiop:command-line-arguments))
 	 (args (remove-if (lambda (arg)
 			    (or (string= arg "-v")
-				(string= arg "--verbose")))
+				(string= arg "--verbose")
+				(string= arg "-c")
+				(string= arg "--compile-only")))
 			  raw-args)))
     (setf *verbose* (or (member "-v" raw-args :test #'string=)
 			(member "--verbose" raw-args :test #'string=)))
+    (setf *compile-only* (or (member "-c" raw-args :test #'string=)
+			     (member "--compile-only" raw-args :test #'string=)))
     (cond
       ((member "-h" args :test #'string=)
        (print-help))
