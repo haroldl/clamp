@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+CLAMP_VERBOSE = False
+
 """
 Python to Common Lisp Compiler
 """
@@ -235,7 +237,8 @@ def codegen_args(args, context: Context):
 
 
 def clamp_compiler(code):
-    print("Preparing to compile:", code)
+    if CLAMP_VERBOSE:
+        print("Preparing to compile:", code)
     code_tree = ast.parse(code)
     return codegen(code_tree, Context(top_level_stmt=True))
 

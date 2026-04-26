@@ -16,6 +16,7 @@
 
 ;; Read in the Python -> Lisp compiler so that it will be in memory, even in the saved lisp core.
 (defconstant *clamp-compiler-source* (uiop:read-file-string "clamp_compiler.py"))
+(defparameter *verbose* nil)
 
 ;;
 ;; Map the Python C API into Lisp:
@@ -83,7 +84,8 @@
   (write-line "With no FILE, clamp starts in interactive mode.")
   (write-line "")
   (write-line "Options:")
-  (write-line "  -h, --help  Print this help message and exit."))
+  (write-line "  -h, --help     Print this help message and exit.")
+  (write-line "  -v, --verbose  Print compiler diagnostics and generated Lisp code."))
 
 (defun read-code (interactive filename)
   (let ((code nil) (done nil))
@@ -99,9 +101,11 @@
 		(setf code nil))))
 	;; Read input from the filename on the command line:
 	(progn
-	  (write-line (concatenate 'string "Reading code from " filename))
+	  (when *verbose*
+	    (write-line (concatenate 'string "Reading code from " filename)))
 	  (setf code (uiop:read-file-string filename))
-	  (write-line code)
+	  (when *verbose*
+	    (write-line code))
 	  (setf done t)))
     (list code done)))
 
@@ -123,35 +127,48 @@
 	(let ((generated-lisp-code (python-to-lisp-string result)))
 	  (if (not (string= "<NULL>" generated-lisp-code))
 	      (progn
-		(write-line "Generated Lisp code:")
-		(write-line generated-lisp-code)
+		(when *verbose*
+		  (write-line "Generated Lisp code:")
+		  (write-line generated-lisp-code))
 		(let ((code-to-run (read-from-string
 				    (concatenate 'string "(cl::progn " generated-lisp-code ")"))))
-		  (write-line "code-to-run:")
-		  (print code-to-run)
-		  (write-line "")
-		  (write-line "")
-		  (write-line "running:")
-		  (let ((result (eval code-to-run)))
+		  (when *verbose*
+		    (write-line "code-to-run:")
+		    (print code-to-run)
 		    (write-line "")
-		    (write-line "Result:")
-		    (print result)
-		    (write-line "")))
-		(write-line "")))))))
+		    (write-line "")
+		    (write-line "running:"))
+		  (let ((result (eval code-to-run)))
+		    (when *verbose*
+		      (write-line "")
+		      (write-line "Result:")
+		      (print result)
+		      (write-line ""))))
+		(when *verbose*
+		  (write-line ""))))))))
 
 (defun main ()
   ;; save-lisp-and-die does not save the current package info
   (defpackage :clamp (:use "CLAMP.__builtins__"))
   (in-package :clamp)
-  (let ((interactive t) (done nil) (args (uiop:command-line-arguments)))
+  (let* ((interactive t)
+	 (done nil)
+	 (raw-args (uiop:command-line-arguments))
+	 (args (remove-if (lambda (arg)
+			    (or (string= arg "-v")
+				(string= arg "--verbose")))
+			  raw-args)))
+    (setf *verbose* (or (member "-v" raw-args :test #'string=)
+			(member "--verbose" raw-args :test #'string=)))
     (cond
       ((member "-h" args :test #'string=)
        (print-help))
       ((member "--help" args :test #'string=)
        (print-help))
       (t
-       (write-line "Startup")
-       (print *package*)
+       (when *verbose*
+	 (write-line "Startup")
+	 (print *package*))
 
        ;;https://stackoverflow.com/questions/2535478/how-do-i-disable-warnings-in-lisp-sbcl
        (declaim (sb-ext:muffle-conditions cl:warning))
@@ -162,9 +179,10 @@
        (if (> (length args) 0)
 	   (progn
 	     (setf interactive nil)
-	     (princ "Command line arguments: ")
-	     (princ args)
-	     (write-line "")))
+	     (when *verbose*
+	       (princ "Command line arguments: ")
+	       (princ args)
+	       (write-line ""))))
 
        ;; Start up Python inside this process and execute some Python code.
        (py-initialize)
@@ -176,6 +194,15 @@
 	      ;; Someday clamp will be self-hosting, but not today, so...
 	      ;; Send the compiler code to the Python system to compile the compiler :-P
 	      (py-run-string *clamp-compiler-source* py-file-input py-globals-and-locals py-globals-and-locals)
+	      (if (py-err-occurred)
+		  (py-err-print))
+	      (py-run-string
+	       (if *verbose*
+		   "CLAMP_VERBOSE = True"
+		   "CLAMP_VERBOSE = False")
+	       py-file-input
+	       py-globals-and-locals
+	       py-globals-and-locals)
 	      (if (py-err-occurred)
 		  (py-err-print))
 
