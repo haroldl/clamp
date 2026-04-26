@@ -1,0 +1,40 @@
+from pathlib import Path
+import subprocess
+
+
+TEST_DIR = Path(__file__).resolve().parent
+ROOT = TEST_DIR.parent
+CLAMP = ROOT / "clamp"
+EXAMPLE_1 = TEST_DIR / "example_1.py"
+
+
+def run_clamp(sample, *args):
+    return subprocess.run(
+        [str(CLAMP), *args, str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_default_run_is_quiet():
+    result = run_clamp(EXAMPLE_1)
+    assert result.stdout == "hello, clamp\n"
+    assert "Preparing to compile:" not in result.stdout
+    assert "Generated Lisp code:" not in result.stdout
+
+
+def test_verbose_run_shows_compiler_diagnostics():
+    result = run_clamp(EXAMPLE_1, "--verbose")
+    assert "hello, clamp\n\n" in result.stdout
+    assert "Preparing to compile:" in result.stdout
+    assert "Generated Lisp code:" in result.stdout
+
+
+def test_examples_match_expected_output():
+    for sample in sorted(TEST_DIR.glob("example_*.py")):
+        expected = sample.with_suffix(".expected")
+        assert expected.exists(), f"missing expected output for {sample.name}"
+        result = run_clamp(sample)
+        assert result.stdout == expected.read_text()

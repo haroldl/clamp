@@ -50,4 +50,10 @@
 
 (defvar print
   (lambda (&rest xs)
-    (apply #'cl:print xs)))
+    (loop for x in xs
+          for first = t then nil
+          do (progn
+               (unless first
+                 (princ #\Space))
+               (princ x)))
+    (terpri)))
