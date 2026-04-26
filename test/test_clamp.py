@@ -9,13 +9,25 @@ EXAMPLE_1 = TEST_DIR / "example_1.py"
 
 
 def run_clamp(sample, *args):
-    return subprocess.run(
-        [str(CLAMP), *args, str(sample)],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    command = [str(CLAMP), *args, str(sample)]
+    try:
+        return subprocess.run(
+            command,
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise AssertionError(
+            "clamp command failed\n"
+            f"command: {exc.cmd}\n"
+            f"cwd: {ROOT}\n"
+            f"sample: {sample}\n"
+            f"exit code: {exc.returncode}\n"
+            f"stdout:\n{exc.stdout}\n"
+            f"stderr:\n{exc.stderr}"
+        ) from exc
 
 
 def test_default_run_is_quiet():
