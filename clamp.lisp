@@ -75,6 +75,16 @@
 (define-alien-routine ("PyErr_Occurred" py-err-occurred) (* t))
 (define-alien-routine ("PyErr_Print" py-err-print) void)
 
+(defun print-help ()
+  (write-line "Usage: clamp [OPTION] [FILE]")
+  (write-line "")
+  (write-line "Compile Python to Common Lisp and run it.")
+  (write-line "")
+  (write-line "With no FILE, clamp starts in interactive mode.")
+  (write-line "")
+  (write-line "Options:")
+  (write-line "  -h, --help  Print this help message and exit."))
+
 (defun read-code (interactive filename)
   (let ((code nil) (done nil))
     (if interactive
@@ -133,48 +143,54 @@
   ;; save-lisp-and-die does not save the current package info
   (defpackage :clamp (:use "CLAMP.__builtins__"))
   (in-package :clamp)
-  (write-line "Startup")
-  (print *package*)
-
-  ;;https://stackoverflow.com/questions/2535478/how-do-i-disable-warnings-in-lisp-sbcl
-  (declaim (sb-ext:muffle-conditions cl:warning))
-
   (let ((interactive t) (done nil) (args (uiop:command-line-arguments)))
-    ;; Demonstration that we can access command line arguments from
-    ;; when the Lisp core file is executed. The output changes with
-    ;; each invocation.
-    (if (> (length args) 0)
-	(progn
-	  (setf interactive nil)
-	  (princ "Command line arguments: ")
-	  (princ args)
-	  (write-line "")))
+    (cond
+      ((member "-h" args :test #'string=)
+       (print-help))
+      ((member "--help" args :test #'string=)
+       (print-help))
+      (t
+       (write-line "Startup")
+       (print *package*)
 
-    ;; Start up Python inside this process and execute some Python code.
-    (py-initialize)
-    (unwind-protect
-	 (let ((py-globals-and-locals (py-new-dict)))
-	   (setf *py-none* (py-run-string "None" py-eval-input py-globals-and-locals py-globals-and-locals))
-	   ;;(write-line (python-to-lisp-string *py-none*))
+       ;;https://stackoverflow.com/questions/2535478/how-do-i-disable-warnings-in-lisp-sbcl
+       (declaim (sb-ext:muffle-conditions cl:warning))
 
-	   ;; Someday clamp will be self-hosting, but not today, so...
-	   ;; Send the compiler code to the Python system to compile the compiler :-P
-	   (py-run-string *clamp-compiler-source* py-file-input py-globals-and-locals py-globals-and-locals)
-	   (if (py-err-occurred)
-	       (py-err-print))
+       ;; Demonstration that we can access command line arguments from
+       ;; when the Lisp core file is executed. The output changes with
+       ;; each invocation.
+       (if (> (length args) 0)
+	   (progn
+	     (setf interactive nil)
+	     (princ "Command line arguments: ")
+	     (princ args)
+	     (write-line "")))
 
-	   (loop while (not done)
-		 do (progn
-		      (let ((code nil))
-			(destructuring-bind (new-code new-done)
-			    (read-code interactive (car args))
-			  (progn
-			    (setf code new-code)
-			    (setf done new-done)))
-			(if code
-			    (clamp-compile-and-run code py-globals-and-locals py-globals-and-locals))))))
-      (progn
-	(py-finalize)))))
+       ;; Start up Python inside this process and execute some Python code.
+       (py-initialize)
+       (unwind-protect
+	    (let ((py-globals-and-locals (py-new-dict)))
+	      (setf *py-none* (py-run-string "None" py-eval-input py-globals-and-locals py-globals-and-locals))
+	      ;;(write-line (python-to-lisp-string *py-none*))
+
+	      ;; Someday clamp will be self-hosting, but not today, so...
+	      ;; Send the compiler code to the Python system to compile the compiler :-P
+	      (py-run-string *clamp-compiler-source* py-file-input py-globals-and-locals py-globals-and-locals)
+	      (if (py-err-occurred)
+		  (py-err-print))
+
+	      (loop while (not done)
+		    do (progn
+			 (let ((code nil))
+			   (destructuring-bind (new-code new-done)
+			       (read-code interactive (car args))
+			     (progn
+			       (setf code new-code)
+			       (setf done new-done)))
+			   (if code
+			       (clamp-compile-and-run code py-globals-and-locals py-globals-and-locals))))))
+	 (progn
+	   (py-finalize)))))))
 
 ;; Save a core file named clamp which, when run, will
 ;; execute the main function above. It can be run as a
