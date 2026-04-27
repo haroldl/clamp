@@ -19,6 +19,13 @@ def run_clamp(sample, *args):
             text=True,
         )
     except subprocess.CalledProcessError as exc:
+        compile_only_command = [str(CLAMP), "-c", str(sample)]
+        compile_only_result = subprocess.run(
+            compile_only_command,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
         raise AssertionError(
             "clamp command failed\n"
             f"command: {exc.cmd}\n"
@@ -26,7 +33,12 @@ def run_clamp(sample, *args):
             f"sample: {sample}\n"
             f"exit code: {exc.returncode}\n"
             f"stdout:\n{exc.stdout}\n"
-            f"stderr:\n{exc.stderr}"
+            f"stderr:\n{exc.stderr}\n"
+            "compile-only follow-up:\n"
+            f"command: {compile_only_command}\n"
+            f"exit code: {compile_only_result.returncode}\n"
+            f"stdout:\n{compile_only_result.stdout}\n"
+            f"stderr:\n{compile_only_result.stderr}"
         ) from exc
 
 

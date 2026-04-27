@@ -137,7 +137,10 @@ def codegen_function(node, context : Context):
     # Python is a Lisp-1, Common Lisp is a Lisp-2
     # For compiled Python code running in SBCL, we'll put functions and other variables in the
     # same namespace which means we need to use funcall/apply to invoke compiled Python functions.
-    hed = f"(common-lisp:setf {node.name} (lambda ({params}) (block {node.name} "
+    hed = (
+        f"(common-lisp:setf {node.name} "
+        f"(common-lisp:lambda ({params}) (common-lisp:block {node.name} "
+    )
 
     body_context = replace(child_context, block_name=node.name)
     bod = codegen_block(node.body, body_context)
@@ -156,7 +159,7 @@ def codegen_funcall(node, context : Context):
 
 
 def codegen_module(node, context : Context):
-    header_code = """(common-lisp:in-package :clamp) (common-lisp:use-package "CLAMP.__builtins__")\n"""
+    header_code = """(common-lisp:in-package :clamp)\n(common-lisp:use-package "CLAMP.__builtins__")\n"""
     name_code = """(common-lisp:setq __name__ "__main__")\n"""
     # Keep top-level context so ASSIGN can perform global SETQ at module level
     body_code = codegen_block(node.body, context)
@@ -167,7 +170,7 @@ def codegen_return(node, context : Context):
     if not context.block_name:
         raise Exception("Trying to return but not inside a lexical scope.")
     retval = codegen(node.value, context.child())
-    return f"(return-from {context.block_name} {retval})"
+    return f"(common-lisp:return-from {context.block_name} {retval})"
 
 
 def codegen_binary_operator(node, context : Context):
