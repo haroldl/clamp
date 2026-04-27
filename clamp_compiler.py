@@ -181,6 +181,23 @@ def codegen_binary_operator(node, context : Context):
     return f"({op} {lhs} {rhs})"
 
 
+def codegen_compare(node, context: Context):
+    child_context = context.child()
+    if len(node.ops) != 1 or len(node.comparators) != 1:
+        raise Exception("TODO: chained comparisons")
+    op = codegen(node.ops[0], child_context)
+    lhs = codegen(node.left, child_context)
+    rhs = codegen(node.comparators[0], child_context)
+    return f"({op} {lhs} {rhs})"
+
+
+def codegen_bool_operator(node, context: Context):
+    child_context = context.child()
+    op = codegen(node.op, child_context)
+    values = " ".join(codegen(v, child_context) for v in node.values)
+    return f"({op} {values})"
+
+
 def codegen_if(node, context : Context):
     child_context = context.child()
     conditional = codegen(node.test, child_context)
@@ -218,8 +235,13 @@ codegen_handlers[ast.Mult] = lambda node, _: "COMMON-LISP::*"
 codegen_handlers[ast.Div] = lambda node, _: "COMMON-LISP::/"
 codegen_handlers[ast.Pow] = lambda node, _: "COMMON-LISP::expt"
 codegen_handlers[ast.BinOp] = codegen_binary_operator
+codegen_handlers[ast.Compare] = codegen_compare
+codegen_handlers[ast.BoolOp] = codegen_bool_operator
 codegen_handlers[ast.Constant] = lambda node, _: codegen(node.value)
 codegen_handlers[ast.Return] = codegen_return
+codegen_handlers[ast.Eq] = lambda node, _: "COMMON-LISP::="
+codegen_handlers[ast.Or] = lambda node, _: "COMMON-LISP::or"
+codegen_handlers[ast.And] = lambda node, _: "COMMON-LISP::and"
 codegen_handlers[int] = lambda node, _: str(node)
 codegen_handlers[float] = lambda node, _: str(node)
 codegen_handlers[str] = lambda node, _: '"' + str(node) + '"' # TODO: escape nested quotes correctly
