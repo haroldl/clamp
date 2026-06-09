@@ -2,6 +2,9 @@
 
 (require :uiop)
 
+;; Define Clamp's internal runtime types and helpers.
+(load "clamp-internals.lisp")
+
 ;; Define the __builtins__ module.
 (load "clamp-builtins.lisp")
 
