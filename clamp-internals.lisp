@@ -28,6 +28,15 @@
    :py-callable-owner-type
    :*py-object-type*
    :*py-type-type*
+   :*py-none*
+   :*py-false*
+   :*py-true*
+   :py-bool
+   :py-truthy-p
+   :py-and
+   :py-or
+   :py-eq
+   :py-display
    :make-py-list
    :py-append
    :py-getitem
@@ -77,6 +86,83 @@
   (make-py-type :type *py-type-type* :name "object" :basicsize 1))
 
 (setf (py-type-bases *py-type-type*) (list *py-object-type*))
+
+(defparameter *py-none-type*
+  (make-py-type :type *py-type-type*
+                :name "NoneType"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-bool-type*
+  (make-py-type :type *py-type-type*
+                :name "bool"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-none*
+  (make-py-object :type *py-none-type* :value nil))
+
+(defparameter *py-false*
+  (make-py-object :type *py-bool-type* :value nil))
+
+(defparameter *py-true*
+  (make-py-object :type *py-bool-type* :value t))
+
+(defun py-bool (value)
+  (if value *py-true* *py-false*))
+
+(defun py-truthy-p (value)
+  (cond
+    ((eq value *py-true*) t)
+    ((or (eq value *py-false*) (eq value *py-none*)) nil)
+    ((py-list-object-p value) (> (or (py-object-size value) 0) 0))
+    ((numberp value) (not (zerop value)))
+    ((stringp value) (> (length value) 0))
+    ((null value) nil)
+    (t t)))
+
+(defmacro py-or (&rest forms)
+  (cond
+    ((null forms) '*py-false*)
+    ((null (rest forms)) (first forms))
+    (t
+     (let ((value (gensym "PY-OR-VALUE-")))
+       `(let ((,value ,(first forms)))
+          (if (py-truthy-p ,value)
+              ,value
+              (py-or ,@(rest forms))))))))
+
+(defmacro py-and (&rest forms)
+  (cond
+    ((null forms) '*py-true*)
+    ((null (rest forms)) (first forms))
+    (t
+     (let ((value (gensym "PY-AND-VALUE-")))
+       `(let ((,value ,(first forms)))
+          (if (py-truthy-p ,value)
+              (py-and ,@(rest forms))
+              ,value))))))
+
+(defun py-bool-value (value)
+  (cond
+    ((eq value *py-true*) 1)
+    ((eq value *py-false*) 0)
+    (t nil)))
+
+(defun py-eq (left right)
+  (py-bool
+   (let ((left-bool-value (py-bool-value left))
+         (right-bool-value (py-bool-value right)))
+     (cond
+       ((or (eq left *py-none*) (eq right *py-none*))
+        (eq left right))
+       ((and left-bool-value (numberp right)) (= left-bool-value right))
+       ((and right-bool-value (numberp left)) (= left right-bool-value))
+       ((or left-bool-value right-bool-value)
+        (eq left right))
+       ((and (numberp left) (numberp right)) (= left right))
+       ((and (stringp left) (stringp right)) (string= left right))
+       (t (eq left right))))))
 
 ;; Internal representation of Python-callable behavior.
 ;;
@@ -180,6 +266,21 @@
                          :size (fill-pointer storage)
                          :value storage
                          :allocated (array-total-size storage))))
+
+(defun py-display (value &optional (stream *standard-output*))
+  (cond
+    ((eq value *py-none*) (princ "None" stream))
+    ((eq value *py-true*) (princ "True" stream))
+    ((eq value *py-false*) (princ "False" stream))
+    ((py-list-object-p value)
+     (princ "[" stream)
+     (loop for index from 0 below (or (py-object-size value) 0)
+           do (progn
+                (when (> index 0)
+                  (princ ", " stream))
+                (py-display (aref (py-object-value value) index) stream)))
+     (princ "]" stream))
+    (t (princ value stream))))
 
 (defun py-append (obj value)
   (py-call-attr obj "append" value))

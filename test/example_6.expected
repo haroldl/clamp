@@ -1,0 +1,12 @@
+True False None
+none false
+empty false
+list true
+42
+fallback
+kept
+[]
+ok
+True True False True
+zero false
+string false

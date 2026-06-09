@@ -210,6 +210,8 @@ def codegen_compare(node, context: Context):
     op = codegen(node.ops[0], child_context)
     lhs = codegen(node.left, child_context)
     rhs = codegen(node.comparators[0], child_context)
+    if isinstance(node.ops[0], ast.Eq):
+        return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-EQ {lhs} {rhs})"
     return f"({op} {lhs} {rhs})"
 
 
@@ -273,14 +275,14 @@ def codegen_if(node, context : Context):
     else:
         false_branch = codegen(node.orelse, child_context)
 
-    return f"(COMMON-LISP::if {conditional} {true_branch} {false_branch})"
+    return f"(COMMON-LISP::if (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P {conditional}) {true_branch} {false_branch})"
 
 
 def map_name(name: str) -> str:
     return name
 
 
-codegen_handlers[type(None)] = lambda node, _: "COMMON-LISP::nil"
+codegen_handlers[type(None)] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
 codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.AugAssign] = codegen_augassign
@@ -309,13 +311,13 @@ codegen_handlers[ast.Compare] = codegen_compare
 codegen_handlers[ast.BoolOp] = codegen_bool_operator
 codegen_handlers[ast.Constant] = lambda node, _: codegen(node.value)
 codegen_handlers[ast.Return] = codegen_return
-codegen_handlers[ast.Eq] = lambda node, _: "COMMON-LISP::="
-codegen_handlers[ast.Or] = lambda node, _: "COMMON-LISP::or"
-codegen_handlers[ast.And] = lambda node, _: "COMMON-LISP::and"
+codegen_handlers[ast.Eq] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-EQ"
+codegen_handlers[ast.Or] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-OR"
+codegen_handlers[ast.And] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-AND"
 codegen_handlers[int] = lambda node, _: str(node)
 codegen_handlers[float] = lambda node, _: str(node)
 codegen_handlers[str] = lambda node, _: '"' + str(node) + '"' # TODO: escape nested quotes correctly
-codegen_handlers[bool] = lambda node, _: "COMMON-LISP::t" if node else "COMMON-LISP::nil"
+codegen_handlers[bool] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:*PY-TRUE*" if node else "|CLAMP.__CLAMP_INTERNALS__|:*PY-FALSE*"
 
 # TODO:
 # Exception: Do not have support to codegen <class 'ast.Compare'> node with value Compare(left=Constant(value=5), ops=[Eq()], comparators=[Constant(value=2)])

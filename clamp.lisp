@@ -147,8 +147,8 @@
 			(write-line "")
 			(write-line "running:"))
 		      (let ((result (eval code-to-run)))
-			(when (and interactive result)
-			  (princ result)
+			(when (and interactive (not (eq result |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)))
+			  (|CLAMP.__CLAMP_INTERNALS__|:PY-DISPLAY result)
 			  (terpri))
 			(when *verbose*
 			  (write-line "")

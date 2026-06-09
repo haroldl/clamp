@@ -55,5 +55,5 @@
           do (progn
                (unless first
                  (princ #\Space))
-               (princ x)))
+               (|CLAMP.__CLAMP_INTERNALS__|:PY-DISPLAY x)))
     (terpri)))
