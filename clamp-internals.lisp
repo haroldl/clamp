@@ -4,6 +4,7 @@
    :py-object
    :make-py-object
    :py-object-type
+   :py-object-size
    :py-object-value
    :py-object-attrs
    :make-py-instance
@@ -12,6 +13,9 @@
    :py-type-name
    :py-type-bases
    :py-type-attrs
+   :py-type-basicsize
+   :py-type-itemsize
+   :py-type-flags
    :py-type-attr
    :py-object-attr
    :py-lookup-attr
@@ -22,6 +26,8 @@
    :py-callable-fn
    :py-callable-binding-kind
    :py-callable-owner-type
+   :*py-object-type*
+   :*py-type-type*
    :make-py-list
    :py-append
    :py-getitem
@@ -32,13 +38,21 @@
 ;; Private runtime representation for Python objects inside Clamp.
 ;; Keep this separate from CLAMP.__builtins__ so user-visible Python globals
 ;; do not accidentally gain access to internal implementation details.
+;;
+;; This mirrors CPython's object model where every value has a fixed type
+;; pointer and variable-size objects carry an explicit logical size. SBCL's GC
+;; owns memory management, so Clamp does not model CPython's reference counts.
 (defstruct py-object
   type
+  size
   value
   (attrs (make-hash-table :test #'equal)))
 
-(defun make-py-instance (type &key value attrs)
-  (let ((obj (make-py-object :type type :value value)))
+
+(defun make-py-instance (type &key value attrs size)
+  (unless (py-type-p type)
+    (error "Python object type must be a py-type, got ~S" type))
+  (let ((obj (make-py-object :type type :value value :size size)))
     (when attrs
       (maphash (lambda (name attr)
                  (setf (gethash name (py-object-attrs obj)) attr))
@@ -47,10 +61,22 @@
 
 ;; Internal representation of a Python type object. User-defined classes can be
 ;; modeled with this rather than relying on CLOS semantics.
-(defstruct py-type
+(defstruct (py-type (:include py-object))
   name
   (bases '())
-  (attrs (make-hash-table :test #'equal)))
+  (basicsize 0)
+  (itemsize 0)
+  (flags 0))
+
+(defparameter *py-type-type*
+  (make-py-type :name "type" :basicsize 1))
+
+(setf (py-object-type *py-type-type*) *py-type-type*)
+
+(defparameter *py-object-type*
+  (make-py-type :type *py-type-type* :name "object" :basicsize 1))
+
+(setf (py-type-bases *py-type-type*) (list *py-object-type*))
 
 ;; Internal representation of Python-callable behavior.
 ;;
@@ -90,6 +116,8 @@
               finally (return (values nil nil))))))
 
 (defun py-lookup-attr (obj name)
+  (unless (py-object-p obj)
+    (error "Cannot look up Python attribute ~S on non-object ~S" name obj))
   (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
     (when found
       (return-from py-lookup-attr attr)))
@@ -112,8 +140,15 @@
 (defun py-call-attr (obj name &rest args)
   (apply #'py-invoke-callable (py-lookup-attr obj name) obj args))
 
+(defstruct (py-list-object (:include py-object))
+  (allocated 0))
+
 (defparameter *py-list-type*
-  (make-py-type :name "list"))
+  (make-py-type :type *py-type-type*
+                :name "list"
+                :bases (list *py-object-type*)
+                :basicsize 1
+                :itemsize 1))
 
 (defun py-list-storage (obj operation)
   (unless (eq (py-object-type obj) *py-list-type*)
@@ -122,7 +157,10 @@
 
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
-        (vector-push-extend value (py-list-storage obj "append"))
+        (let ((storage (py-list-storage obj "append")))
+          (vector-push-extend value storage)
+          (setf (py-object-size obj) (fill-pointer storage))
+          (setf (py-list-object-allocated obj) (array-total-size storage)))
         nil))
 
 (setf (py-type-attr *py-list-type* "__getitem__")
@@ -138,7 +176,10 @@
   (let ((storage (make-array 0 :adjustable t :fill-pointer 0)))
     (dolist (value values)
       (vector-push-extend value storage))
-    (make-py-instance *py-list-type* :value storage)))
+    (make-py-list-object :type *py-list-type*
+                         :size (fill-pointer storage)
+                         :value storage
+                         :allocated (array-total-size storage))))
 
 (defun py-append (obj value)
   (py-call-attr obj "append" value))
