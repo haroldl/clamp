@@ -139,24 +139,14 @@ NIL
 Boolean Logic
 -------------
 
-Common Lisp uses the `nil` value for the same purposes that Python uses `None` and `False`. This means we need a special value for one of them. The presence of 2 different false values cannot be represented in Common Lisp; even 0 is true to Lisp.
+Common Lisp uses `nil` for both falsehood and the empty list, while Python has distinct `None`, `False`, empty containers, and other falsy values. Clamp therefore must not use raw Common Lisp truthiness for Python code.
 
-But Python boolean logic is not like SQL TRUE/FALSE/NULL boolean values in that None values do not override other values the way NULL values do in SQL.
-
-That means that we need to
-1) Define a special None value in Common Lisp.
-2) Write our own logic functions, including a way to coerce values to booleans for use in predicates. Let's call that `(coerce-to-boolean v)`.
+Clamp represents `None`, `False`, and `True` as runtime singleton objects and routes predicate tests through `PY-TRUTHY-P`, modeled after CPython's `PyObject_IsTrue`. Boolean operators compile to `PY-AND` and `PY-OR`, which preserve Python's value-returning behavior:
 
 ```
-if None or 42:
-   ...
+None or 42    # returns 42
+[] and 42     # returns []
 ```
 
-should compile to
+As new Python object types are added, they should plug into this same runtime truth path rather than falling back to raw Lisp truthiness. For example, a future dict, tuple, or user-defined object implementation should make `PY-TRUTHY-P` consult the appropriate length or `__bool__` behavior, matching the CPython source in `~/local/Python-3.14.5`.
 
-```
-(if (coerce-to-boolean (or CLAMP.__builtins__::None 42))
-    ...)
-```
-
-and `#'COERCE-TO-BOOLEAN` should convert `None` to `nil`.
