@@ -42,6 +42,18 @@ def run_clamp(sample, *args):
         ) from exc
 
 
+def run_clamp_repl(input_text):
+    command = [str(CLAMP)]
+    return subprocess.run(
+        command,
+        cwd=ROOT,
+        input=input_text,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def test_default_run_is_quiet():
     result = run_clamp(EXAMPLE_1)
     assert result.stdout == "hello, clamp\n"
@@ -68,3 +80,8 @@ def test_examples_match_expected_output():
         assert expected.exists(), f"missing expected output for {sample.name}"
         result = run_clamp(sample)
         assert result.stdout == expected.read_text()
+
+
+def test_interactive_math_expression_prints_result():
+    result = run_clamp_repl("1 + 2\nquit\n")
+    assert result.stdout == ">>> 3\n>>> "

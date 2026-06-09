@@ -121,7 +121,7 @@
   (write-line "Locals:")
   (write-line (python-to-lisp-string py-locals)))
 
-(defun clamp-compile-and-run (python-code py-globals py-locals)
+(defun clamp-compile-and-run (python-code py-globals py-locals interactive)
   ;; Set a local variable to hold the code to be compiled:
   (py-dict-set-item py-locals (py-unicode-from-string "python_source_to_compile") (py-unicode-from-string python-code))
 
@@ -147,6 +147,9 @@
 			(write-line "")
 			(write-line "running:"))
 		      (let ((result (eval code-to-run)))
+			(when (and interactive result)
+			  (princ result)
+			  (terpri))
 			(when *verbose*
 			  (write-line "")
 			  (write-line "Result:")
@@ -227,7 +230,7 @@
 			       (setf code new-code)
 			       (setf done new-done)))
 			   (if code
-			       (clamp-compile-and-run code py-globals-and-locals py-globals-and-locals))))))
+			       (clamp-compile-and-run code py-globals-and-locals py-globals-and-locals interactive))))))
 	 (progn
 	   (py-finalize)))))))
 
