@@ -56,6 +56,10 @@ codegen_handlers = {}
 class Context():
     top_level_stmt: bool = True
     block_name: str | None = None
+    mutation_context: bool = False
+    loop_block_name: str | None = None
+    loop_continue_name: str | None = None
+    loop_broke_name: str | None = None
 
     def child(self):
         return replace(self, top_level_stmt = False)
@@ -120,6 +124,9 @@ def codegen_block(stmts, context: Context) -> str:
                 return f"(|CLAMP.__builtins__|:ASSIGN (:GLOBAL {lhs} {rhs}) {rest_code})"
             else:
                 return f"(|CLAMP.__builtins__|:ASSIGN (:GLOBAL {lhs} {rhs}))"
+        elif context.mutation_context:
+            assignment_code = f"(common-lisp:setf {lhs} {rhs})"
+            return assignment_code + ("\n" + rest_code if rest_code else "")
         else:
             # Lexical binding within function or inner block
             if rest_code:
@@ -205,14 +212,32 @@ def codegen_binary_operator(node, context : Context):
 
 def codegen_compare(node, context: Context):
     child_context = context.child()
-    if len(node.ops) != 1 or len(node.comparators) != 1:
-        raise Exception("TODO: chained comparisons")
-    op = codegen(node.ops[0], child_context)
-    lhs = codegen(node.left, child_context)
-    rhs = codegen(node.comparators[0], child_context)
-    if isinstance(node.ops[0], ast.Eq):
-        return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-EQ {lhs} {rhs})"
-    return f"({op} {lhs} {rhs})"
+    operands = [node.left, *node.comparators]
+    operand_codes = [codegen(operand, child_context) for operand in operands]
+    op_codes = [codegen(op, child_context) for op in node.ops]
+
+    if len(op_codes) == 1:
+        return f"({op_codes[0]} {operand_codes[0]} {operand_codes[1]})"
+
+    base = f"__clamp_compare_{id(node)}"
+
+    def build(index: int, left_symbol: str) -> str:
+        right_symbol = f"{base}_right_{index}"
+        comparison_symbol = f"{base}_comparison_{index}"
+        comparison = f"({op_codes[index]} {left_symbol} {right_symbol})"
+        if index == len(op_codes) - 1:
+            success = comparison_symbol
+        else:
+            success = build(index + 1, right_symbol)
+        return (
+            f"(common-lisp:let (({right_symbol} {operand_codes[index + 1]})) "
+            f"(common-lisp:let (({comparison_symbol} {comparison})) "
+            f"(common-lisp:if (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P {comparison_symbol}) "
+            f"{success} |CLAMP.__CLAMP_INTERNALS__|:*PY-FALSE*)))"
+        )
+
+    left_symbol = f"{base}_left"
+    return f"(common-lisp:let (({left_symbol} {operand_codes[0]})) {build(0, left_symbol)})"
 
 
 def codegen_bool_operator(node, context: Context):
@@ -260,18 +285,74 @@ def codegen_augassign(node, context: Context):
     raise Exception("TODO: unsupported augmented assignment target")
 
 
+def codegen_unary_operator(node, context: Context):
+    child_context = context.child()
+    op = codegen(node.op, child_context)
+    operand = codegen(node.operand, child_context)
+    return f"({op} {operand})"
+
+
+def codegen_while(node, context: Context):
+    child_context = context.child()
+    loop_id = id(node)
+    loop_block_name = f"__clamp_loop_{loop_id}"
+    loop_continue_name = f"__clamp_loop_continue_{loop_id}"
+    loop_broke_name = f"__clamp_loop_broke_{loop_id}"
+    body_context = replace(
+        child_context,
+        mutation_context=True,
+        loop_block_name=loop_block_name,
+        loop_continue_name=loop_continue_name,
+        loop_broke_name=loop_broke_name,
+    )
+    conditional = codegen(node.test, child_context)
+    body = codegen_block(node.body, body_context) or "COMMON-LISP::nil"
+    loop_code = (
+        f"(common-lisp:let (({loop_broke_name} COMMON-LISP::nil)) "
+        f"(common-lisp:block {loop_block_name} "
+        "(common-lisp:loop "
+        f"while (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P {conditional}) "
+        f"do (common-lisp:block {loop_continue_name} "
+        f"(common-lisp:progn {body}))))"
+    )
+    if node.orelse:
+        else_code = codegen_block(node.orelse, child_context)
+        loop_code += (
+            f" (common-lisp:unless {loop_broke_name} "
+            f"(common-lisp:progn {else_code} ))"
+        )
+    return loop_code + ")"
+
+
+def codegen_break(node, context: Context):
+    if not context.loop_block_name or not context.loop_broke_name:
+        raise Exception("Trying to break but not inside a loop.")
+    return (
+        f"(common-lisp:setf {context.loop_broke_name} COMMON-LISP::t) "
+        f"(common-lisp:return-from {context.loop_block_name} COMMON-LISP::nil)"
+    )
+
+
+def codegen_continue(node, context: Context):
+    if not context.loop_continue_name:
+        raise Exception("Trying to continue but not inside a loop.")
+    return f"(common-lisp:return-from {context.loop_continue_name} COMMON-LISP::nil)"
+
+
 def codegen_if(node, context : Context):
     child_context = context.child()
     conditional = codegen(node.test, child_context)
 
     # If statement vs. If expression handling
     if isinstance(node.body, list):
-        true_branch = codegen_block(node.body, child_context)
+        true_code = codegen_block(node.body, child_context)
+        true_branch = f"(common-lisp:progn {true_code})" if true_code else "COMMON-LISP::nil"
     else:
         true_branch = codegen(node.body, child_context)
 
     if isinstance(node.orelse, list):
-        false_branch = codegen_block(node.orelse, child_context)
+        false_code = codegen_block(node.orelse, child_context)
+        false_branch = f"(common-lisp:progn {false_code})" if false_code else "COMMON-LISP::nil"
     else:
         false_branch = codegen(node.orelse, child_context)
 
@@ -301,6 +382,9 @@ codegen_handlers[ast.Subscript] = lambda node, context: (
 )
 codegen_handlers[ast.If] = codegen_if
 codegen_handlers[ast.IfExp] = codegen_if
+codegen_handlers[ast.While] = codegen_while
+codegen_handlers[ast.Break] = codegen_break
+codegen_handlers[ast.Continue] = codegen_continue
 codegen_handlers[ast.Add] = lambda node, _: "COMMON-LISP::+"
 codegen_handlers[ast.Sub] = lambda node, _: "COMMON-LISP::-"
 codegen_handlers[ast.Mult] = lambda node, _: "COMMON-LISP::*"
@@ -309,9 +393,16 @@ codegen_handlers[ast.Pow] = lambda node, _: "COMMON-LISP::expt"
 codegen_handlers[ast.BinOp] = codegen_binary_operator
 codegen_handlers[ast.Compare] = codegen_compare
 codegen_handlers[ast.BoolOp] = codegen_bool_operator
+codegen_handlers[ast.UnaryOp] = codegen_unary_operator
 codegen_handlers[ast.Constant] = lambda node, _: codegen(node.value)
 codegen_handlers[ast.Return] = codegen_return
 codegen_handlers[ast.Eq] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-EQ"
+codegen_handlers[ast.NotEq] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-NE"
+codegen_handlers[ast.Lt] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-LT"
+codegen_handlers[ast.LtE] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-LE"
+codegen_handlers[ast.Gt] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-GT"
+codegen_handlers[ast.GtE] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-GE"
+codegen_handlers[ast.Not] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-NOT"
 codegen_handlers[ast.Or] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-OR"
 codegen_handlers[ast.And] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-AND"
 codegen_handlers[int] = lambda node, _: str(node)

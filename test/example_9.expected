@@ -1,0 +1,9 @@
+loop 1
+loop 3
+after break 4
+plain 0
+plain 1
+plain else 2
+nested 0 1
+nested 1 1
+nested done

@@ -36,6 +36,12 @@
    :py-and
    :py-or
    :py-eq
+   :py-ne
+   :py-lt
+   :py-le
+   :py-gt
+   :py-ge
+   :py-not
    :py-display
    :make-py-list
    :py-append
@@ -149,20 +155,74 @@
     ((eq value *py-false*) 0)
     (t nil)))
 
+(defun py-normalize-bool-number (value)
+  (let ((bool-value (py-bool-value value)))
+    (if bool-value bool-value value)))
+
 (defun py-eq (left right)
-  (py-bool
-   (let ((left-bool-value (py-bool-value left))
-         (right-bool-value (py-bool-value right)))
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (py-bool
      (cond
        ((or (eq left *py-none*) (eq right *py-none*))
         (eq left right))
-       ((and left-bool-value (numberp right)) (= left-bool-value right))
-       ((and right-bool-value (numberp left)) (= left right-bool-value))
-       ((or left-bool-value right-bool-value)
-        (eq left right))
-       ((and (numberp left) (numberp right)) (= left right))
-       ((and (stringp left) (stringp right)) (string= left right))
+       ((and (numberp normalized-left) (numberp normalized-right))
+        (= normalized-left normalized-right))
+       ((and (stringp left) (stringp right))
+        (string= left right))
        (t (eq left right))))))
+
+(defun py-ne (left right)
+  (py-bool (not (py-truthy-p (py-eq left right)))))
+
+(defun py-ordered-values (left right operation)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (cond
+      ((and (numberp normalized-left) (numberp normalized-right))
+       (values normalized-left normalized-right))
+      ((and (stringp left) (stringp right))
+       (values left right))
+      (t
+       (error "Unsupported Python comparison ~A between ~S and ~S"
+              operation left right)))))
+
+(defun py-lt (left right)
+  (multiple-value-bind (ordered-left ordered-right)
+      (py-ordered-values left right "<")
+    (py-bool
+     (if (and (stringp ordered-left) (stringp ordered-right))
+         (string< ordered-left ordered-right)
+         (< ordered-left ordered-right)))))
+
+(defun py-le (left right)
+  (multiple-value-bind (ordered-left ordered-right)
+      (py-ordered-values left right "<=")
+    (py-bool
+     (if (and (stringp ordered-left) (stringp ordered-right))
+         (not (null (or (string< ordered-left ordered-right)
+                        (string= ordered-left ordered-right))))
+         (<= ordered-left ordered-right)))))
+
+(defun py-gt (left right)
+  (multiple-value-bind (ordered-left ordered-right)
+      (py-ordered-values left right ">")
+    (py-bool
+     (if (and (stringp ordered-left) (stringp ordered-right))
+         (string> ordered-left ordered-right)
+         (> ordered-left ordered-right)))))
+
+(defun py-ge (left right)
+  (multiple-value-bind (ordered-left ordered-right)
+      (py-ordered-values left right ">=")
+    (py-bool
+     (if (and (stringp ordered-left) (stringp ordered-right))
+         (not (null (or (string> ordered-left ordered-right)
+                        (string= ordered-left ordered-right))))
+         (>= ordered-left ordered-right)))))
+
+(defun py-not (value)
+  (py-bool (not (py-truthy-p value))))
 
 ;; Internal representation of Python-callable behavior.
 ;;
