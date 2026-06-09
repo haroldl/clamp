@@ -1,6 +1,8 @@
 from pathlib import Path
 import subprocess
 
+import pytest
+
 
 TEST_DIR = Path(__file__).resolve().parent
 ROOT = TEST_DIR.parent
@@ -74,12 +76,15 @@ def test_compile_only_prints_generated_lisp_without_running_program():
     assert "hello, clamp\n\n" not in result.stdout
 
 
-def test_examples_match_expected_output():
-    for sample in sorted(TEST_DIR.glob("example_*.py")):
-        expected = sample.with_suffix(".expected")
-        assert expected.exists(), f"missing expected output for {sample.name}"
-        result = run_clamp(sample)
-        assert result.stdout == expected.read_text()
+EXAMPLES = sorted(TEST_DIR.glob("example_*.py"))
+
+
+@pytest.mark.parametrize("sample", EXAMPLES, ids=lambda path: path.stem)
+def test_example_matches_expected_output(sample):
+    expected = sample.with_suffix(".expected")
+    assert expected.exists(), f"missing expected output for {sample.name}"
+    result = run_clamp(sample)
+    assert result.stdout == expected.read_text()
 
 
 def test_interactive_math_expression_prints_result():
