@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print)
-  (:export :test :dir :plus :times :print :len :iter :next :reversed :assign))
+  (:export :test :dir :plus :times :print :len :bool :iter :next :reversed :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -61,6 +61,11 @@
 (defvar len
   (lambda (obj)
     (|CLAMP.__CLAMP_INTERNALS__|:PY-LEN obj)))
+
+(defvar bool
+  (lambda (&optional (obj |CLAMP.__CLAMP_INTERNALS__|:*PY-FALSE*))
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-BOOL
+     (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P obj))))
 
 (defvar iter
   (lambda (obj)
