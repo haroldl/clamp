@@ -70,6 +70,7 @@
    :py-iadd
    :py-mul
    :py-imul
+   :py-pow
    :py-truediv
    :py-floordiv
    :py-mod
@@ -1609,6 +1610,29 @@
        (py-string-repeat right normalized-left))
       (t
        (error "Unsupported Python * between ~S and ~S" left right)))))
+
+(defun py-pow (left right &optional (modulus *py-none*))
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right))
+        (normalized-modulus (py-normalize-bool-number modulus)))
+    (unless (and (numberp normalized-left) (numberp normalized-right))
+      (error "Unsupported Python ** or pow() between ~S and ~S" left right))
+    (if (eq modulus *py-none*)
+        (let ((result (expt normalized-left normalized-right)))
+          (if (and (integerp normalized-left)
+                   (integerp normalized-right)
+                   (< normalized-right 0))
+              (float result)
+              result))
+        (progn
+          (unless (and (integerp normalized-left)
+                       (integerp normalized-right)
+                       (integerp normalized-modulus))
+            (error "pow() 3rd argument only supported for integers"))
+          (when (= normalized-modulus 0)
+            (error "pow() 3rd argument cannot be 0"))
+          (mod (expt normalized-left normalized-right)
+               normalized-modulus)))))
 
 (defun py-truediv (left right)
   (let ((normalized-left (py-normalize-bool-number left))

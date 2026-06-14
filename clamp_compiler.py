@@ -182,7 +182,7 @@ def codegen_funcall(node, context : Context):
     target = codegen(node.func, child_context)
     args_str = " ".join(args)
     # Map builtins that must resolve before USE-PACKAGE takes effect.
-    if isinstance(node.func, ast.Name) and node.func.id.lower() in {"print", "len", "bool", "callable", "repr", "str", "type", "iter", "next", "reversed", "min", "max", "sum", "sorted", "list", "tuple", "abs", "hash", "divmod", "all", "any", "enumerate", "zip", "filter", "map", "range", "slice", "bin", "oct", "hex", "chr", "ord"}:
+    if isinstance(node.func, ast.Name) and node.func.id.lower() in {"print", "len", "bool", "callable", "repr", "str", "type", "iter", "next", "reversed", "min", "max", "sum", "sorted", "list", "tuple", "abs", "hash", "pow", "divmod", "all", "any", "enumerate", "zip", "filter", "map", "range", "slice", "bin", "oct", "hex", "chr", "ord"}:
         target = f"|CLAMP.__builtins__|:{node.func.id.upper()}"
     return f"(common-lisp:funcall {target} {args_str})"
 
@@ -474,7 +474,7 @@ codegen_handlers[ast.Mult] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-MUL
 codegen_handlers[ast.Div] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-TRUEDIV"
 codegen_handlers[ast.FloorDiv] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-FLOORDIV"
 codegen_handlers[ast.Mod] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-MOD"
-codegen_handlers[ast.Pow] = lambda node, _: "COMMON-LISP::expt"
+codegen_handlers[ast.Pow] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-POW"
 codegen_handlers[ast.BinOp] = codegen_binary_operator
 codegen_handlers[ast.Compare] = codegen_compare
 codegen_handlers[ast.BoolOp] = codegen_bool_operator

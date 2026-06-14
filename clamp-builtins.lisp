@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print :min :max :sum :sorted :abs :filter :map :hash :list :tuple :slice :chr :hex :type :str)
-  (:export :test :dir :plus :times :print :len :bool :callable :repr :str :type :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :divmod :all :any :enumerate :zip :filter :map :range :slice :bin :oct :hex :chr :ord :assign))
+  (:export :test :dir :plus :times :print :len :bool :callable :repr :str :type :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :pow :divmod :all :any :enumerate :zip :filter :map :range :slice :bin :oct :hex :chr :ord :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -127,6 +127,10 @@
 (defvar hash
   (lambda (obj)
     (|CLAMP.__CLAMP_INTERNALS__|:PY-HASH obj)))
+
+(defvar pow
+  (lambda (base exp &optional (mod |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*))
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-POW base exp mod)))
 
 (defvar divmod
   (lambda (left right)
