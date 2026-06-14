@@ -698,6 +698,27 @@
     (setf (py-object-size obj) (fill-pointer storage))
     value))
 
+(defun py-list-delete-slice (obj slice)
+  (let* ((storage (py-list-storage obj "delete"))
+         (size (or (py-object-size obj) 0))
+         (delete-flags (make-array size :initial-element nil)))
+    (multiple-value-bind (start step slice-length)
+        (py-list-slice-parameters slice size)
+      (loop for offset from 0 below slice-length
+            for index = start then (+ index step)
+            do (setf (aref delete-flags index) t)))
+    (let ((write-index 0))
+      (loop for read-index from 0 below size
+            unless (aref delete-flags read-index)
+              do (progn
+                   (setf (aref storage write-index) (aref storage read-index))
+                   (incf write-index)))
+      (loop while (> (fill-pointer storage) write-index)
+            do (vector-pop storage)))
+    (setf (py-object-size obj) (fill-pointer storage))
+    (setf (py-list-object-allocated obj) (array-total-size storage))
+    *py-none*))
+
 (setf (py-type-attr *py-list-type* "pop")
       (lambda (obj &optional (index -1))
         (let* ((storage (py-list-storage obj "pop"))
@@ -739,7 +760,9 @@
 
 (setf (py-type-attr *py-list-type* "__delitem__")
       (lambda (obj index)
-        (py-list-delete-index obj (py-list-normalized-index obj index "list"))
+        (if (py-slice-object-p index)
+            (py-list-delete-slice obj index)
+            (py-list-delete-index obj (py-list-normalized-index obj index "list")))
         *py-none*))
 
 (defun make-py-list (&rest values)

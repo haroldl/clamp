@@ -261,7 +261,7 @@ def codegen_delete(node, context: Context):
     if len(node.targets) != 1:
         raise Exception("TODO: unsupported delete target count")
     target = node.targets[0]
-    if not isinstance(target, ast.Subscript) or isinstance(target.slice, ast.Slice):
+    if not isinstance(target, ast.Subscript):
         raise Exception("TODO: unsupported delete target")
     child_context = context.child()
     obj = codegen(target.value, child_context)
