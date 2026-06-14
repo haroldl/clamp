@@ -439,6 +439,17 @@
           (setf (py-list-object-allocated obj) (array-total-size storage)))
         *py-none*))
 
+(setf (py-type-attr *py-list-type* "extend")
+      (lambda (obj iterable)
+        (let* ((storage (py-list-storage obj "extend"))
+               (source-storage (py-list-storage iterable "extend"))
+               (source-size (or (py-object-size iterable) 0)))
+          (loop for index from 0 below source-size
+                do (vector-push-extend (aref source-storage index) storage))
+          (setf (py-object-size obj) (fill-pointer storage))
+          (setf (py-list-object-allocated obj) (array-total-size storage)))
+        *py-none*))
+
 (setf (py-type-attr *py-list-type* "clear")
       (lambda (obj)
         (py-list-storage obj "clear")
