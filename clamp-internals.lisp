@@ -60,6 +60,7 @@
    :py-sorted
    :py-list
    :py-tuple
+   :py-bin
    :py-chr
    :py-ord
    :py-add
@@ -1500,6 +1501,14 @@
 (defun py-divmod (left right)
   (make-py-tuple (py-floordiv left right)
                  (py-mod left right)))
+
+(defun py-bin (value)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (unless (integerp normalized-value)
+      (error "bin() argument must be an integer"))
+    (if (< normalized-value 0)
+        (format nil "-0b~B" (- normalized-value))
+        (format nil "0b~B" normalized-value))))
 
 (defun py-chr (value)
   (let ((normalized-value (py-normalize-bool-number value)))

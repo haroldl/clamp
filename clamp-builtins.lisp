@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print :min :max :sum :sorted :abs :filter :hash :list :tuple :slice :chr :type :str)
-  (:export :test :dir :plus :times :print :len :bool :callable :repr :str :type :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :divmod :all :any :enumerate :zip :filter :range :slice :chr :ord :assign))
+  (:export :test :dir :plus :times :print :len :bool :callable :repr :str :type :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :divmod :all :any :enumerate :zip :filter :range :slice :bin :chr :ord :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -155,6 +155,10 @@
 (defvar range
   (lambda (&rest args)
     (apply #'|CLAMP.__CLAMP_INTERNALS__|:PY-RANGE args)))
+
+(defvar bin
+  (lambda (value)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-BIN value)))
 
 (defvar chr
   (lambda (value)
