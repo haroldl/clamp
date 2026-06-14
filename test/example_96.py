@@ -1,0 +1,7 @@
+print((0).bit_count())
+print((13).bit_count())
+print((-13).bit_count())
+print((2 ** 20).bit_count())
+print(((2 ** 20) - 1).bit_count())
+print(True.bit_count())
+print(False.bit_count())

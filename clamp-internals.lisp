@@ -395,6 +395,12 @@
       (error "int.bit_length() expected an integer, got ~S" value))
     (integer-length (abs normalized-value))))
 
+(defun py-int-bit-count (value)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (unless (integerp normalized-value)
+      (error "int.bit_count() expected an integer, got ~S" value))
+    (logcount (abs normalized-value))))
+
 (defun py-list-eq (left right)
   (let ((left-size (or (py-object-size left) 0))
         (right-size (or (py-object-size right) 0)))
@@ -1074,6 +1080,10 @@
 (setf (py-type-attr *py-int-type* "bit_length")
       (lambda (obj)
         (py-int-bit-length obj)))
+
+(setf (py-type-attr *py-int-type* "bit_count")
+      (lambda (obj)
+        (py-int-bit-count obj)))
 
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
