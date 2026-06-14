@@ -54,6 +54,8 @@
    :py-max
    :py-sum
    :py-sorted
+   :py-list
+   :py-tuple
    :py-add
    :py-iadd
    :py-mul
@@ -1544,6 +1546,28 @@
         (py-append result item)))
     (py-call-attr result "sort")
     result))
+
+(defun py-list (&optional (iterable *py-none*))
+  (let ((result (make-py-list)))
+    (unless (eq iterable *py-none*)
+      (py-list-extend-iterable result iterable))
+    result))
+
+(defun py-tuple (&optional (iterable *py-none*))
+  (cond
+    ((eq iterable *py-none*)
+     (make-py-tuple))
+    ((py-tuple-object-p iterable)
+     iterable)
+    (t
+     (let ((items '())
+           (iterator (py-iter iterable)))
+       (loop
+         (multiple-value-bind (item found) (py-next-item iterator)
+           (unless found
+             (return))
+           (push item items)))
+       (apply #'make-py-tuple (nreverse items))))))
 
 (defun py-all (iterable)
   (let ((iterator (py-iter iterable)))
