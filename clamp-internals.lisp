@@ -264,6 +264,10 @@
        (py-bool
         (loop for index from 0 below size
               thereis (py-truthy-p (py-eq (aref storage index) item))))))
+    ((stringp container)
+     (unless (stringp item)
+       (error "'in <string>' requires string as left operand, got ~S" item))
+     (py-bool (search item container)))
     (t
      (error "Python object of type ~A is not a container"
             (if (py-object-p container)
