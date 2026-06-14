@@ -720,11 +720,20 @@
 
 (setf (py-type-attr *py-list-type* "extend")
       (lambda (obj iterable)
-        (let* ((storage (py-list-storage obj "extend"))
-               (source-storage (py-list-storage iterable "extend"))
-               (source-size (or (py-object-size iterable) 0)))
-          (loop for index from 0 below source-size
-                do (vector-push-extend (aref source-storage index) storage))
+        (let ((storage (py-list-storage obj "extend")))
+          (cond
+            ((py-list-object-p iterable)
+             (let ((source-storage (py-list-storage iterable "extend"))
+                   (source-size (or (py-object-size iterable) 0)))
+               (loop for index from 0 below source-size
+                     do (vector-push-extend (aref source-storage index) storage))))
+            ((py-tuple-object-p iterable)
+             (let ((source-storage (py-tuple-storage iterable "extend"))
+                   (source-size (or (py-object-size iterable) 0)))
+               (loop for index from 0 below source-size
+                     do (vector-push-extend (aref source-storage index) storage))))
+            (t
+             (error "extend argument must be iterable")))
           (setf (py-object-size obj) (fill-pointer storage))
           (setf (py-list-object-allocated obj) (array-total-size storage)))
         *py-none*))
@@ -1067,14 +1076,10 @@
        (error "Unsupported Python + between ~S and ~S" left right)))))
 
 (defun py-iadd (left right)
-  (if (and (py-list-object-p left) (py-list-object-p right))
-      (let* ((left-storage (py-list-storage left "+="))
-             (right-storage (py-list-storage right "+="))
-             (right-size (or (py-object-size right) 0)))
-        (loop for index from 0 below right-size
-              do (vector-push-extend (aref right-storage index) left-storage))
-        (setf (py-object-size left) (fill-pointer left-storage))
-        (setf (py-list-object-allocated left) (array-total-size left-storage))
+  (if (and (py-list-object-p left)
+           (or (py-list-object-p right) (py-tuple-object-p right)))
+      (progn
+        (py-call-attr left "extend" right)
         left)
       (py-add left right)))
 
