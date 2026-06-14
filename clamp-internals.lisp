@@ -68,6 +68,7 @@
    :py-next
    :py-next-item
    :make-py-list
+   :make-py-tuple
    :py-append
    :py-insert
    :py-pop
@@ -185,6 +186,7 @@
     ((eq value *py-true*) t)
     ((or (eq value *py-false*) (eq value *py-none*)) nil)
     ((py-list-object-p value) (> (or (py-object-size value) 0) 0))
+    ((py-tuple-object-p value) (> (or (py-object-size value) 0) 0))
     ((numberp value) (not (zerop value)))
     ((stringp value) (> (length value) 0))
     ((null value) nil)
@@ -193,6 +195,7 @@
 (defun py-len (value)
   (cond
     ((py-list-object-p value) (or (py-object-size value) 0))
+    ((py-tuple-object-p value) (or (py-object-size value) 0))
     ((stringp value) (length value))
     (t
      (error "Python object of type ~A has no len()"
@@ -243,6 +246,17 @@
                          (py-eq (aref left-storage index)
                                 (aref right-storage index))))))))
 
+(defun py-tuple-eq (left right)
+  (let ((left-size (or (py-object-size left) 0))
+        (right-size (or (py-object-size right) 0)))
+    (and (= left-size right-size)
+         (let ((left-storage (py-object-value left))
+               (right-storage (py-object-value right)))
+           (loop for index from 0 below left-size
+                 always (py-truthy-p
+                         (py-eq (aref left-storage index)
+                                (aref right-storage index))))))))
+
 (defun py-list-compare (left right operation)
   (let* ((left-size (or (py-object-size left) 0))
          (right-size (or (py-object-size right) 0))
@@ -281,6 +295,8 @@
         (eq left right))
        ((and (py-list-object-p left) (py-list-object-p right))
         (py-list-eq left right))
+       ((and (py-tuple-object-p left) (py-tuple-object-p right))
+        (py-tuple-eq left right))
        ((and (numberp normalized-left) (numberp normalized-right))
         (= normalized-left normalized-right))
        ((and (stringp left) (stringp right))
@@ -293,6 +309,12 @@
 (defun py-contains (item container)
   (cond
     ((py-list-object-p container)
+     (let ((storage (py-object-value container))
+           (size (or (py-object-size container) 0)))
+       (py-bool
+        (loop for index from 0 below size
+              thereis (py-truthy-p (py-eq (aref storage index) item))))))
+    ((py-tuple-object-p container)
      (let ((storage (py-object-value container))
            (size (or (py-object-size container) 0)))
        (py-bool
@@ -467,6 +489,8 @@
 (defstruct (py-list-object (:include py-object))
   (allocated 0))
 
+(defstruct (py-tuple-object (:include py-object)))
+
 (defstruct (py-list-iterator-object (:include py-object))
   sequence
   (index 0))
@@ -478,6 +502,13 @@
 (defparameter *py-list-type*
   (make-py-type :type *py-type-type*
                 :name "list"
+                :bases (list *py-object-type*)
+                :basicsize 1
+                :itemsize 1))
+
+(defparameter *py-tuple-type*
+  (make-py-type :type *py-type-type*
+                :name "tuple"
                 :bases (list *py-object-type*)
                 :basicsize 1
                 :itemsize 1))
@@ -497,6 +528,11 @@
 (defun py-list-storage (obj operation)
   (unless (eq (py-object-type obj) *py-list-type*)
     (error "~A only supports list objects, got ~S" operation obj))
+  (py-object-value obj))
+
+(defun py-tuple-storage (obj operation)
+  (unless (eq (py-object-type obj) *py-tuple-type*)
+    (error "~A only supports tuple objects, got ~S" operation obj))
   (py-object-value obj))
 
 (defun py-list-index (obj index)
@@ -800,6 +836,45 @@
         (with-output-to-string (stream)
           (py-repr obj stream))))
 
+(setf (py-type-attr *py-tuple-type* "__contains__")
+      (lambda (obj value)
+        (py-contains value obj)))
+
+(setf (py-type-attr *py-tuple-type* "__eq__")
+      (lambda (obj value)
+        (py-eq obj value)))
+
+(setf (py-type-attr *py-tuple-type* "__ne__")
+      (lambda (obj value)
+        (py-ne obj value)))
+
+(setf (py-type-attr *py-tuple-type* "__len__")
+      (lambda (obj)
+        (py-tuple-storage obj "__len__")
+        (or (py-object-size obj) 0)))
+
+(setf (py-type-attr *py-tuple-type* "__getitem__")
+      (lambda (obj index)
+        (aref (py-tuple-storage obj "__getitem__")
+              (py-list-normalized-index obj index "tuple"))))
+
+(setf (py-type-attr *py-tuple-type* "__add__")
+      (lambda (obj value)
+        (py-add obj value)))
+
+(setf (py-type-attr *py-tuple-type* "__mul__")
+      (lambda (obj value)
+        (py-mul obj value)))
+
+(setf (py-type-attr *py-tuple-type* "__rmul__")
+      (lambda (obj value)
+        (py-mul value obj)))
+
+(setf (py-type-attr *py-tuple-type* "__repr__")
+      (lambda (obj)
+        (with-output-to-string (stream)
+          (py-repr obj stream))))
+
 (defun make-py-list (&rest values)
   (let ((storage (make-array 0 :adjustable t :fill-pointer 0)))
     (dolist (value values)
@@ -808,6 +883,16 @@
                          :size (fill-pointer storage)
                          :value storage
                          :allocated (array-total-size storage))))
+
+(defun make-py-tuple (&rest values)
+  (let* ((size (length values))
+         (storage (make-array size)))
+    (loop for value in values
+          for index from 0
+          do (setf (aref storage index) value))
+    (make-py-tuple-object :type *py-tuple-type*
+                          :size size
+                          :value storage)))
 
 (defun py-add (left right)
   (let ((normalized-left (py-normalize-bool-number left))
@@ -829,6 +914,20 @@
                               :size (fill-pointer result-storage)
                               :value result-storage
                               :allocated (array-total-size result-storage))))
+      ((and (py-tuple-object-p left) (py-tuple-object-p right))
+       (let* ((left-size (or (py-object-size left) 0))
+              (right-size (or (py-object-size right) 0))
+              (result-size (+ left-size right-size))
+              (result-storage (make-array result-size)))
+         (loop for index from 0 below left-size
+               do (setf (aref result-storage index)
+                        (aref (py-tuple-storage left "+") index)))
+         (loop for index from 0 below right-size
+               do (setf (aref result-storage (+ left-size index))
+                        (aref (py-tuple-storage right "+") index)))
+         (make-py-tuple-object :type *py-tuple-type*
+                               :size result-size
+                               :value result-storage)))
       (t
        (error "Unsupported Python + between ~S and ~S" left right)))))
 
@@ -859,6 +958,20 @@
                          :size (fill-pointer result-storage)
                          :value result-storage
                          :allocated (array-total-size result-storage))))
+
+(defun py-tuple-repeat (items count)
+  (let* ((source-storage (py-tuple-storage items "*"))
+         (source-size (or (py-object-size items) 0))
+         (repeat-count (max count 0))
+         (output-size (* source-size repeat-count))
+         (result-storage (make-array output-size)))
+    (dotimes (repeat repeat-count)
+      (loop for index from 0 below source-size
+            do (setf (aref result-storage (+ (* repeat source-size) index))
+                     (aref source-storage index))))
+    (make-py-tuple-object :type *py-tuple-type*
+                          :size output-size
+                          :value result-storage)))
 
 (defun py-list-inplace-repeat (items count)
   (let* ((storage (py-list-storage items "*="))
@@ -896,6 +1009,10 @@
        (py-list-repeat left normalized-right))
       ((and (integerp normalized-left) (py-list-object-p right))
        (py-list-repeat right normalized-left))
+      ((and (py-tuple-object-p left) (integerp normalized-right))
+       (py-tuple-repeat left normalized-right))
+      ((and (integerp normalized-left) (py-tuple-object-p right))
+       (py-tuple-repeat right normalized-left))
       ((and (stringp left) (integerp normalized-right))
        (py-string-repeat left normalized-right))
       ((and (integerp normalized-left) (stringp right))
@@ -1053,6 +1170,16 @@
                   (princ ", " stream))
                 (py-repr (aref (py-object-value value) index) stream)))
      (princ "]" stream))
+    ((py-tuple-object-p value)
+     (princ "(" stream)
+     (loop for index from 0 below (or (py-object-size value) 0)
+           do (progn
+                (when (> index 0)
+                  (princ ", " stream))
+                (py-repr (aref (py-object-value value) index) stream)))
+     (when (= (or (py-object-size value) 0) 1)
+       (princ "," stream))
+     (princ ")" stream))
     (t (py-display value stream))))
 
 (defun py-display (value &optional (stream *standard-output*))
@@ -1065,6 +1192,7 @@
     ((py-forward-list-iterator-p value) (princ "<list_iterator>" stream))
     ((py-reverse-list-iterator-p value) (princ "<list_reverseiterator>" stream))
     ((py-list-object-p value) (py-repr value stream))
+    ((py-tuple-object-p value) (py-repr value stream))
     (t (princ value stream))))
 
 (defun py-append (obj value)

@@ -401,6 +401,11 @@ codegen_handlers[ast.List] = lambda node, context: (
     + "".join(f" {codegen(elt, context.child())}" for elt in node.elts)
     + ")"
 )
+codegen_handlers[ast.Tuple] = lambda node, context: (
+    "(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-TUPLE"
+    + "".join(f" {codegen(elt, context.child())}" for elt in node.elts)
+    + ")"
+)
 codegen_handlers[ast.Slice] = codegen_slice
 codegen_handlers[ast.Name] = lambda node, _: map_name(node.id)
 codegen_handlers[ast.Module] = codegen_module
