@@ -1,0 +1,15 @@
+items = (10, 20, 30)
+it = iter(items)
+print(it.__length_hint__())
+print(next(it), it.__length_hint__())
+again = iter(it)
+print(next(again), next(it), it.__length_hint__())
+
+nested = ([1], (2, 3))
+nested_it = iter(nested)
+first = next(nested_it)
+first.append(99)
+print(first, next(nested_it))
+
+empty = iter(())
+print(empty.__length_hint__())
