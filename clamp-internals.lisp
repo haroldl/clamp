@@ -22,6 +22,7 @@
    :py-call-attr
    :py-type-of
    :py-callable
+   :py-isinstance
    :make-py-callable
    :py-callable-name
    :py-callable-fn
@@ -752,6 +753,28 @@
   (py-bool
    (or (functionp value)
        (py-callable-p value))))
+
+(defun py-type-subtype-p (derived cls)
+  (cond
+    ((eq derived cls) t)
+    ((not (py-type-p derived)) nil)
+    (t
+     (loop for base in (py-type-bases derived)
+           thereis (py-type-subtype-p base cls)))))
+
+(defun py-isinstance (obj class-or-tuple)
+  (cond
+    ((py-type-p class-or-tuple)
+     (py-bool (py-type-subtype-p (py-type-of obj) class-or-tuple)))
+    ((py-tuple-object-p class-or-tuple)
+     (let ((storage (py-object-value class-or-tuple))
+           (size (or (py-object-size class-or-tuple) 0)))
+       (py-bool
+        (loop for index from 0 below size
+              thereis (py-truthy-p
+                       (py-isinstance obj (aref storage index)))))))
+    (t
+     (error "isinstance() arg 2 must be a type or tuple of types"))))
 
 (defun py-call-attr (obj name &rest args)
   (apply #'py-invoke-callable (py-lookup-attr obj name) obj args))

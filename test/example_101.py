@@ -1,0 +1,6 @@
+print(isinstance(1, type(1)), isinstance(True, type(True)), isinstance(True, type(1)))
+print(isinstance(False, type(1)), isinstance(1, type(True)), isinstance(None, type(None)))
+print(isinstance([], type([])), isinstance((), type(())), isinstance("x", type("")))
+print(isinstance(range(3), type(range(0))), isinstance(iter([]), type(iter([]))))
+print(isinstance(1, (type(""), type(1))), isinstance("x", (type([]), type(()))))
+print(isinstance([], (type(()), (type([]),))), isinstance(type(1), type(type(1))))
