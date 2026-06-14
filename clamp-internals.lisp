@@ -66,6 +66,7 @@
    :py-le
    :py-gt
    :py-ge
+   :py-abs
    :py-neg
    :py-pos
    :py-not
@@ -452,6 +453,12 @@
             (not (null (or (string> ordered-left ordered-right)
                            (string= ordered-left ordered-right))))
             (>= ordered-left ordered-right)))))))
+
+(defun py-abs (value)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (if (numberp normalized-value)
+        (abs normalized-value)
+        (error "bad operand type for abs(): ~S" value))))
 
 (defun py-pos (value)
   (let ((normalized-value (py-normalize-bool-number value)))
