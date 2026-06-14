@@ -30,6 +30,7 @@
    :py-string-reverse-iterator-object
    :py-tuple-iterator-object
    :py-tuple-reverse-iterator-object
+   :py-enumerate-object
    :py-slice-object
    :make-py-slice
    :py-slice-object-start
@@ -72,6 +73,7 @@
    :py-raise
    :*py-stop-iteration*
    :py-stop-iteration-p
+   :py-enumerate
    :py-iter
    :py-next
    :py-next-item
@@ -574,6 +576,11 @@
   sequence
   (index -1))
 
+(defstruct (py-enumerate-object (:include py-object))
+  iterator
+  (index 0)
+  result)
+
 (defparameter *py-list-type*
   (make-py-type :type *py-type-type*
                 :name "list"
@@ -621,6 +628,12 @@
 (defparameter *py-tuple-reverse-iterator-type*
   (make-py-type :type *py-type-type*
                 :name "reversed"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-enumerate-type*
+  (make-py-type :type *py-type-type*
+                :name "enumerate"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -1252,7 +1265,8 @@
            (eq (py-object-type obj) *py-string-iterator-type*)
            (eq (py-object-type obj) *py-string-reverse-iterator-type*)
            (eq (py-object-type obj) *py-tuple-iterator-type*)
-           (eq (py-object-type obj) *py-tuple-reverse-iterator-type*))))
+           (eq (py-object-type obj) *py-tuple-reverse-iterator-type*)
+           (eq (py-object-type obj) *py-enumerate-type*))))
 
 (defun py-forward-list-iterator-p (obj)
   (and (py-object-p obj)
@@ -1277,6 +1291,16 @@
 (defun py-reverse-tuple-iterator-p (obj)
   (and (py-object-p obj)
        (eq (py-object-type obj) *py-tuple-reverse-iterator-type*)))
+
+(defun py-enumerate (iterable &optional (start 0))
+  (let ((normalized-start (py-normalize-bool-number start)))
+    (unless (integerp normalized-start)
+      (error "enumerate() start must be an integer, got ~S" start))
+    (make-py-enumerate-object
+     :type *py-enumerate-type*
+     :iterator (py-iter iterable)
+     :index normalized-start
+     :result (make-py-tuple *py-none* *py-none*))))
 
 (defun py-iter (obj)
   (cond
@@ -1390,6 +1414,13 @@
            (progn
              (setf (py-tuple-reverse-iterator-object-index iterator) -1)
              (py-raise *py-stop-iteration*)))))
+    ((py-enumerate-object-p iterator)
+     (let* ((index (py-enumerate-object-index iterator))
+            (next-item (py-next (py-enumerate-object-iterator iterator)))
+            (result (make-py-tuple index next-item)))
+       (setf (py-enumerate-object-index iterator) (1+ index))
+       (setf (py-enumerate-object-result iterator) result)
+       result))
     (t
      (error "Expected Python iterator, got ~S" iterator))))
 
@@ -1536,6 +1567,14 @@
       (lambda (iterator)
         (py-tuple-reverse-iterator-length-hint iterator)))
 
+(setf (py-type-attr *py-enumerate-type* "__iter__")
+      (lambda (iterator)
+        (py-iter iterator)))
+
+(setf (py-type-attr *py-enumerate-type* "__next__")
+      (lambda (iterator)
+        (py-next iterator)))
+
 (defun py-string-repr (value stream)
   (princ "'" stream)
   (loop for char across value
@@ -1582,6 +1621,7 @@
     ((py-reverse-string-iterator-p value) (princ "<reversed>" stream))
     ((py-tuple-iterator-p value) (princ "<tuple_iterator>" stream))
     ((py-reverse-tuple-iterator-p value) (princ "<reversed>" stream))
+    ((py-enumerate-object-p value) (princ "<enumerate>" stream))
     ((py-list-object-p value) (py-repr value stream))
     ((py-tuple-object-p value) (py-repr value stream))
     (t (princ value stream))))

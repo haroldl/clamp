@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print)
-  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :assign))
+  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :enumerate :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -83,3 +83,7 @@
 (defvar reversed
   (lambda (obj)
     (|CLAMP.__CLAMP_INTERNALS__|:PY-REVERSED obj)))
+
+(defvar enumerate
+  (lambda (iterable &optional (start 0))
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-ENUMERATE iterable start)))
