@@ -51,6 +51,7 @@
    :py-le
    :py-gt
    :py-ge
+   :py-pos
    :py-not
    :py-repr
    :py-display
@@ -359,6 +360,12 @@
              (not (null (or (string> ordered-left ordered-right)
                             (string= ordered-left ordered-right))))
              (>= ordered-left ordered-right))))))
+
+(defun py-pos (value)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (if (numberp normalized-value)
+        normalized-value
+        (error "bad operand type for unary +: ~S" value))))
 
 (defun py-not (value)
   (py-bool (not (py-truthy-p value))))
