@@ -48,6 +48,8 @@
    :py-iadd
    :py-mul
    :py-imul
+   :py-floordiv
+   :py-mod
    :py-is
    :py-is-not
    :py-eq
@@ -1172,6 +1174,20 @@
        (py-string-repeat right normalized-left))
       (t
        (error "Unsupported Python * between ~S and ~S" left right)))))
+
+(defun py-floordiv (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (if (and (numberp normalized-left) (numberp normalized-right))
+        (floor normalized-left normalized-right)
+        (error "Unsupported Python // between ~S and ~S" left right))))
+
+(defun py-mod (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (if (and (numberp normalized-left) (numberp normalized-right))
+        (mod normalized-left normalized-right)
+        (error "Unsupported Python % between ~S and ~S" left right))))
 
 (defun py-imul (left right)
   (let ((normalized-right (py-normalize-bool-number right)))
