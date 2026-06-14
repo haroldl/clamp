@@ -48,6 +48,7 @@
    :py-and
    :py-or
    :py-len
+   :py-hash
    :py-reversed
    :py-min
    :py-max
@@ -224,6 +225,74 @@
             (if (py-object-p value)
                 (py-type-name (py-object-type value))
                 (type-of value))))))
+
+(defparameter +py-uhash-width+ 64)
+(defparameter +py-uhash-modulus+ (ash 1 +py-uhash-width+))
+(defparameter +py-uhash-mask+ (1- +py-uhash-modulus+))
+(defparameter +py-hash-sign-bit+ (ash 1 (1- +py-uhash-width+)))
+(defparameter +py-tuple-hash-xxprime-1+ 11400714785074694791)
+(defparameter +py-tuple-hash-xxprime-2+ 14029467366897019727)
+(defparameter +py-tuple-hash-xxprime-5+ 2870177450012600261)
+
+(defun py-uhash (value)
+  (logand value +py-uhash-mask+))
+
+(defun py-uhash-rotate-left-31 (value)
+  (py-uhash
+   (logior (ash value 31)
+           (ash value -33))))
+
+(defun py-signed-hash (value)
+  (let ((unsigned (py-uhash value)))
+    (if (>= unsigned +py-hash-sign-bit+)
+        (- unsigned +py-uhash-modulus+)
+        unsigned)))
+
+(defun py-int-hash (value)
+  (let ((hash value))
+    (when (= hash -1)
+      (setf hash -2))
+    hash))
+
+(defun py-tuple-hash (obj)
+  (let ((cached-hash (py-tuple-object-hash obj)))
+    (unless (= cached-hash -1)
+      (return-from py-tuple-hash cached-hash)))
+  (let* ((size (or (py-object-size obj) 0))
+         (storage (py-tuple-storage obj "hash"))
+         (acc +py-tuple-hash-xxprime-5+))
+    (loop for index from 0 below size
+          for lane = (py-uhash (py-hash (aref storage index)))
+          do (setf acc (py-uhash
+                        (* (py-uhash-rotate-left-31
+                            (py-uhash
+                             (+ acc (* lane +py-tuple-hash-xxprime-2+))))
+                           +py-tuple-hash-xxprime-1+))))
+    (setf acc (py-uhash
+               (+ acc
+                  (logxor size
+                          (logxor +py-tuple-hash-xxprime-5+ 3527539)))))
+    (when (= acc +py-uhash-mask+)
+      (setf acc 1546275796))
+    (let ((hash (py-signed-hash acc)))
+      (setf (py-tuple-object-hash obj) hash)
+      hash)))
+
+(defun py-hash (value)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (cond
+      ((eq value *py-none*) #xFCA86420)
+      ((integerp normalized-value)
+       (py-int-hash normalized-value))
+      ((py-tuple-object-p value)
+       (py-tuple-hash value))
+      ((py-list-object-p value)
+       (error "unhashable type: 'list'"))
+      (t
+       (error "Python object of type ~A is not hashable by Clamp yet"
+              (if (py-object-p value)
+                  (py-type-name (py-object-type value))
+                  (type-of value)))))))
 
 (defmacro py-or (&rest forms)
   (cond
@@ -574,7 +643,8 @@
 (defstruct (py-list-object (:include py-object))
   (allocated 0))
 
-(defstruct (py-tuple-object (:include py-object)))
+(defstruct (py-tuple-object (:include py-object))
+  (hash -1))
 
 (defstruct (py-list-iterator-object (:include py-object))
   sequence
@@ -1136,6 +1206,10 @@
       (lambda (obj)
         (with-output-to-string (stream)
           (py-repr obj stream))))
+
+(setf (py-type-attr *py-tuple-type* "__hash__")
+      (lambda (obj)
+        (py-hash obj)))
 
 (setf (py-type-attr *py-tuple-type* "__getnewargs__")
       (lambda (obj)

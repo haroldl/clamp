@@ -1,0 +1,7 @@
+print(hash(()))
+print(hash((1, 2, 3)))
+print(hash((-1,)))
+print(hash((True, False, 1, 0)))
+nested = ((1, 2), (3,))
+print(hash(nested), nested.__hash__(), hash(nested) == nested.__hash__())
+print(hash(True), hash(False), hash(1), hash(0), hash(-1))

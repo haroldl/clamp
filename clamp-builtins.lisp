@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
-  (:shadow :print :min :max :sum :sorted :abs :filter)
-  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :min :max :sum :sorted :abs :all :any :enumerate :zip :filter :assign))
+  (:shadow :print :min :max :sum :sorted :abs :filter :hash)
+  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :min :max :sum :sorted :abs :hash :all :any :enumerate :zip :filter :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -103,6 +103,10 @@
 (defvar abs
   (lambda (obj)
     (|CLAMP.__CLAMP_INTERNALS__|:PY-ABS obj)))
+
+(defvar hash
+  (lambda (obj)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-HASH obj)))
 
 (defvar all
   (lambda (iterable)
