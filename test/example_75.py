@@ -1,0 +1,10 @@
+print(divmod(7, 3))
+print(divmod(7, -3))
+print(divmod(-7, 3))
+print(divmod(-7, -3))
+print(divmod(True, 2))
+print(divmod(False, 2))
+
+result = divmod(10, 4)
+print(len(result), result[0], result[1])
+print(result == (10 // 4, 10 % 4))

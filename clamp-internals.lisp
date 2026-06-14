@@ -62,6 +62,7 @@
    :py-imul
    :py-floordiv
    :py-mod
+   :py-divmod
    :py-is
    :py-is-not
    :py-eq
@@ -1371,6 +1372,10 @@
     (if (and (numberp normalized-left) (numberp normalized-right))
         (mod normalized-left normalized-right)
         (error "Unsupported Python % between ~S and ~S" left right))))
+
+(defun py-divmod (left right)
+  (make-py-tuple (py-floordiv left right)
+                 (py-mod left right)))
 
 (defun py-imul (left right)
   (let ((normalized-right (py-normalize-bool-number right)))
