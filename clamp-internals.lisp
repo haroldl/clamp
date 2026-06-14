@@ -771,25 +771,33 @@
           (setf (py-list-object-allocated obj) (array-total-size storage)))
         *py-none*))
 
+(defun py-list-extend-iterable (obj iterable)
+  (let ((storage (py-list-storage obj "extend")))
+    (cond
+      ((py-list-object-p iterable)
+       (let ((source-storage (py-list-storage iterable "extend"))
+             (source-size (or (py-object-size iterable) 0)))
+         (loop for index from 0 below source-size
+               do (vector-push-extend (aref source-storage index) storage))))
+      ((py-tuple-object-p iterable)
+       (let ((source-storage (py-tuple-storage iterable "extend"))
+             (source-size (or (py-object-size iterable) 0)))
+         (loop for index from 0 below source-size
+               do (vector-push-extend (aref source-storage index) storage))))
+      (t
+       (let ((iterator (py-iter iterable)))
+         (loop
+           (multiple-value-bind (item found) (py-next-item iterator)
+             (unless found
+               (return))
+             (vector-push-extend item storage))))))
+    (setf (py-object-size obj) (fill-pointer storage))
+    (setf (py-list-object-allocated obj) (array-total-size storage)))
+  *py-none*)
+
 (setf (py-type-attr *py-list-type* "extend")
       (lambda (obj iterable)
-        (let ((storage (py-list-storage obj "extend")))
-          (cond
-            ((py-list-object-p iterable)
-             (let ((source-storage (py-list-storage iterable "extend"))
-                   (source-size (or (py-object-size iterable) 0)))
-               (loop for index from 0 below source-size
-                     do (vector-push-extend (aref source-storage index) storage))))
-            ((py-tuple-object-p iterable)
-             (let ((source-storage (py-tuple-storage iterable "extend"))
-                   (source-size (or (py-object-size iterable) 0)))
-               (loop for index from 0 below source-size
-                     do (vector-push-extend (aref source-storage index) storage))))
-            (t
-             (error "extend argument must be iterable")))
-          (setf (py-object-size obj) (fill-pointer storage))
-          (setf (py-list-object-allocated obj) (array-total-size storage)))
-        *py-none*))
+        (py-list-extend-iterable obj iterable)))
 
 (setf (py-type-attr *py-list-type* "clear")
       (lambda (obj)
@@ -1134,10 +1142,9 @@
        (error "Unsupported Python + between ~S and ~S" left right)))))
 
 (defun py-iadd (left right)
-  (if (and (py-list-object-p left)
-           (or (py-list-object-p right) (py-tuple-object-p right)))
+  (if (py-list-object-p left)
       (progn
-        (py-call-attr left "extend" right)
+        (py-list-extend-iterable left right)
         left)
       (py-add left right)))
 
