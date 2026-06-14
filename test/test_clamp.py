@@ -9,6 +9,7 @@ ROOT = TEST_DIR.parent
 CLAMP = ROOT / "clamp"
 EXAMPLE_1 = TEST_DIR / "example_1.py"
 EXAMPLE_12 = TEST_DIR / "example_12.py"
+EXAMPLE_13 = TEST_DIR / "example_13.py"
 CPYTHON_314 = Path.home() / "local" / "Python-3.14.5" / "python"
 
 
@@ -89,17 +90,18 @@ def test_example_matches_expected_output(sample):
     assert result.stdout == expected.read_text()
 
 
-def test_len_example_matches_local_cpython_when_available():
+@pytest.mark.parametrize("sample", [EXAMPLE_12, EXAMPLE_13], ids=lambda path: path.stem)
+def test_examples_match_local_cpython_when_available(sample):
     if not CPYTHON_314.exists():
         pytest.skip("local CPython 3.14.5 interpreter is not built")
     cpython_result = subprocess.run(
-        [str(CPYTHON_314), str(EXAMPLE_12)],
+        [str(CPYTHON_314), str(sample)],
         cwd=ROOT,
         check=True,
         capture_output=True,
         text=True,
     )
-    clamp_result = run_clamp(EXAMPLE_12)
+    clamp_result = run_clamp(sample)
     assert clamp_result.stdout == cpython_result.stdout
 
 

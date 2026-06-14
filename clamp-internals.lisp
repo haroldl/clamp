@@ -378,6 +378,11 @@
     (error "~A only supports list objects, got ~S" operation obj))
   (py-object-value obj))
 
+(defun py-list-index (obj index)
+  (if (< index 0)
+      (+ index (or (py-object-size obj) 0))
+      index))
+
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
         (let ((storage (py-list-storage obj "append")))
@@ -388,11 +393,11 @@
 
 (setf (py-type-attr *py-list-type* "__getitem__")
       (lambda (obj index)
-        (aref (py-list-storage obj "__getitem__") index)))
+        (aref (py-list-storage obj "__getitem__") (py-list-index obj index))))
 
 (setf (py-type-attr *py-list-type* "__setitem__")
       (lambda (obj index value)
-        (setf (aref (py-list-storage obj "__setitem__") index) value)
+        (setf (aref (py-list-storage obj "__setitem__") (py-list-index obj index)) value)
         nil))
 
 (defun make-py-list (&rest values)

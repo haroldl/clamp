@@ -403,6 +403,7 @@ codegen_handlers[ast.LtE] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-LE"
 codegen_handlers[ast.Gt] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-GT"
 codegen_handlers[ast.GtE] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-GE"
 codegen_handlers[ast.Not] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-NOT"
+codegen_handlers[ast.USub] = lambda node, _: "COMMON-LISP::-"
 codegen_handlers[ast.Or] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-OR"
 codegen_handlers[ast.And] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-AND"
 codegen_handlers[int] = lambda node, _: str(node)
