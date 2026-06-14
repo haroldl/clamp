@@ -38,6 +38,8 @@
    :py-len
    :py-eq
    :py-ne
+   :py-contains
+   :py-not-contains
    :py-lt
    :py-le
    :py-gt
@@ -216,6 +218,23 @@
 
 (defun py-ne (left right)
   (py-bool (not (py-truthy-p (py-eq left right)))))
+
+(defun py-contains (item container)
+  (cond
+    ((py-list-object-p container)
+     (let ((storage (py-object-value container))
+           (size (or (py-object-size container) 0)))
+       (py-bool
+        (loop for index from 0 below size
+              thereis (py-truthy-p (py-eq (aref storage index) item))))))
+    (t
+     (error "Python object of type ~A is not a container"
+            (if (py-object-p container)
+                (py-type-name (py-object-type container))
+                (type-of container))))))
+
+(defun py-not-contains (item container)
+  (py-bool (not (py-truthy-p (py-contains item container)))))
 
 (defun py-ordered-values (left right operation)
   (let ((normalized-left (py-normalize-bool-number left))

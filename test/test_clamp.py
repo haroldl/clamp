@@ -14,6 +14,7 @@ EXAMPLE_14 = TEST_DIR / "example_14.py"
 EXAMPLE_15 = TEST_DIR / "example_15.py"
 EXAMPLE_16 = TEST_DIR / "example_16.py"
 EXAMPLE_17 = TEST_DIR / "example_17.py"
+EXAMPLE_18 = TEST_DIR / "example_18.py"
 CPYTHON_314 = Path.home() / "local" / "Python-3.14.5" / "python"
 
 
@@ -94,7 +95,7 @@ def test_example_matches_expected_output(sample):
     assert result.stdout == expected.read_text()
 
 
-@pytest.mark.parametrize("sample", [EXAMPLE_12, EXAMPLE_13, EXAMPLE_14, EXAMPLE_15, EXAMPLE_16, EXAMPLE_17], ids=lambda path: path.stem)
+@pytest.mark.parametrize("sample", [EXAMPLE_12, EXAMPLE_13, EXAMPLE_14, EXAMPLE_15, EXAMPLE_16, EXAMPLE_17, EXAMPLE_18], ids=lambda path: path.stem)
 def test_examples_match_local_cpython_when_available(sample):
     if not CPYTHON_314.exists():
         pytest.skip("local CPython 3.14.5 interpreter is not built")
