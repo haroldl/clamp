@@ -968,6 +968,43 @@
             for index = start then (+ index step)
             do (princ (char value index) stream)))))
 
+(defun py-string-adjust-bound (bound size default)
+  (let ((index (if (eq bound *py-none*)
+                   default
+                   (py-normalize-bool-number bound))))
+    (when (< index 0)
+      (incf index size))
+    (cond
+      ((< index 0) 0)
+      ((> index size) size)
+      (t index))))
+
+(defun py-string-count (value substring &optional
+                        (start *py-none*)
+                        (end *py-none*))
+  (unless (stringp substring)
+    (error "must be str, not ~S" substring))
+  (let* ((size (length value))
+         (substring-size (length substring))
+         (adjusted-start (py-string-adjust-bound start size 0))
+         (adjusted-end (py-string-adjust-bound end size size))
+         (span-size (- adjusted-end adjusted-start)))
+    (cond
+      ((< span-size 0) 0)
+      ((= substring-size 0) (1+ span-size))
+      ((< span-size substring-size) 0)
+      (t
+       (let ((count 0)
+             (position adjusted-start))
+         (loop
+           (let ((match (search substring value
+                                :start2 position
+                                :end2 adjusted-end)))
+             (unless match
+               (return count))
+             (incf count)
+             (setf position (+ match substring-size)))))))))
+
 (defun py-string-getitem (value index)
   (if (py-slice-object-p index)
       (py-string-slice value index)
@@ -981,6 +1018,12 @@
 (setf (py-type-attr *py-str-type* "__getitem__")
       (lambda (obj index)
         (py-string-getitem obj index)))
+
+(setf (py-type-attr *py-str-type* "count")
+      (lambda (obj substring &optional
+                   (start *py-none*)
+                   (end *py-none*))
+        (py-string-count obj substring start end)))
 
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
