@@ -36,6 +36,7 @@
    :py-and
    :py-or
    :py-len
+   :py-add
    :py-eq
    :py-ne
    :py-contains
@@ -562,6 +563,29 @@
                          :size (fill-pointer storage)
                          :value storage
                          :allocated (array-total-size storage))))
+
+(defun py-add (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (cond
+      ((and (numberp normalized-left) (numberp normalized-right))
+       (+ normalized-left normalized-right))
+      ((and (stringp left) (stringp right))
+       (concatenate 'string left right))
+      ((and (py-list-object-p left) (py-list-object-p right))
+       (let* ((left-storage (py-list-storage left "+"))
+              (right-storage (py-list-storage right "+"))
+              (result-storage (make-array 0 :adjustable t :fill-pointer 0)))
+         (loop for index from 0 below (or (py-object-size left) 0)
+               do (vector-push-extend (aref left-storage index) result-storage))
+         (loop for index from 0 below (or (py-object-size right) 0)
+               do (vector-push-extend (aref right-storage index) result-storage))
+         (make-py-list-object :type *py-list-type*
+                              :size (fill-pointer result-storage)
+                              :value result-storage
+                              :allocated (array-total-size result-storage))))
+      (t
+       (error "Unsupported Python + between ~S and ~S" left right)))))
 
 (defun py-iterator-p (obj)
   (and (py-object-p obj)
