@@ -1368,6 +1368,8 @@
          (repeat-count (max count 0))
          (output-size (* source-size repeat-count))
          (result-storage (make-array output-size)))
+    (when (= repeat-count 1)
+      (return-from py-tuple-repeat items))
     (dotimes (repeat repeat-count)
       (loop for index from 0 below source-size
             do (setf (aref result-storage (+ (* repeat source-size) index))
