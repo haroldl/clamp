@@ -55,6 +55,7 @@ EXAMPLE_59 = TEST_DIR / "example_59.py"
 EXAMPLE_60 = TEST_DIR / "example_60.py"
 EXAMPLE_61 = TEST_DIR / "example_61.py"
 EXAMPLE_62 = TEST_DIR / "example_62.py"
+EXAMPLE_63 = TEST_DIR / "example_63.py"
 CPYTHON_314 = Path.home() / "local" / "Python-3.14.5" / "python"
 
 
@@ -135,7 +136,7 @@ def test_example_matches_expected_output(sample):
     assert result.stdout == expected.read_text()
 
 
-@pytest.mark.parametrize("sample", [EXAMPLE_12, EXAMPLE_13, EXAMPLE_14, EXAMPLE_15, EXAMPLE_16, EXAMPLE_17, EXAMPLE_18, EXAMPLE_20, EXAMPLE_21, EXAMPLE_22, EXAMPLE_23, EXAMPLE_24, EXAMPLE_25, EXAMPLE_26, EXAMPLE_27, EXAMPLE_28, EXAMPLE_29, EXAMPLE_30, EXAMPLE_31, EXAMPLE_32, EXAMPLE_33, EXAMPLE_34, EXAMPLE_35, EXAMPLE_36, EXAMPLE_37, EXAMPLE_38, EXAMPLE_39, EXAMPLE_41, EXAMPLE_42, EXAMPLE_43, EXAMPLE_44, EXAMPLE_45, EXAMPLE_46, EXAMPLE_47, EXAMPLE_49, EXAMPLE_50, EXAMPLE_51, EXAMPLE_52, EXAMPLE_54, EXAMPLE_55, EXAMPLE_56, EXAMPLE_57, EXAMPLE_58, EXAMPLE_59, EXAMPLE_60, EXAMPLE_61, EXAMPLE_62], ids=lambda path: path.stem)
+@pytest.mark.parametrize("sample", [EXAMPLE_12, EXAMPLE_13, EXAMPLE_14, EXAMPLE_15, EXAMPLE_16, EXAMPLE_17, EXAMPLE_18, EXAMPLE_20, EXAMPLE_21, EXAMPLE_22, EXAMPLE_23, EXAMPLE_24, EXAMPLE_25, EXAMPLE_26, EXAMPLE_27, EXAMPLE_28, EXAMPLE_29, EXAMPLE_30, EXAMPLE_31, EXAMPLE_32, EXAMPLE_33, EXAMPLE_34, EXAMPLE_35, EXAMPLE_36, EXAMPLE_37, EXAMPLE_38, EXAMPLE_39, EXAMPLE_41, EXAMPLE_42, EXAMPLE_43, EXAMPLE_44, EXAMPLE_45, EXAMPLE_46, EXAMPLE_47, EXAMPLE_49, EXAMPLE_50, EXAMPLE_51, EXAMPLE_52, EXAMPLE_54, EXAMPLE_55, EXAMPLE_56, EXAMPLE_57, EXAMPLE_58, EXAMPLE_59, EXAMPLE_60, EXAMPLE_61, EXAMPLE_62, EXAMPLE_63], ids=lambda path: path.stem)
 def test_examples_match_local_cpython_when_available(sample):
     if not CPYTHON_314.exists():
         pytest.skip("local CPython 3.14.5 interpreter is not built")
@@ -173,6 +174,18 @@ def test_next_raises_stop_iteration_for_empty_tuple_iterator():
         command,
         cwd=ROOT,
         input="it = iter(())\nnext(it)\n",
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "StopIteration" in result.stderr
+
+def test_zip_raises_stop_iteration_at_shortest_iterable():
+    command = [str(CLAMP)]
+    result = subprocess.run(
+        command,
+        cwd=ROOT,
+        input='it = zip([1], "ab")\nnext(it)\nnext(it)\n',
         capture_output=True,
         text=True,
     )

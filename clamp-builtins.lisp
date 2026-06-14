@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print)
-  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :enumerate :assign))
+  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :enumerate :zip :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -87,3 +87,7 @@
 (defvar enumerate
   (lambda (iterable &optional (start 0))
     (|CLAMP.__CLAMP_INTERNALS__|:PY-ENUMERATE iterable start)))
+
+(defvar zip
+  (lambda (&rest iterables)
+    (apply #'|CLAMP.__CLAMP_INTERNALS__|:PY-ZIP iterables)))
