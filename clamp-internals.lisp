@@ -41,6 +41,7 @@
    :py-and
    :py-or
    :py-len
+   :py-reversed
    :py-add
    :py-mul
    :py-eq
@@ -467,6 +468,10 @@
   sequence
   (index 0))
 
+(defstruct (py-list-reverse-iterator-object (:include py-object))
+  sequence
+  (index -1))
+
 (defparameter *py-list-type*
   (make-py-type :type *py-type-type*
                 :name "list"
@@ -477,6 +482,12 @@
 (defparameter *py-list-iterator-type*
   (make-py-type :type *py-type-type*
                 :name "list_iterator"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-list-reverse-iterator-type*
+  (make-py-type :type *py-type-type*
+                :name "list_reverseiterator"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -789,7 +800,16 @@
 
 (defun py-iterator-p (obj)
   (and (py-object-p obj)
+       (or (eq (py-object-type obj) *py-list-iterator-type*)
+           (eq (py-object-type obj) *py-list-reverse-iterator-type*))))
+
+(defun py-forward-list-iterator-p (obj)
+  (and (py-object-p obj)
        (eq (py-object-type obj) *py-list-iterator-type*)))
+
+(defun py-reverse-list-iterator-p (obj)
+  (and (py-object-p obj)
+       (eq (py-object-type obj) *py-list-reverse-iterator-type*)))
 
 (defun py-iter (obj)
   (cond
@@ -804,19 +824,45 @@
                 (py-type-name (py-object-type obj))
                 (type-of obj))))))
 
+(defun py-reversed (obj)
+  (cond
+    ((eq (py-object-type obj) *py-list-type*)
+     (make-py-list-reverse-iterator-object
+      :type *py-list-reverse-iterator-type*
+      :sequence obj
+      :index (1- (or (py-object-size obj) 0))))
+    (t
+     (error "Python object of type ~A is not reversible"
+            (if (py-object-p obj)
+                (py-type-name (py-object-type obj))
+                (type-of obj))))))
+
 (defun py-next (iterator)
-  (unless (py-iterator-p iterator)
-    (error "Expected Python iterator, got ~S" iterator))
-  (let* ((sequence (py-list-iterator-object-sequence iterator))
-         (index (py-list-iterator-object-index iterator))
-         (size (or (py-object-size sequence) 0)))
-    (if (and (>= index 0) (< index size))
-        (prog1
-            (aref (py-object-value sequence) index)
-          (setf (py-list-iterator-object-index iterator) (1+ index)))
-        (progn
-          (setf (py-list-iterator-object-index iterator) -1)
-          (py-raise *py-stop-iteration*)))))
+  (cond
+    ((py-forward-list-iterator-p iterator)
+     (let* ((sequence (py-list-iterator-object-sequence iterator))
+            (index (py-list-iterator-object-index iterator))
+            (size (or (py-object-size sequence) 0)))
+       (if (and (>= index 0) (< index size))
+           (prog1
+               (aref (py-object-value sequence) index)
+             (setf (py-list-iterator-object-index iterator) (1+ index)))
+           (progn
+             (setf (py-list-iterator-object-index iterator) -1)
+             (py-raise *py-stop-iteration*)))))
+    ((py-reverse-list-iterator-p iterator)
+     (let* ((sequence (py-list-reverse-iterator-object-sequence iterator))
+            (index (py-list-reverse-iterator-object-index iterator))
+            (size (or (py-object-size sequence) 0)))
+       (if (and (>= index 0) (< index size))
+           (prog1
+               (aref (py-object-value sequence) index)
+             (setf (py-list-reverse-iterator-object-index iterator) (1- index)))
+           (progn
+             (setf (py-list-reverse-iterator-object-index iterator) -1)
+             (py-raise *py-stop-iteration*)))))
+    (t
+     (error "Expected Python iterator, got ~S" iterator))))
 
 (defun py-next-item (iterator)
   (handler-case
@@ -835,6 +881,18 @@
         (py-iter iterator)))
 
 (setf (py-type-attr *py-list-iterator-type* "__next__")
+      (lambda (iterator)
+        (py-next iterator)))
+
+(setf (py-type-attr *py-list-type* "__reversed__")
+      (lambda (obj)
+        (py-reversed obj)))
+
+(setf (py-type-attr *py-list-reverse-iterator-type* "__iter__")
+      (lambda (iterator)
+        (py-iter iterator)))
+
+(setf (py-type-attr *py-list-reverse-iterator-type* "__next__")
       (lambda (iterator)
         (py-next iterator)))
 
@@ -868,7 +926,8 @@
     ((eq value *py-false*) (princ "False" stream))
     ((stringp value) (princ value stream))
     ((py-stop-iteration-p value) (princ "StopIteration" stream))
-    ((py-iterator-p value) (princ "<list_iterator>" stream))
+    ((py-forward-list-iterator-p value) (princ "<list_iterator>" stream))
+    ((py-reverse-list-iterator-p value) (princ "<list_reverseiterator>" stream))
     ((py-list-object-p value) (py-repr value stream))
     (t (princ value stream))))
 

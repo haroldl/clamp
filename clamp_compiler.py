@@ -182,7 +182,7 @@ def codegen_funcall(node, context : Context):
     target = codegen(node.func, child_context)
     args_str = " ".join(args)
     # Map builtins that must resolve before USE-PACKAGE takes effect.
-    if isinstance(node.func, ast.Name) and node.func.id.lower() in {"print", "len"}:
+    if isinstance(node.func, ast.Name) and node.func.id.lower() in {"print", "len", "iter", "next", "reversed"}:
         target = f"|CLAMP.__builtins__|:{node.func.id.upper()}"
     return f"(common-lisp:funcall {target} {args_str})"
 

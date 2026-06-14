@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print)
-  (:export :test :dir :plus :times :print :len :iter :next :assign))
+  (:export :test :dir :plus :times :print :len :iter :next :reversed :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -69,3 +69,7 @@
 (defvar next
   (lambda (iterator)
     (|CLAMP.__CLAMP_INTERNALS__|:PY-NEXT iterator)))
+
+(defvar reversed
+  (lambda (obj)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-REVERSED obj)))
