@@ -651,6 +651,18 @@
         (py-list-storage obj "__len__")
         (or (py-object-size obj) 0)))
 
+(setf (py-type-attr *py-list-type* "__add__")
+      (lambda (obj value)
+        (py-add obj value)))
+
+(setf (py-type-attr *py-list-type* "__mul__")
+      (lambda (obj value)
+        (py-mul obj value)))
+
+(setf (py-type-attr *py-list-type* "__rmul__")
+      (lambda (obj value)
+        (py-mul value obj)))
+
 (defun py-list-slice-index (size index)
   (let ((normalized-index index))
     (when (< normalized-index 0)
