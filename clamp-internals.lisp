@@ -470,6 +470,25 @@
                   do (incf count))
           count)))
 
+(defun py-list-slice-index (size index)
+  (let ((normalized-index index))
+    (when (< normalized-index 0)
+      (incf normalized-index size)
+      (when (< normalized-index 0)
+        (setf normalized-index 0)))
+    normalized-index))
+
+(setf (py-type-attr *py-list-type* "index")
+      (lambda (obj value &optional (start 0) (stop most-positive-fixnum))
+        (let* ((storage (py-list-storage obj "index"))
+               (size (or (py-object-size obj) 0))
+               (normalized-start (py-list-slice-index size start))
+               (normalized-stop (py-list-slice-index size stop)))
+          (loop for index from normalized-start below (min normalized-stop size)
+                when (py-truthy-p (py-eq (aref storage index) value))
+                  return index
+                finally (error "list.index(x): x not in list")))))
+
 (setf (py-type-attr *py-list-type* "reverse")
       (lambda (obj)
         (let* ((storage (py-list-storage obj "reverse"))

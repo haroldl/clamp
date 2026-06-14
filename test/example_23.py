@@ -1,0 +1,10 @@
+items = [1, 2, 3, 2, None, "x", 2]
+print(items.index(2))
+print(items.index(2, 2))
+print(items.index(2, -2))
+print(items.index(2, 0, -1))
+print(items.index(None), items.index("x"))
+print(items.index(2, 4, 99))
+print(items.index(1, -99))
+bools = [1, True, 0, False]
+print(bools.index(True), bools.index(False))
