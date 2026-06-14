@@ -80,6 +80,7 @@
    :py-abs
    :py-neg
    :py-pos
+   :py-invert
    :py-not
    :py-repr
    :py-display
@@ -570,6 +571,12 @@
     (if (numberp normalized-value)
         (- normalized-value)
         (error "bad operand type for unary -: ~S" value))))
+
+(defun py-invert (value)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (if (integerp normalized-value)
+        (- (1+ normalized-value))
+        (error "bad operand type for unary ~: ~S" value))))
 
 (defun py-not (value)
   (py-bool (not (py-truthy-p value))))
