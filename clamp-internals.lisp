@@ -37,6 +37,7 @@
    :py-or
    :py-len
    :py-add
+   :py-mul
    :py-eq
    :py-ne
    :py-contains
@@ -586,6 +587,45 @@
                               :allocated (array-total-size result-storage))))
       (t
        (error "Unsupported Python + between ~S and ~S" left right)))))
+
+(defun py-list-repeat (items count)
+  (let* ((source-storage (py-list-storage items "*"))
+         (source-size (or (py-object-size items) 0))
+         (repeat-count (max count 0))
+         (output-size (* source-size repeat-count))
+         (result-storage (make-array output-size
+                                     :adjustable t
+                                     :fill-pointer 0)))
+    (dotimes (_ repeat-count)
+      (loop for index from 0 below source-size
+            do (vector-push-extend (aref source-storage index) result-storage)))
+    (make-py-list-object :type *py-list-type*
+                         :size (fill-pointer result-storage)
+                         :value result-storage
+                         :allocated (array-total-size result-storage))))
+
+(defun py-string-repeat (value count)
+  (let ((repeat-count (max count 0)))
+    (with-output-to-string (stream)
+      (dotimes (_ repeat-count)
+        (princ value stream)))))
+
+(defun py-mul (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (cond
+      ((and (numberp normalized-left) (numberp normalized-right))
+       (* normalized-left normalized-right))
+      ((and (py-list-object-p left) (integerp normalized-right))
+       (py-list-repeat left normalized-right))
+      ((and (integerp normalized-left) (py-list-object-p right))
+       (py-list-repeat right normalized-left))
+      ((and (stringp left) (integerp normalized-right))
+       (py-string-repeat left normalized-right))
+      ((and (integerp normalized-left) (stringp right))
+       (py-string-repeat right normalized-left))
+      (t
+       (error "Unsupported Python * between ~S and ~S" left right)))))
 
 (defun py-iterator-p (obj)
   (and (py-object-p obj)
