@@ -458,6 +458,15 @@
                   do (incf count))
           count)))
 
+(setf (py-type-attr *py-list-type* "reverse")
+      (lambda (obj)
+        (let* ((storage (py-list-storage obj "reverse"))
+               (size (or (py-object-size obj) 0)))
+          (loop for left from 0 below (floor size 2)
+                for right downfrom (1- size)
+                do (rotatef (aref storage left) (aref storage right))))
+        *py-none*))
+
 (setf (py-type-attr *py-list-type* "pop")
       (lambda (obj &optional (index -1))
         (let* ((storage (py-list-storage obj "pop"))
