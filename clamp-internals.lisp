@@ -20,6 +20,7 @@
    :py-object-attr
    :py-lookup-attr
    :py-call-attr
+   :py-type-of
    :py-callable
    :make-py-callable
    :py-callable-name
@@ -167,6 +168,24 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-int-type*
+  (make-py-type :type *py-type-type*
+                :name "int"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-float-type*
+  (make-py-type :type *py-type-type*
+                :name "float"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-str-type*
+  (make-py-type :type *py-type-type*
+                :name "str"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-base-exception-type*
   (make-py-type :type *py-type-type*
                 :name "BaseException"
@@ -250,6 +269,15 @@
             (if (py-object-p value)
                 (py-type-name (py-object-type value))
                 (type-of value))))))
+
+(defun py-type-of (value)
+  (cond
+    ((py-object-p value) (py-object-type value))
+    ((integerp value) *py-int-type*)
+    ((floatp value) *py-float-type*)
+    ((stringp value) *py-str-type*)
+    (t
+     (error "Python object type for ~S is not modeled by Clamp yet" value))))
 
 (defparameter +py-uhash-width+ 64)
 (defparameter +py-uhash-modulus+ (ash 1 +py-uhash-width+))
@@ -2128,6 +2156,8 @@
 
 (defun py-repr (value &optional (stream *standard-output*))
   (cond
+    ((py-type-p value)
+     (format stream "<class '~A'>" (py-type-name value)))
     ((stringp value) (py-string-repr value stream))
     ((py-list-object-p value)
      (princ "[" stream)
@@ -2176,6 +2206,7 @@
     ((py-filter-object-p value) (princ "<filter>" stream))
     ((py-range-object-p value) (py-repr value stream))
     ((py-range-iterator-p value) (princ "<range_iterator>" stream))
+    ((py-type-p value) (py-repr value stream))
     ((py-list-object-p value) (py-repr value stream))
     ((py-tuple-object-p value) (py-repr value stream))
     (t (princ value stream))))

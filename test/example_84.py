@@ -1,0 +1,5 @@
+print(type(None), type(True), type(False))
+print(type(1), type(-2), type(1.5), type("clamp"))
+print(type([]), type([1]), type(()), type((1,)))
+print(type(range(3)), type(iter([])), type(reversed([])))
+print(type([]) is type(list()), type(()) is type(tuple()), type(type([])))

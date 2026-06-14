@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
-  (:shadow :print :min :max :sum :sorted :abs :filter :hash :list :tuple :slice :chr)
-  (:export :test :dir :plus :times :print :len :bool :callable :repr :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :divmod :all :any :enumerate :zip :filter :range :slice :chr :ord :assign))
+  (:shadow :print :min :max :sum :sorted :abs :filter :hash :list :tuple :slice :chr :type)
+  (:export :test :dir :plus :times :print :len :bool :callable :repr :type :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :divmod :all :any :enumerate :zip :filter :range :slice :chr :ord :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -75,6 +75,10 @@
   (lambda (obj)
     (with-output-to-string (stream)
       (|CLAMP.__CLAMP_INTERNALS__|:PY-REPR obj stream))))
+
+(defvar type
+  (lambda (obj)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-TYPE-OF obj)))
 
 (defvar iter
   (lambda (obj)

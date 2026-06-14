@@ -1,0 +1,5 @@
+<class 'NoneType'> <class 'bool'> <class 'bool'>
+<class 'int'> <class 'int'> <class 'float'> <class 'str'>
+<class 'list'> <class 'list'> <class 'tuple'> <class 'tuple'>
+<class 'range'> <class 'list_iterator'> <class 'list_reverseiterator'>
+True True <class 'type'>
