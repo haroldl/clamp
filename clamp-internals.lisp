@@ -642,6 +642,10 @@
                   do (incf count))
           count)))
 
+(setf (py-type-attr *py-list-type* "__contains__")
+      (lambda (obj value)
+        (py-contains value obj)))
+
 (setf (py-type-attr *py-list-type* "__len__")
       (lambda (obj)
         (py-list-storage obj "__len__")
