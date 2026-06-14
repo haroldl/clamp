@@ -70,7 +70,8 @@
    :py-insert
    :py-pop
    :py-getitem
-   :py-setitem))
+   :py-setitem
+   :py-delitem))
 
 (in-package "CLAMP.__CLAMP_INTERNALS__")
 
@@ -730,7 +731,12 @@
         (setf (aref (py-list-storage obj "__setitem__")
                     (py-list-normalized-index obj index "list"))
               value)
-        nil))
+        *py-none*))
+
+(setf (py-type-attr *py-list-type* "__delitem__")
+      (lambda (obj index)
+        (py-list-delete-index obj (py-list-normalized-index obj index "list"))
+        *py-none*))
 
 (defun make-py-list (&rest values)
   (let ((storage (make-array 0 :adjustable t :fill-pointer 0)))
@@ -950,3 +956,6 @@
 
 (defun py-setitem (obj index value)
   (py-call-attr obj "__setitem__" index value))
+
+(defun py-delitem (obj index)
+  (py-call-attr obj "__delitem__" index))

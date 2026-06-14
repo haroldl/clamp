@@ -257,6 +257,20 @@ def codegen_subscript_store(node, value_code: str, context: Context):
     )
 
 
+def codegen_delete(node, context: Context):
+    if len(node.targets) != 1:
+        raise Exception("TODO: unsupported delete target count")
+    target = node.targets[0]
+    if not isinstance(target, ast.Subscript) or isinstance(target.slice, ast.Slice):
+        raise Exception("TODO: unsupported delete target")
+    child_context = context.child()
+    obj = codegen(target.value, child_context)
+    index = codegen(target.slice, child_context)
+    return (
+        "(|CLAMP.__CLAMP_INTERNALS__|:PY-DELITEM "
+        f"{obj} {index})"
+    )
+
 def codegen_slice(node, context: Context):
     child_context = context.child()
     lower = codegen(node.lower, child_context)
@@ -375,6 +389,7 @@ codegen_handlers[type(None)] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:*PY-
 codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.AugAssign] = codegen_augassign
+codegen_handlers[ast.Delete] = codegen_delete
 codegen_handlers[ast.FunctionDef] = codegen_function
 codegen_handlers[ast.Call] = codegen_funcall
 codegen_handlers[ast.List] = lambda node, context: (
