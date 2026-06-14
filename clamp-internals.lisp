@@ -51,6 +51,7 @@
    :py-min
    :py-max
    :py-sum
+   :py-sorted
    :py-add
    :py-iadd
    :py-mul
@@ -1440,6 +1441,17 @@
         (unless found
           (return result))
         (setf result (py-add result item))))))
+
+(defun py-sorted (iterable)
+  (let ((result (make-py-list))
+        (iterator (py-iter iterable)))
+    (loop
+      (multiple-value-bind (item found) (py-next-item iterator)
+        (unless found
+          (return))
+        (py-append result item)))
+    (py-call-attr result "sort")
+    result))
 
 (defun py-all (iterable)
   (let ((iterator (py-iter iterable)))
