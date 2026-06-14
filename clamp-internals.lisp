@@ -50,6 +50,7 @@
    :py-reversed
    :py-min
    :py-max
+   :py-sum
    :py-add
    :py-iadd
    :py-mul
@@ -1428,6 +1429,17 @@
 
 (defun py-max (&rest args)
   (py-extreme :max args))
+
+(defun py-sum (iterable &optional (start 0))
+  (when (stringp start)
+    (error "sum() can't sum strings [use ''.join(seq) instead]"))
+  (let ((result start)
+        (iterator (py-iter iterable)))
+    (loop
+      (multiple-value-bind (item found) (py-next-item iterator)
+        (unless found
+          (return result))
+        (setf result (py-add result item))))))
 
 (defun py-all (iterable)
   (let ((iterator (py-iter iterable)))

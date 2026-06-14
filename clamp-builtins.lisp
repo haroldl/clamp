@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
-  (:shadow :print :min :max :abs)
-  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :min :max :abs :all :any :enumerate :zip :assign))
+  (:shadow :print :min :max :sum :abs)
+  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :min :max :sum :abs :all :any :enumerate :zip :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -91,6 +91,10 @@
 (defvar max
   (lambda (&rest xs)
     (apply #'|CLAMP.__CLAMP_INTERNALS__|:PY-MAX xs)))
+
+(defvar sum
+  (lambda (iterable &optional (start 0))
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-SUM iterable start)))
 
 (defvar abs
   (lambda (obj)
