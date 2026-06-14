@@ -836,7 +836,7 @@
                (slice-length (if (< start stop)
                                  (1+ (floor (1- (- stop start)) step))
                                  0)))
-          (values start step slice-length))
+          (values start step slice-length stop))
         (let* ((start (if (eq (py-slice-object-start slice) *py-none*)
                           (1- size)
                           (py-list-normalize-slice-index
@@ -850,7 +850,7 @@
                (slice-length (if (> start stop)
                                  (1+ (floor (1- (- start stop)) (- step)))
                                  0)))
-          (values start step slice-length)))))
+          (values start step slice-length stop)))))
 
 (defun py-list-slice (obj slice)
   (let* ((storage (py-list-storage obj "__getitem__"))
@@ -1534,6 +1534,14 @@
   (+ (py-range-object-start range)
      (* index (py-range-object-step range))))
 
+(defun py-range-slice (range slice)
+  (multiple-value-bind (start step slice-length stop)
+      (py-list-slice-parameters slice (py-range-object-length range))
+    (let* ((substep (* (py-range-object-step range) step))
+           (substart (py-range-item range start))
+           (substop (py-range-item range stop)))
+      (py-range substart substop substep))))
+
 (defun py-range-normalized-index (range index)
   (let* ((length (py-range-object-length range))
          (normalized-index (if (< index 0) (+ index length) index)))
@@ -2006,7 +2014,9 @@
 
 (setf (py-type-attr *py-range-type* "__getitem__")
       (lambda (obj index)
-        (py-range-item obj (py-range-normalized-index obj index))))
+        (if (py-slice-object-p index)
+            (py-range-slice obj index)
+            (py-range-item obj (py-range-normalized-index obj index)))))
 
 (setf (py-type-attr *py-range-type* "__reversed__")
       (lambda (obj)
