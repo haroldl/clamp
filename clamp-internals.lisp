@@ -688,6 +688,14 @@
 (defun py-lookup-attr (obj name)
   (unless (py-object-p obj)
     (error "Cannot look up Python attribute ~S on non-object ~S" name obj))
+  (when (py-range-object-p obj)
+    (cond
+      ((string= name "start")
+       (return-from py-lookup-attr (py-range-object-start obj)))
+      ((string= name "stop")
+       (return-from py-lookup-attr (py-range-object-stop obj)))
+      ((string= name "step")
+       (return-from py-lookup-attr (py-range-object-step obj)))))
   (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
     (when found
       (return-from py-lookup-attr attr)))

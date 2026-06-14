@@ -451,6 +451,10 @@ codegen_handlers[ast.Tuple] = lambda node, context: (
     + "".join(f" {codegen(elt, context.child())}" for elt in node.elts)
     + ")"
 )
+codegen_handlers[ast.Attribute] = lambda node, context: (
+    "(|CLAMP.__CLAMP_INTERNALS__|:PY-LOOKUP-ATTR "
+    f"{codegen(node.value, context.child())} {codegen(node.attr, context.child())})"
+)
 codegen_handlers[ast.Slice] = codegen_slice
 codegen_handlers[ast.Name] = lambda node, _: map_name(node.id)
 codegen_handlers[ast.Module] = codegen_module
