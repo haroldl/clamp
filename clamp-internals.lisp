@@ -1027,6 +1027,11 @@
         (with-output-to-string (stream)
           (py-repr obj stream))))
 
+(setf (py-type-attr *py-tuple-type* "__getnewargs__")
+      (lambda (obj)
+        (py-tuple-storage obj "__getnewargs__")
+        (make-py-tuple obj)))
+
 (defun make-py-list (&rest values)
   (let ((storage (make-array 0 :adjustable t :fill-pointer 0)))
     (dolist (value values)
