@@ -479,6 +479,17 @@
                 do (rotatef (aref storage left) (aref storage right))))
         *py-none*))
 
+(defun py-list-delete-index (obj normalized-index)
+  (let* ((storage (py-list-storage obj "delete"))
+         (size (or (py-object-size obj) 0))
+         (size-after-delete (1- size))
+         (value (aref storage normalized-index)))
+    (loop for i from normalized-index below size-after-delete
+          do (setf (aref storage i) (aref storage (1+ i))))
+    (vector-pop storage)
+    (setf (py-object-size obj) (fill-pointer storage))
+    value))
+
 (setf (py-type-attr *py-list-type* "pop")
       (lambda (obj &optional (index -1))
         (let* ((storage (py-list-storage obj "pop"))
@@ -488,13 +499,21 @@
           (let ((normalized-index (py-list-index obj index)))
             (unless (py-list-valid-index-p normalized-index size)
               (error "pop index out of range"))
-            (let ((value (aref storage normalized-index))
-                  (size-after-pop (1- size)))
-              (loop for i from normalized-index below size-after-pop
-                    do (setf (aref storage i) (aref storage (1+ i))))
-              (vector-pop storage)
-              (setf (py-object-size obj) (fill-pointer storage))
-              value)))))
+            (py-list-delete-index obj normalized-index)))))
+
+(setf (py-type-attr *py-list-type* "remove")
+      (lambda (obj value)
+        (let* ((storage (py-list-storage obj "remove"))
+               (size (or (py-object-size obj) 0))
+               (match-index
+                 (loop for index from 0 below size
+                       when (py-truthy-p (py-eq (aref storage index) value))
+                         return index)))
+          (if match-index
+              (progn
+                (py-list-delete-index obj match-index)
+                *py-none*)
+              (error "list.remove(x): x not in list")))))
 
 (setf (py-type-attr *py-list-type* "__getitem__")
       (lambda (obj index)
