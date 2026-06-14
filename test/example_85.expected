@@ -1,0 +1,6 @@
+ clamp 'clamp'
+None True False
+0 -2 3.5
+[1, 'two', False] (1, 'two') range(2, 8, 3)
+[1, 'two']
+[1, 'two', [None]]

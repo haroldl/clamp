@@ -85,6 +85,7 @@
    :py-pos
    :py-invert
    :py-not
+   :py-str
    :py-repr
    :py-display
    :py-exception
@@ -610,6 +611,13 @@
 
 (defun py-not (value)
   (py-bool (not (py-truthy-p value))))
+
+(defun py-str (value)
+  (cond
+    ((stringp value) value)
+    (t
+     (with-output-to-string (stream)
+       (py-display value stream)))))
 
 (defstruct (py-exception-object (:include py-object))
   (args '()))
