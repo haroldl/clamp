@@ -33,6 +33,8 @@
    :py-enumerate-object
    :py-zip-object
    :py-filter-object
+   :py-range-object
+   :py-range-iterator-object
    :py-slice-object
    :make-py-slice
    :py-slice-object-start
@@ -89,6 +91,7 @@
    :py-enumerate
    :py-zip
    :py-filter
+   :py-range
    :py-all
    :py-any
    :py-iter
@@ -184,6 +187,18 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-range-type*
+  (make-py-type :type *py-type-type*
+                :name "range"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-range-iterator-type*
+  (make-py-type :type *py-type-type*
+                :name "range_iterator"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
 
@@ -214,6 +229,7 @@
     ((or (eq value *py-false*) (eq value *py-none*)) nil)
     ((py-list-object-p value) (> (or (py-object-size value) 0) 0))
     ((py-tuple-object-p value) (> (or (py-object-size value) 0) 0))
+    ((py-range-object-p value) (> (py-range-object-length value) 0))
     ((numberp value) (not (zerop value)))
     ((stringp value) (> (length value) 0))
     ((null value) nil)
@@ -223,6 +239,7 @@
   (cond
     ((py-list-object-p value) (or (py-object-size value) 0))
     ((py-tuple-object-p value) (or (py-object-size value) 0))
+    ((py-range-object-p value) (py-range-object-length value))
     ((stringp value) (length value))
     (t
      (error "Python object of type ~A has no len()"
@@ -450,6 +467,8 @@
        (py-bool
         (loop for index from 0 below size
               thereis (py-truthy-p (py-eq (aref storage index) item))))))
+    ((py-range-object-p container)
+     (py-range-contains container item))
     ((stringp container)
      (unless (stringp item)
        (error "'in <string>' requires string as left operand, got ~S" item))
@@ -686,6 +705,16 @@
 (defstruct (py-filter-object (:include py-object))
   predicate
   iterator)
+
+(defstruct (py-range-object (:include py-object))
+  start
+  stop
+  step
+  length)
+
+(defstruct (py-range-iterator-object (:include py-object))
+  range
+  (index 0))
 
 (defparameter *py-list-type*
   (make-py-type :type *py-type-type*
@@ -1401,7 +1430,8 @@
            (eq (py-object-type obj) *py-tuple-reverse-iterator-type*)
            (eq (py-object-type obj) *py-enumerate-type*)
            (eq (py-object-type obj) *py-zip-type*)
-           (eq (py-object-type obj) *py-filter-type*))))
+           (eq (py-object-type obj) *py-filter-type*)
+           (eq (py-object-type obj) *py-range-iterator-type*))))
 
 (defun py-forward-list-iterator-p (obj)
   (and (py-object-p obj)
@@ -1426,6 +1456,10 @@
 (defun py-reverse-tuple-iterator-p (obj)
   (and (py-object-p obj)
        (eq (py-object-type obj) *py-tuple-reverse-iterator-type*)))
+
+(defun py-range-iterator-p (obj)
+  (and (py-object-p obj)
+       (eq (py-object-type obj) *py-range-iterator-type*)))
 
 (defun py-enumerate (iterable &optional (start 0))
   (let ((normalized-start (py-normalize-bool-number start)))
@@ -1455,6 +1489,70 @@
                          :predicate predicate
                          :iterator (py-iter iterable)))
 
+(defun py-range-length (start stop step)
+  (cond
+    ((and (> step 0) (< start stop))
+     (1+ (floor (- stop 1 start) step)))
+    ((and (< step 0) (> start stop))
+     (1+ (floor (- start 1 stop) (- step))))
+    (t 0)))
+
+(defun py-range-integer-argument (value name)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (unless (integerp normalized-value)
+      (error "range() ~A must be an integer, got ~S" name value))
+    normalized-value))
+
+(defun py-range (&rest args)
+  (let (start stop step)
+    (case (length args)
+      (1
+       (setf start 0
+             stop (py-range-integer-argument (first args) "stop")
+             step 1))
+      (2
+       (setf start (py-range-integer-argument (first args) "start")
+             stop (py-range-integer-argument (second args) "stop")
+             step 1))
+      (3
+       (setf start (py-range-integer-argument (first args) "start")
+             stop (py-range-integer-argument (second args) "stop")
+             step (py-range-integer-argument (third args) "step"))
+       (when (= step 0)
+         (error "range() arg 3 must not be zero")))
+      (0
+       (error "range expected at least 1 argument, got 0"))
+      (otherwise
+       (error "range expected at most 3 arguments, got ~A" (length args))))
+    (make-py-range-object :type *py-range-type*
+                          :start start
+                          :stop stop
+                          :step step
+                          :length (py-range-length start stop step))))
+
+(defun py-range-item (range index)
+  (+ (py-range-object-start range)
+     (* index (py-range-object-step range))))
+
+(defun py-range-normalized-index (range index)
+  (let* ((length (py-range-object-length range))
+         (normalized-index (if (< index 0) (+ index length) index)))
+    (unless (py-list-valid-index-p normalized-index length)
+      (error "range object index out of range"))
+    normalized-index))
+
+(defun py-range-contains (range value)
+  (let ((candidate (py-normalize-bool-number value))
+        (start (py-range-object-start range))
+        (stop (py-range-object-stop range))
+        (step (py-range-object-step range)))
+    (py-bool
+     (and (integerp candidate)
+          (if (> step 0)
+              (and (<= start candidate) (< candidate stop))
+              (and (< stop candidate) (<= candidate start)))
+          (= (mod (- candidate start) step) 0)))))
+
 (defun py-iter (obj)
   (cond
     ((py-iterator-p obj) obj)
@@ -1469,6 +1567,10 @@
     ((eq (py-object-type obj) *py-tuple-type*)
      (make-py-tuple-iterator-object :type *py-tuple-iterator-type*
                                     :sequence obj
+                                    :index 0))
+    ((eq (py-object-type obj) *py-range-type*)
+     (make-py-range-iterator-object :type *py-range-iterator-type*
+                                    :range obj
                                     :index 0))
     (t
      (error "Python object of type ~A is not iterable"
@@ -1493,6 +1595,17 @@
       :type *py-tuple-reverse-iterator-type*
       :sequence obj
       :index (1- (or (py-object-size obj) 0))))
+    ((py-range-object-p obj)
+     (let ((length (py-range-object-length obj)))
+       (make-py-range-iterator-object
+        :type *py-range-iterator-type*
+        :range (if (= length 0)
+                   (py-range 0)
+                   (py-range (py-range-item obj (1- length))
+                             (- (py-range-object-start obj)
+                                (py-range-object-step obj))
+                             (- (py-range-object-step obj))))
+        :index 0)))
     (t
      (error "Python object of type ~A is not reversible"
             (if (py-object-p obj)
@@ -1695,6 +1808,15 @@
                           (py-invoke-callable predicate item))))
          (when (py-truthy-p result)
            (return item)))))
+    ((py-range-iterator-p iterator)
+     (let* ((range (py-range-iterator-object-range iterator))
+            (index (py-range-iterator-object-index iterator))
+            (length (py-range-object-length range)))
+       (if (< index length)
+           (prog1
+               (py-range-item range index)
+             (setf (py-range-iterator-object-index iterator) (1+ index)))
+           (py-raise *py-stop-iteration*))))
     (t
      (error "Expected Python iterator, got ~S" iterator))))
 
@@ -1756,6 +1878,11 @@
     (if (or (< length-remaining 0) (< size length-remaining))
         0
         length-remaining)))
+
+(defun py-range-iterator-length-hint (iterator)
+  (let* ((range (py-range-iterator-object-range iterator))
+         (index (py-range-iterator-object-index iterator)))
+    (max (- (py-range-object-length range) index) 0)))
 
 (setf (py-type-attr *py-list-type* "__iter__")
       (lambda (obj)
@@ -1865,6 +1992,50 @@
       (lambda (iterator)
         (py-next iterator)))
 
+(setf (py-type-attr *py-range-type* "__iter__")
+      (lambda (obj)
+        (py-iter obj)))
+
+(setf (py-type-attr *py-range-type* "__len__")
+      (lambda (obj)
+        (py-range-object-length obj)))
+
+(setf (py-type-attr *py-range-type* "__contains__")
+      (lambda (obj value)
+        (py-range-contains obj value)))
+
+(setf (py-type-attr *py-range-type* "__getitem__")
+      (lambda (obj index)
+        (py-range-item obj (py-range-normalized-index obj index))))
+
+(setf (py-type-attr *py-range-type* "__reversed__")
+      (lambda (obj)
+        (py-reversed obj)))
+
+(setf (py-type-attr *py-range-type* "count")
+      (lambda (obj value)
+        (if (py-truthy-p (py-range-contains obj value)) 1 0)))
+
+(setf (py-type-attr *py-range-type* "index")
+      (lambda (obj value)
+        (unless (py-truthy-p (py-range-contains obj value))
+          (error "~S is not in range" value))
+        (floor (- (py-normalize-bool-number value)
+                  (py-range-object-start obj))
+               (py-range-object-step obj))))
+
+(setf (py-type-attr *py-range-iterator-type* "__iter__")
+      (lambda (iterator)
+        (py-iter iterator)))
+
+(setf (py-type-attr *py-range-iterator-type* "__next__")
+      (lambda (iterator)
+        (py-next iterator)))
+
+(setf (py-type-attr *py-range-iterator-type* "__length_hint__")
+      (lambda (iterator)
+        (py-range-iterator-length-hint iterator)))
+
 (defun py-string-repr (value stream)
   (princ "'" stream)
   (loop for char across value
@@ -1896,6 +2067,15 @@
      (when (= (or (py-object-size value) 0) 1)
        (princ "," stream))
      (princ ")" stream))
+    ((py-range-object-p value)
+     (if (= (py-range-object-step value) 1)
+         (format stream "range(~A, ~A)"
+                 (py-range-object-start value)
+                 (py-range-object-stop value))
+         (format stream "range(~A, ~A, ~A)"
+                 (py-range-object-start value)
+                 (py-range-object-stop value)
+                 (py-range-object-step value))))
     (t (py-display value stream))))
 
 (defun py-display (value &optional (stream *standard-output*))
@@ -1914,6 +2094,8 @@
     ((py-enumerate-object-p value) (princ "<enumerate>" stream))
     ((py-zip-object-p value) (princ "<zip>" stream))
     ((py-filter-object-p value) (princ "<filter>" stream))
+    ((py-range-object-p value) (py-repr value stream))
+    ((py-range-iterator-p value) (princ "<range_iterator>" stream))
     ((py-list-object-p value) (py-repr value stream))
     ((py-tuple-object-p value) (py-repr value stream))
     (t (princ value stream))))
