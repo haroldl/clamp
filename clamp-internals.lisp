@@ -701,9 +701,7 @@
               finally (return (values nil nil))))))
 
 (defun py-lookup-attr (obj name)
-  (unless (py-object-p obj)
-    (error "Cannot look up Python attribute ~S on non-object ~S" name obj))
-  (when (py-range-object-p obj)
+  (when (and (py-object-p obj) (py-range-object-p obj))
     (cond
       ((string= name "start")
        (return-from py-lookup-attr (py-range-object-start obj)))
@@ -711,14 +709,15 @@
        (return-from py-lookup-attr (py-range-object-stop obj)))
       ((string= name "step")
        (return-from py-lookup-attr (py-range-object-step obj)))))
-  (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
-    (when found
-      (return-from py-lookup-attr attr)))
-  (multiple-value-bind (attr found) (py-find-type-attr (py-object-type obj) name)
+  (when (py-object-p obj)
+    (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
+      (when found
+        (return-from py-lookup-attr attr))))
+  (multiple-value-bind (attr found) (py-find-type-attr (py-type-of obj) name)
     (when found
       (return-from py-lookup-attr attr)))
   (error "Python object of type ~A has no attribute ~S"
-         (py-type-name (py-object-type obj))
+         (py-type-name (py-type-of obj))
          name))
 
 (defun py-invoke-callable (callable &rest args)
@@ -974,6 +973,14 @@
       (py-string-slice value index)
       (let ((normalized-index (py-string-normalized-index value index)))
         (subseq value normalized-index (1+ normalized-index)))))
+
+(setf (py-type-attr *py-str-type* "__len__")
+      (lambda (obj)
+        (py-len obj)))
+
+(setf (py-type-attr *py-str-type* "__getitem__")
+      (lambda (obj index)
+        (py-string-getitem obj index)))
 
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
@@ -1730,7 +1737,7 @@
     (t
      (error "Python object of type ~A is not iterable"
             (if (py-object-p obj)
-                (py-type-name (py-object-type obj))
+                (py-type-name (py-type-of obj))
                 (type-of obj))))))
 
 (defun py-reversed (obj)
@@ -1764,7 +1771,7 @@
     (t
      (error "Python object of type ~A is not reversible"
             (if (py-object-p obj)
-                (py-type-name (py-object-type obj))
+                (py-type-name (py-type-of obj))
                 (type-of obj))))))
 
 (defun py-extreme (operation args)
