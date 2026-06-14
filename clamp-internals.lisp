@@ -419,6 +419,15 @@
           (setf (py-list-object-allocated obj) (array-total-size storage)))
         *py-none*))
 
+(setf (py-type-attr *py-list-type* "clear")
+      (lambda (obj)
+        (py-list-storage obj "clear")
+        (setf (py-object-value obj)
+              (make-array 0 :adjustable t :fill-pointer 0))
+        (setf (py-object-size obj) 0)
+        (setf (py-list-object-allocated obj) 0)
+        *py-none*))
+
 (setf (py-type-attr *py-list-type* "pop")
       (lambda (obj &optional (index -1))
         (let* ((storage (py-list-storage obj "pop"))
