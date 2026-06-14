@@ -52,6 +52,7 @@
    :py-len
    :py-hash
    :py-reversed
+   :py-callable
    :py-min
    :py-max
    :py-sum
@@ -659,6 +660,11 @@
      (apply callable args))
     (t
      (error "Python attribute is not callable: ~S" callable))))
+
+(defun py-callable (value)
+  (py-bool
+   (or (functionp value)
+       (py-callable-p value))))
 
 (defun py-call-attr (obj name &rest args)
   (apply #'py-invoke-callable (py-lookup-attr obj name) obj args))
