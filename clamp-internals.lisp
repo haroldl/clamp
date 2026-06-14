@@ -876,6 +876,17 @@
                   do (incf count))
           count)))
 
+(setf (py-type-attr *py-tuple-type* "index")
+      (lambda (obj value &optional (start 0) (stop most-positive-fixnum))
+        (let* ((storage (py-tuple-storage obj "index"))
+               (size (or (py-object-size obj) 0))
+               (normalized-start (py-list-slice-index size start))
+               (normalized-stop (py-list-slice-index size stop)))
+          (loop for index from normalized-start below (min normalized-stop size)
+                when (py-truthy-p (py-eq (aref storage index) value))
+                  return index
+                finally (error "tuple.index(x): x not in tuple")))))
+
 (setf (py-type-attr *py-tuple-type* "__getitem__")
       (lambda (obj index)
         (if (py-slice-object-p index)
