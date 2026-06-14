@@ -66,6 +66,7 @@
    :py-le
    :py-gt
    :py-ge
+   :py-neg
    :py-pos
    :py-not
    :py-repr
@@ -457,6 +458,12 @@
     (if (numberp normalized-value)
         normalized-value
         (error "bad operand type for unary +: ~S" value))))
+
+(defun py-neg (value)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (if (numberp normalized-value)
+        (- normalized-value)
+        (error "bad operand type for unary -: ~S" value))))
 
 (defun py-not (value)
   (py-bool (not (py-truthy-p value))))
