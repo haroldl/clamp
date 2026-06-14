@@ -448,6 +448,18 @@
         (setf (py-list-object-allocated obj) 0)
         *py-none*))
 
+(setf (py-type-attr *py-list-type* "copy")
+      (lambda (obj)
+        (let* ((storage (py-list-storage obj "copy"))
+               (size (or (py-object-size obj) 0))
+               (copied-storage (make-array 0 :adjustable t :fill-pointer 0)))
+          (loop for index from 0 below size
+                do (vector-push-extend (aref storage index) copied-storage))
+          (make-py-list-object :type *py-list-type*
+                               :size (fill-pointer copied-storage)
+                               :value copied-storage
+                               :allocated (array-total-size copied-storage)))))
+
 (setf (py-type-attr *py-list-type* "count")
       (lambda (obj value)
         (let ((storage (py-list-storage obj "count"))
