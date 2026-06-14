@@ -448,6 +448,16 @@
         (setf (py-list-object-allocated obj) 0)
         *py-none*))
 
+(setf (py-type-attr *py-list-type* "count")
+      (lambda (obj value)
+        (let ((storage (py-list-storage obj "count"))
+              (size (or (py-object-size obj) 0))
+              (count 0))
+          (loop for index from 0 below size
+                when (py-truthy-p (py-eq (aref storage index) value))
+                  do (incf count))
+          count)))
+
 (setf (py-type-attr *py-list-type* "pop")
       (lambda (obj &optional (index -1))
         (let* ((storage (py-list-storage obj "pop"))
