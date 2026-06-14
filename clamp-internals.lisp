@@ -43,6 +43,7 @@
    :py-len
    :py-reversed
    :py-add
+   :py-iadd
    :py-mul
    :py-eq
    :py-ne
@@ -655,6 +656,10 @@
       (lambda (obj value)
         (py-add obj value)))
 
+(setf (py-type-attr *py-list-type* "__iadd__")
+      (lambda (obj value)
+        (py-iadd obj value)))
+
 (setf (py-type-attr *py-list-type* "__mul__")
       (lambda (obj value)
         (py-mul obj value)))
@@ -808,6 +813,18 @@
                               :allocated (array-total-size result-storage))))
       (t
        (error "Unsupported Python + between ~S and ~S" left right)))))
+
+(defun py-iadd (left right)
+  (if (and (py-list-object-p left) (py-list-object-p right))
+      (let* ((left-storage (py-list-storage left "+="))
+             (right-storage (py-list-storage right "+="))
+             (right-size (or (py-object-size right) 0)))
+        (loop for index from 0 below right-size
+              do (vector-push-extend (aref right-storage index) left-storage))
+        (setf (py-object-size left) (fill-pointer left-storage))
+        (setf (py-list-object-allocated left) (array-total-size left-storage))
+        left)
+      (py-add left right)))
 
 (defun py-list-repeat (items count)
   (let* ((source-storage (py-list-storage items "*"))

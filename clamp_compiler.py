@@ -283,6 +283,8 @@ def codegen_augassign(node, context: Context):
     child_context = context.child()
     rhs = codegen(node.value, child_context)
     op = codegen(node.op, child_context)
+    if isinstance(node.op, ast.Add):
+        op = "|CLAMP.__CLAMP_INTERNALS__|:PY-IADD"
 
     if isinstance(node.target, ast.Name):
         target = codegen(node.target, child_context)
