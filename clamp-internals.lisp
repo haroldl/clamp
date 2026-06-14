@@ -883,6 +883,23 @@
           (values nil nil)
           (error condition)))))
 
+(defun py-list-iterator-length-hint (iterator)
+  (let* ((sequence (py-list-iterator-object-sequence iterator))
+         (index (py-list-iterator-object-index iterator))
+         (length-remaining (if (>= index 0)
+                               (- (or (py-object-size sequence) 0) index)
+                               0)))
+    (max length-remaining 0)))
+
+(defun py-list-reverse-iterator-length-hint (iterator)
+  (let* ((sequence (py-list-reverse-iterator-object-sequence iterator))
+         (index (py-list-reverse-iterator-object-index iterator))
+         (length-remaining (1+ index))
+         (size (or (py-object-size sequence) 0)))
+    (if (or (< length-remaining 0) (< size length-remaining))
+        0
+        length-remaining)))
+
 (setf (py-type-attr *py-list-type* "__iter__")
       (lambda (obj)
         (py-iter obj)))
@@ -895,6 +912,10 @@
       (lambda (iterator)
         (py-next iterator)))
 
+(setf (py-type-attr *py-list-iterator-type* "__length_hint__")
+      (lambda (iterator)
+        (py-list-iterator-length-hint iterator)))
+
 (setf (py-type-attr *py-list-type* "__reversed__")
       (lambda (obj)
         (py-reversed obj)))
@@ -906,6 +927,10 @@
 (setf (py-type-attr *py-list-reverse-iterator-type* "__next__")
       (lambda (iterator)
         (py-next iterator)))
+
+(setf (py-type-attr *py-list-reverse-iterator-type* "__length_hint__")
+      (lambda (iterator)
+        (py-list-reverse-iterator-length-hint iterator)))
 
 (defun py-string-repr (value stream)
   (princ "'" stream)
