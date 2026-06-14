@@ -772,6 +772,22 @@
       (lambda (obj value)
         (py-ne obj value)))
 
+(setf (py-type-attr *py-list-type* "__lt__")
+      (lambda (obj value)
+        (py-lt obj value)))
+
+(setf (py-type-attr *py-list-type* "__le__")
+      (lambda (obj value)
+        (py-le obj value)))
+
+(setf (py-type-attr *py-list-type* "__gt__")
+      (lambda (obj value)
+        (py-gt obj value)))
+
+(setf (py-type-attr *py-list-type* "__ge__")
+      (lambda (obj value)
+        (py-ge obj value)))
+
 (setf (py-type-attr *py-list-type* "__len__")
       (lambda (obj)
         (py-list-storage obj "__len__")
@@ -927,6 +943,22 @@
 (setf (py-type-attr *py-tuple-type* "__ne__")
       (lambda (obj value)
         (py-ne obj value)))
+
+(setf (py-type-attr *py-tuple-type* "__lt__")
+      (lambda (obj value)
+        (py-lt obj value)))
+
+(setf (py-type-attr *py-tuple-type* "__le__")
+      (lambda (obj value)
+        (py-le obj value)))
+
+(setf (py-type-attr *py-tuple-type* "__gt__")
+      (lambda (obj value)
+        (py-gt obj value)))
+
+(setf (py-type-attr *py-tuple-type* "__ge__")
+      (lambda (obj value)
+        (py-ge obj value)))
 
 (setf (py-type-attr *py-tuple-type* "__len__")
       (lambda (obj)
