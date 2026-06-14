@@ -1005,6 +1005,24 @@
              (incf count)
              (setf position (+ match substring-size)))))))))
 
+(defun py-string-find (value substring &optional
+                       (start *py-none*)
+                       (end *py-none*))
+  (unless (stringp substring)
+    (error "must be str, not ~S" substring))
+  (let* ((size (length value))
+         (raw-start (if (eq start *py-none*)
+                        0
+                        (py-normalize-bool-number start)))
+         (adjusted-start (py-string-adjust-bound start size 0))
+         (adjusted-end (py-string-adjust-bound end size size)))
+    (if (or (> raw-start size) (> adjusted-start adjusted-end))
+        -1
+        (or (search substring value
+                    :start2 adjusted-start
+                    :end2 adjusted-end)
+            -1))))
+
 (defun py-string-getitem (value index)
   (if (py-slice-object-p index)
       (py-string-slice value index)
@@ -1024,6 +1042,12 @@
                    (start *py-none*)
                    (end *py-none*))
         (py-string-count obj substring start end)))
+
+(setf (py-type-attr *py-str-type* "find")
+      (lambda (obj substring &optional
+                   (start *py-none*)
+                   (end *py-none*))
+        (py-string-find obj substring start end)))
 
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
