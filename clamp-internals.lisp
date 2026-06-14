@@ -641,6 +641,11 @@
                   do (incf count))
           count)))
 
+(setf (py-type-attr *py-list-type* "__len__")
+      (lambda (obj)
+        (py-list-storage obj "__len__")
+        (or (py-object-size obj) 0)))
+
 (defun py-list-slice-index (size index)
   (let ((normalized-index index))
     (when (< normalized-index 0)
