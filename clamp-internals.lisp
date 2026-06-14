@@ -80,6 +80,8 @@
    :py-stop-iteration-p
    :py-enumerate
    :py-zip
+   :py-all
+   :py-any
    :py-iter
    :py-next
    :py-next-item
@@ -1426,6 +1428,24 @@
 
 (defun py-max (&rest args)
   (py-extreme :max args))
+
+(defun py-all (iterable)
+  (let ((iterator (py-iter iterable)))
+    (loop
+      (multiple-value-bind (item found) (py-next-item iterator)
+        (unless found
+          (return *py-true*))
+        (unless (py-truthy-p item)
+          (return *py-false*))))))
+
+(defun py-any (iterable)
+  (let ((iterator (py-iter iterable)))
+    (loop
+      (multiple-value-bind (item found) (py-next-item iterator)
+        (unless found
+          (return *py-false*))
+        (when (py-truthy-p item)
+          (return *py-true*))))))
 
 (defun py-next (iterator)
   (cond
