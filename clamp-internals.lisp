@@ -205,6 +205,17 @@
   (let ((bool-value (py-bool-value value)))
     (if bool-value bool-value value)))
 
+(defun py-list-eq (left right)
+  (let ((left-size (or (py-object-size left) 0))
+        (right-size (or (py-object-size right) 0)))
+    (and (= left-size right-size)
+         (let ((left-storage (py-object-value left))
+               (right-storage (py-object-value right)))
+           (loop for index from 0 below left-size
+                 always (py-truthy-p
+                         (py-eq (aref left-storage index)
+                                (aref right-storage index))))))))
+
 (defun py-eq (left right)
   (let ((normalized-left (py-normalize-bool-number left))
         (normalized-right (py-normalize-bool-number right)))
@@ -212,6 +223,8 @@
      (cond
        ((or (eq left *py-none*) (eq right *py-none*))
         (eq left right))
+       ((and (py-list-object-p left) (py-list-object-p right))
+        (py-list-eq left right))
        ((and (numberp normalized-left) (numberp normalized-right))
         (= normalized-left normalized-right))
        ((and (stringp left) (stringp right))

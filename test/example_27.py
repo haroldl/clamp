@@ -1,0 +1,10 @@
+print([1, 2] == [1, 2])
+print([1, 2] == [1, 3])
+print([1, 2] == [1, 2, 3])
+print([1, [2, True]] == [1, [2, 1]])
+print([None, False, "x"] != [None, False, "x"])
+left = [1, [2]]
+right = left.copy()
+print(left == right)
+right[1].append(3)
+print(left == right, left != right)
