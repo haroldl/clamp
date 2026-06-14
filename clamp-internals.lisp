@@ -1052,6 +1052,44 @@
                     :end2 adjusted-end)
             -1))))
 
+(defun py-string-tailmatch (value substring start end direction)
+  (unless (stringp substring)
+    (error "startswith/endswith first arg must be str, not ~S" substring))
+  (let* ((size (length value))
+         (adjusted-start
+           (let ((index (if (eq start *py-none*)
+                            0
+                            (py-normalize-bool-number start))))
+             (when (< index 0)
+               (incf index size)
+               (when (< index 0)
+                 (setf index 0)))
+             index))
+         (adjusted-end (py-string-adjust-bound end size size))
+         (substring-size (length substring))
+         (offset-limit (- adjusted-end substring-size)))
+    (cond
+      ((< offset-limit adjusted-start) *py-false*)
+      ((= substring-size 0) *py-true*)
+      (t
+       (let ((offset (if (> direction 0)
+                         offset-limit
+                         adjusted-start)))
+         (py-bool
+          (string= value substring
+                   :start1 offset
+                   :end1 (+ offset substring-size))))))))
+
+(defun py-string-startswith (value prefix &optional
+                             (start *py-none*)
+                             (end *py-none*))
+  (py-string-tailmatch value prefix start end -1))
+
+(defun py-string-endswith (value suffix &optional
+                           (start *py-none*)
+                           (end *py-none*))
+  (py-string-tailmatch value suffix start end 1))
+
 (defun py-string-getitem (value index)
   (if (py-slice-object-p index)
       (py-string-slice value index)
@@ -1077,6 +1115,18 @@
                    (start *py-none*)
                    (end *py-none*))
         (py-string-find obj substring start end)))
+
+(setf (py-type-attr *py-str-type* "startswith")
+      (lambda (obj prefix &optional
+                   (start *py-none*)
+                   (end *py-none*))
+        (py-string-startswith obj prefix start end)))
+
+(setf (py-type-attr *py-str-type* "endswith")
+      (lambda (obj suffix &optional
+                   (start *py-none*)
+                   (end *py-none*))
+        (py-string-endswith obj suffix start end)))
 
 (setf (py-type-attr *py-int-type* "bit_length")
       (lambda (obj)
