@@ -708,6 +708,27 @@
                               :size slice-length
                               :value result-storage)))))
 
+(defun py-string-normalized-index (value index)
+  (let* ((size (length value))
+         (normalized-index (if (< index 0) (+ index size) index)))
+    (unless (py-list-valid-index-p normalized-index size)
+      (error "string index out of range"))
+    normalized-index))
+
+(defun py-string-slice (value slice)
+  (multiple-value-bind (start step slice-length)
+      (py-list-slice-parameters slice (length value))
+    (with-output-to-string (stream)
+      (loop for offset from 0 below slice-length
+            for index = start then (+ index step)
+            do (princ (char value index) stream)))))
+
+(defun py-string-getitem (value index)
+  (if (py-slice-object-p index)
+      (py-string-slice value index)
+      (let ((normalized-index (py-string-normalized-index value index)))
+        (subseq value normalized-index (1+ normalized-index)))))
+
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
         (let ((storage (py-list-storage obj "append")))
@@ -1514,7 +1535,9 @@
   (py-call-attr obj "pop" index))
 
 (defun py-getitem (obj index)
-  (py-call-attr obj "__getitem__" index))
+  (if (stringp obj)
+      (py-string-getitem obj index)
+      (py-call-attr obj "__getitem__" index)))
 
 (defun py-setitem (obj index value)
   (py-call-attr obj "__setitem__" index value))
