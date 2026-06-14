@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
-  (:shadow :print)
-  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :enumerate :zip :assign))
+  (:shadow :print :min :max)
+  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :min :max :enumerate :zip :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -83,6 +83,14 @@
 (defvar reversed
   (lambda (obj)
     (|CLAMP.__CLAMP_INTERNALS__|:PY-REVERSED obj)))
+
+(defvar min
+  (lambda (&rest xs)
+    (apply #'|CLAMP.__CLAMP_INTERNALS__|:PY-MIN xs)))
+
+(defvar max
+  (lambda (&rest xs)
+    (apply #'|CLAMP.__CLAMP_INTERNALS__|:PY-MAX xs)))
 
 (defvar enumerate
   (lambda (iterable &optional (start 0))

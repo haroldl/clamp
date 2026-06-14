@@ -48,6 +48,8 @@
    :py-or
    :py-len
    :py-reversed
+   :py-min
+   :py-max
    :py-add
    :py-iadd
    :py-mul
@@ -1371,6 +1373,45 @@
             (if (py-object-p obj)
                 (py-type-name (py-object-type obj))
                 (type-of obj))))))
+
+(defun py-extreme (operation args)
+  (let ((best nil)
+        (found nil)
+        (iterator nil))
+    (labels ((consider (item)
+               (unless found
+                 (setf best item)
+                 (setf found t)
+                 (return-from consider))
+               (when (py-truthy-p
+                      (ecase operation
+                        (:min (py-lt item best))
+                        (:max (py-gt item best))))
+                 (setf best item))))
+      (cond
+        ((null args)
+         (error "~A expected at least 1 argument, got 0"
+                (if (eq operation :min) "min" "max")))
+        ((null (rest args))
+         (setf iterator (py-iter (first args)))
+         (loop
+           (multiple-value-bind (item item-found) (py-next-item iterator)
+             (unless item-found
+               (return))
+             (consider item))))
+        (t
+         (dolist (item args)
+           (consider item)))))
+    (unless found
+      (error "~A() iterable argument is empty"
+             (if (eq operation :min) "min" "max")))
+    best))
+
+(defun py-min (&rest args)
+  (py-extreme :min args))
+
+(defun py-max (&rest args)
+  (py-extreme :max args))
 
 (defun py-next (iterator)
   (cond
