@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
-  (:shadow :print :min :max :sum :sorted :abs)
-  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :min :max :sum :sorted :abs :all :any :enumerate :zip :assign))
+  (:shadow :print :min :max :sum :sorted :abs :filter)
+  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :min :max :sum :sorted :abs :all :any :enumerate :zip :filter :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -119,3 +119,7 @@
 (defvar zip
   (lambda (&rest iterables)
     (apply #'|CLAMP.__CLAMP_INTERNALS__|:PY-ZIP iterables)))
+
+(defvar filter
+  (lambda (predicate iterable)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-FILTER predicate iterable)))

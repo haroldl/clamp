@@ -32,6 +32,7 @@
    :py-tuple-reverse-iterator-object
    :py-enumerate-object
    :py-zip-object
+   :py-filter-object
    :py-slice-object
    :make-py-slice
    :py-slice-object-start
@@ -82,6 +83,7 @@
    :py-stop-iteration-p
    :py-enumerate
    :py-zip
+   :py-filter
    :py-all
    :py-any
    :py-iter
@@ -607,6 +609,10 @@
   iterators
   result)
 
+(defstruct (py-filter-object (:include py-object))
+  predicate
+  iterator)
+
 (defparameter *py-list-type*
   (make-py-type :type *py-type-type*
                 :name "list"
@@ -666,6 +672,12 @@
 (defparameter *py-zip-type*
   (make-py-type :type *py-type-type*
                 :name "zip"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-filter-type*
+  (make-py-type :type *py-type-type*
+                :name "filter"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -1299,7 +1311,8 @@
            (eq (py-object-type obj) *py-tuple-iterator-type*)
            (eq (py-object-type obj) *py-tuple-reverse-iterator-type*)
            (eq (py-object-type obj) *py-enumerate-type*)
-           (eq (py-object-type obj) *py-zip-type*))))
+           (eq (py-object-type obj) *py-zip-type*)
+           (eq (py-object-type obj) *py-filter-type*))))
 
 (defun py-forward-list-iterator-p (obj)
   (and (py-object-p obj)
@@ -1347,6 +1360,11 @@
     (make-py-zip-object :type *py-zip-type*
                         :iterators iterator-tuple
                         :result result-tuple)))
+
+(defun py-filter (predicate iterable)
+  (make-py-filter-object :type *py-filter-type*
+                         :predicate predicate
+                         :iterator (py-iter iterable)))
 
 (defun py-iter (obj)
   (cond
@@ -1557,6 +1575,15 @@
          (let ((result (apply #'make-py-tuple items)))
            (setf (py-zip-object-result iterator) result)
            result))))
+    ((py-filter-object-p iterator)
+     (loop
+       (let* ((item (py-next (py-filter-object-iterator iterator)))
+              (predicate (py-filter-object-predicate iterator))
+              (result (if (eq predicate *py-none*)
+                          item
+                          (py-invoke-callable predicate item))))
+         (when (py-truthy-p result)
+           (return item)))))
     (t
      (error "Expected Python iterator, got ~S" iterator))))
 
@@ -1719,6 +1746,14 @@
       (lambda (iterator)
         (py-next iterator)))
 
+(setf (py-type-attr *py-filter-type* "__iter__")
+      (lambda (iterator)
+        (py-iter iterator)))
+
+(setf (py-type-attr *py-filter-type* "__next__")
+      (lambda (iterator)
+        (py-next iterator)))
+
 (defun py-string-repr (value stream)
   (princ "'" stream)
   (loop for char across value
@@ -1767,6 +1802,7 @@
     ((py-reverse-tuple-iterator-p value) (princ "<reversed>" stream))
     ((py-enumerate-object-p value) (princ "<enumerate>" stream))
     ((py-zip-object-p value) (princ "<zip>" stream))
+    ((py-filter-object-p value) (princ "<filter>" stream))
     ((py-list-object-p value) (py-repr value stream))
     ((py-tuple-object-p value) (py-repr value stream))
     (t (princ value stream))))
