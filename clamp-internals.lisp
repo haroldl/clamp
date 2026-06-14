@@ -853,6 +853,16 @@
         (py-tuple-storage obj "__len__")
         (or (py-object-size obj) 0)))
 
+(setf (py-type-attr *py-tuple-type* "count")
+      (lambda (obj value)
+        (let ((storage (py-tuple-storage obj "count"))
+              (size (or (py-object-size obj) 0))
+              (count 0))
+          (loop for index from 0 below size
+                when (py-truthy-p (py-eq (aref storage index) value))
+                  do (incf count))
+          count)))
+
 (setf (py-type-attr *py-tuple-type* "__getitem__")
       (lambda (obj index)
         (aref (py-tuple-storage obj "__getitem__")
