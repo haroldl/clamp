@@ -403,6 +403,17 @@
                          (py-eq (aref left-storage index)
                                 (aref right-storage index))))))))
 
+(defun py-range-eq (left right)
+  (let ((left-length (py-range-object-length left))
+        (right-length (py-range-object-length right)))
+    (and (= left-length right-length)
+         (or (= left-length 0)
+             (and (= (py-range-object-start left)
+                     (py-range-object-start right))
+                  (or (= left-length 1)
+                      (= (py-range-object-step left)
+                         (py-range-object-step right))))))))
+
 (defun py-list-compare (left right operation)
   (let* ((left-size (or (py-object-size left) 0))
          (right-size (or (py-object-size right) 0))
@@ -472,6 +483,8 @@
         (py-list-eq left right))
        ((and (py-tuple-object-p left) (py-tuple-object-p right))
         (py-tuple-eq left right))
+       ((and (py-range-object-p left) (py-range-object-p right))
+        (py-range-eq left right))
        ((and (numberp normalized-left) (numberp normalized-right))
         (= normalized-left normalized-right))
        ((and (stringp left) (stringp right))
@@ -2134,6 +2147,14 @@
 (setf (py-type-attr *py-range-type* "__contains__")
       (lambda (obj value)
         (py-range-contains obj value)))
+
+(setf (py-type-attr *py-range-type* "__eq__")
+      (lambda (obj value)
+        (py-eq obj value)))
+
+(setf (py-type-attr *py-range-type* "__ne__")
+      (lambda (obj value)
+        (py-ne obj value)))
 
 (setf (py-type-attr *py-range-type* "__getitem__")
       (lambda (obj index)
