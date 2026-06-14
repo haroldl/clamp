@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print)
-  (:export :test :dir :plus :times :print :len :bool :iter :next :reversed :assign))
+  (:export :test :dir :plus :times :print :len :bool :repr :iter :next :reversed :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -66,6 +66,11 @@
   (lambda (&optional (obj |CLAMP.__CLAMP_INTERNALS__|:*PY-FALSE*))
     (|CLAMP.__CLAMP_INTERNALS__|:PY-BOOL
      (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P obj))))
+
+(defvar repr
+  (lambda (obj)
+    (with-output-to-string (stream)
+      (|CLAMP.__CLAMP_INTERNALS__|:PY-REPR obj stream))))
 
 (defvar iter
   (lambda (obj)

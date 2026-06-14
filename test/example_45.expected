@@ -1,0 +1,6 @@
+None True False
+0 3.5 'clamp'
+[1, 'two', False]
+[1, 'two', False]
+[1, 'two', False, [None]]
+[[1, 'two'], [False]]
