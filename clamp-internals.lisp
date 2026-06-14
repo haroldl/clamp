@@ -34,6 +34,7 @@
    :py-enumerate-object
    :py-zip-object
    :py-filter-object
+   :py-map-object
    :py-range-object
    :py-range-iterator-object
    :py-slice-object
@@ -100,6 +101,7 @@
    :py-enumerate
    :py-zip
    :py-filter
+   :py-map
    :py-range
    :py-all
    :py-any
@@ -780,6 +782,10 @@
   predicate
   iterator)
 
+(defstruct (py-map-object (:include py-object))
+  function
+  iterators)
+
 (defstruct (py-range-object (:include py-object))
   start
   stop
@@ -855,6 +861,12 @@
 (defparameter *py-filter-type*
   (make-py-type :type *py-type-type*
                 :name "filter"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-map-type*
+  (make-py-type :type *py-type-type*
+                :name "map"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -1652,6 +1664,7 @@
            (eq (py-object-type obj) *py-enumerate-type*)
            (eq (py-object-type obj) *py-zip-type*)
            (eq (py-object-type obj) *py-filter-type*)
+           (eq (py-object-type obj) *py-map-type*)
            (eq (py-object-type obj) *py-range-iterator-type*))))
 
 (defun py-forward-list-iterator-p (obj)
@@ -1709,6 +1722,16 @@
   (make-py-filter-object :type *py-filter-type*
                          :predicate predicate
                          :iterator (py-iter iterable)))
+
+(defun py-map (function &rest iterables)
+  (when (null iterables)
+    (error "map() must have at least two arguments."))
+  (make-py-map-object
+   :type *py-map-type*
+   :function function
+   :iterators (apply #'make-py-tuple
+                     (loop for iterable in iterables
+                           collect (py-iter iterable)))))
 
 (defun py-range-length (start stop step)
   (cond
@@ -2037,6 +2060,15 @@
                           (py-invoke-callable predicate item))))
          (when (py-truthy-p result)
            (return item)))))
+    ((py-map-object-p iterator)
+     (let* ((iterators (py-map-object-iterators iterator))
+            (iterator-count (or (py-object-size iterators) 0))
+            (items
+              (loop for index from 0 below iterator-count
+                    collect (py-next (aref (py-object-value iterators) index)))))
+       (apply #'py-invoke-callable
+              (py-map-object-function iterator)
+              items)))
     ((py-range-iterator-p iterator)
      (let* ((range (py-range-iterator-object-range iterator))
             (index (py-range-iterator-object-index iterator))
@@ -2221,6 +2253,14 @@
       (lambda (iterator)
         (py-next iterator)))
 
+(setf (py-type-attr *py-map-type* "__iter__")
+      (lambda (iterator)
+        (py-iter iterator)))
+
+(setf (py-type-attr *py-map-type* "__next__")
+      (lambda (iterator)
+        (py-next iterator)))
+
 (setf (py-type-attr *py-range-type* "__iter__")
       (lambda (obj)
         (py-iter obj)))
@@ -2335,6 +2375,7 @@
     ((py-enumerate-object-p value) (princ "<enumerate>" stream))
     ((py-zip-object-p value) (princ "<zip>" stream))
     ((py-filter-object-p value) (princ "<filter>" stream))
+    ((py-map-object-p value) (princ "<map>" stream))
     ((py-range-object-p value) (py-repr value stream))
     ((py-range-iterator-p value) (princ "<range_iterator>" stream))
     ((py-type-p value) (py-repr value stream))
