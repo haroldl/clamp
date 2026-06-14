@@ -345,6 +345,8 @@
        (py-int-hash normalized-value))
       ((py-tuple-object-p value)
        (py-tuple-hash value))
+      ((py-range-object-p value)
+       (py-range-hash value))
       ((py-list-object-p value)
        (error "unhashable type: 'list'"))
       (t
@@ -1805,6 +1807,17 @@
               (and (< stop candidate) (<= candidate start)))
           (= (mod (- candidate start) step) 0)))))
 
+(defun py-range-hash (range)
+  (let ((length (py-range-object-length range)))
+    (py-hash
+     (make-py-tuple length
+                    (if (= length 0)
+                        *py-none*
+                        (py-range-object-start range))
+                    (if (<= length 1)
+                        *py-none*
+                        (py-range-object-step range))))))
+
 (defun py-iter (obj)
   (cond
     ((py-iterator-p obj) obj)
@@ -2280,6 +2293,10 @@
 (setf (py-type-attr *py-range-type* "__ne__")
       (lambda (obj value)
         (py-ne obj value)))
+
+(setf (py-type-attr *py-range-type* "__hash__")
+      (lambda (obj)
+        (py-hash obj)))
 
 (setf (py-type-attr *py-range-type* "__getitem__")
       (lambda (obj index)
