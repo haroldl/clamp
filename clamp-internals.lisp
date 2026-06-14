@@ -610,6 +610,14 @@
                 do (rotatef (aref storage left) (aref storage right))))
         *py-none*))
 
+(setf (py-type-attr *py-list-type* "sort")
+      (lambda (obj)
+        (let ((storage (py-list-storage obj "sort")))
+          (stable-sort storage
+                       (lambda (left right)
+                         (py-truthy-p (py-lt left right)))))
+        *py-none*))
+
 (defun py-list-delete-index (obj normalized-index)
   (let* ((storage (py-list-storage obj "delete"))
          (size (or (py-object-size obj) 0))
