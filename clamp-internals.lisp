@@ -59,6 +59,8 @@
    :py-sorted
    :py-list
    :py-tuple
+   :py-chr
+   :py-ord
    :py-add
    :py-iadd
    :py-mul
@@ -1462,6 +1464,25 @@
 (defun py-divmod (left right)
   (make-py-tuple (py-floordiv left right)
                  (py-mod left right)))
+
+(defun py-chr (value)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (unless (integerp normalized-value)
+      (error "chr() arg must be an integer"))
+    (unless (<= 0 normalized-value #x10ffff)
+      (error "chr() arg not in range(0x110000)"))
+    (let ((char (code-char normalized-value)))
+      (unless char
+        (error "chr() arg not representable as a Clamp character"))
+      (string char))))
+
+(defun py-ord (value)
+  (unless (and (stringp value) (= (length value) 1))
+    (if (stringp value)
+        (error "ord() expected a character, but string of length ~A found"
+               (length value))
+        (error "ord() expected string of length 1, got ~S" value)))
+  (char-code (char value 0)))
 
 (defun py-imul (left right)
   (let ((normalized-right (py-normalize-bool-number right)))

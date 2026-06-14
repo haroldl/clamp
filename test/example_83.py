@@ -1,0 +1,5 @@
+print(chr(65), ord("A"))
+print(chr(97) + chr(98), ord("abc"[1]))
+print(ord(chr(True)), ord(chr(False)), chr(49))
+print([chr(120), chr(10), ord(next(iter("yz")))])
+print(chr(33) in "!?", ord(chr(90)))
