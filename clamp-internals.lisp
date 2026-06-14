@@ -43,6 +43,7 @@
    :py-gt
    :py-ge
    :py-not
+   :py-repr
    :py-display
    :py-exception
    :py-exception-value
@@ -514,21 +515,38 @@
       (lambda (iterator)
         (py-next iterator)))
 
-(defun py-display (value &optional (stream *standard-output*))
+(defun py-string-repr (value stream)
+  (princ "'" stream)
+  (loop for char across value
+        do (case char
+             (#\\ (princ "\\\\" stream))
+             (#\' (princ "\\'" stream))
+             (#\Newline (princ "\\n" stream))
+             (otherwise (princ char stream))))
+  (princ "'" stream))
+
+(defun py-repr (value &optional (stream *standard-output*))
   (cond
-    ((eq value *py-none*) (princ "None" stream))
-    ((eq value *py-true*) (princ "True" stream))
-    ((eq value *py-false*) (princ "False" stream))
-    ((py-stop-iteration-p value) (princ "StopIteration" stream))
-    ((py-iterator-p value) (princ "<list_iterator>" stream))
+    ((stringp value) (py-string-repr value stream))
     ((py-list-object-p value)
      (princ "[" stream)
      (loop for index from 0 below (or (py-object-size value) 0)
            do (progn
                 (when (> index 0)
                   (princ ", " stream))
-                (py-display (aref (py-object-value value) index) stream)))
+                (py-repr (aref (py-object-value value) index) stream)))
      (princ "]" stream))
+    (t (py-display value stream))))
+
+(defun py-display (value &optional (stream *standard-output*))
+  (cond
+    ((eq value *py-none*) (princ "None" stream))
+    ((eq value *py-true*) (princ "True" stream))
+    ((eq value *py-false*) (princ "False" stream))
+    ((stringp value) (princ value stream))
+    ((py-stop-iteration-p value) (princ "StopIteration" stream))
+    ((py-iterator-p value) (princ "<list_iterator>" stream))
+    ((py-list-object-p value) (py-repr value stream))
     (t (princ value stream))))
 
 (defun py-append (obj value)
