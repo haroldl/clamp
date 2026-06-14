@@ -238,6 +238,35 @@
                          (py-eq (aref left-storage index)
                                 (aref right-storage index))))))))
 
+(defun py-list-compare (left right operation)
+  (let* ((left-size (or (py-object-size left) 0))
+         (right-size (or (py-object-size right) 0))
+         (left-storage (py-object-value left))
+         (right-storage (py-object-value right))
+         (shared-size (min left-size right-size))
+         (differing-index
+           (loop for index from 0 below shared-size
+                 unless (py-truthy-p
+                         (py-eq (aref left-storage index)
+                                (aref right-storage index)))
+                   return index)))
+    (if differing-index
+        (let ((left-item (aref left-storage differing-index))
+              (right-item (aref right-storage differing-index)))
+          (case operation
+            (:lt (py-lt left-item right-item))
+            (:le (py-le left-item right-item))
+            (:gt (py-gt left-item right-item))
+            (:ge (py-ge left-item right-item))
+            (otherwise (error "Unsupported Python list comparison ~A" operation))))
+        (py-bool
+         (case operation
+           (:lt (< left-size right-size))
+           (:le (<= left-size right-size))
+           (:gt (> left-size right-size))
+           (:ge (>= left-size right-size))
+           (otherwise (error "Unsupported Python list comparison ~A" operation)))))))
+
 (defun py-eq (left right)
   (let ((normalized-left (py-normalize-bool-number left))
         (normalized-right (py-normalize-bool-number right)))
@@ -290,38 +319,46 @@
               operation left right)))))
 
 (defun py-lt (left right)
-  (multiple-value-bind (ordered-left ordered-right)
-      (py-ordered-values left right "<")
-    (py-bool
-     (if (and (stringp ordered-left) (stringp ordered-right))
-         (string< ordered-left ordered-right)
-         (< ordered-left ordered-right)))))
+  (if (and (py-list-object-p left) (py-list-object-p right))
+      (py-list-compare left right :lt)
+      (multiple-value-bind (ordered-left ordered-right)
+          (py-ordered-values left right "<")
+        (py-bool
+         (if (and (stringp ordered-left) (stringp ordered-right))
+             (string< ordered-left ordered-right)
+             (< ordered-left ordered-right))))))
 
 (defun py-le (left right)
-  (multiple-value-bind (ordered-left ordered-right)
-      (py-ordered-values left right "<=")
-    (py-bool
-     (if (and (stringp ordered-left) (stringp ordered-right))
-         (not (null (or (string< ordered-left ordered-right)
-                        (string= ordered-left ordered-right))))
-         (<= ordered-left ordered-right)))))
+  (if (and (py-list-object-p left) (py-list-object-p right))
+      (py-list-compare left right :le)
+      (multiple-value-bind (ordered-left ordered-right)
+          (py-ordered-values left right "<=")
+        (py-bool
+         (if (and (stringp ordered-left) (stringp ordered-right))
+             (not (null (or (string< ordered-left ordered-right)
+                            (string= ordered-left ordered-right))))
+             (<= ordered-left ordered-right))))))
 
 (defun py-gt (left right)
-  (multiple-value-bind (ordered-left ordered-right)
-      (py-ordered-values left right ">")
-    (py-bool
-     (if (and (stringp ordered-left) (stringp ordered-right))
-         (string> ordered-left ordered-right)
-         (> ordered-left ordered-right)))))
+  (if (and (py-list-object-p left) (py-list-object-p right))
+      (py-list-compare left right :gt)
+      (multiple-value-bind (ordered-left ordered-right)
+          (py-ordered-values left right ">")
+        (py-bool
+         (if (and (stringp ordered-left) (stringp ordered-right))
+             (string> ordered-left ordered-right)
+             (> ordered-left ordered-right))))))
 
 (defun py-ge (left right)
-  (multiple-value-bind (ordered-left ordered-right)
-      (py-ordered-values left right ">=")
-    (py-bool
-     (if (and (stringp ordered-left) (stringp ordered-right))
-         (not (null (or (string> ordered-left ordered-right)
-                        (string= ordered-left ordered-right))))
-         (>= ordered-left ordered-right)))))
+  (if (and (py-list-object-p left) (py-list-object-p right))
+      (py-list-compare left right :ge)
+      (multiple-value-bind (ordered-left ordered-right)
+          (py-ordered-values left right ">=")
+        (py-bool
+         (if (and (stringp ordered-left) (stringp ordered-right))
+             (not (null (or (string> ordered-left ordered-right)
+                            (string= ordered-left ordered-right))))
+             (>= ordered-left ordered-right))))))
 
 (defun py-not (value)
   (py-bool (not (py-truthy-p value))))
