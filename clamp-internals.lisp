@@ -180,6 +180,8 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(setf (py-type-bases *py-bool-type*) (list *py-int-type*))
+
 (defparameter *py-float-type*
   (make-py-type :type *py-type-type*
                 :name "float"
@@ -386,6 +388,12 @@
 (defun py-normalize-bool-number (value)
   (let ((bool-value (py-bool-value value)))
     (if bool-value bool-value value)))
+
+(defun py-int-bit-length (value)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (unless (integerp normalized-value)
+      (error "int.bit_length() expected an integer, got ~S" value))
+    (integer-length (abs normalized-value))))
 
 (defun py-list-eq (left right)
   (let ((left-size (or (py-object-size left) 0))
@@ -1062,6 +1070,10 @@
                    (start *py-none*)
                    (end *py-none*))
         (py-string-find obj substring start end)))
+
+(setf (py-type-attr *py-int-type* "bit_length")
+      (lambda (obj)
+        (py-int-bit-length obj)))
 
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
