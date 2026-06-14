@@ -648,6 +648,14 @@
       (lambda (obj value)
         (py-contains value obj)))
 
+(setf (py-type-attr *py-list-type* "__eq__")
+      (lambda (obj value)
+        (py-eq obj value)))
+
+(setf (py-type-attr *py-list-type* "__ne__")
+      (lambda (obj value)
+        (py-ne obj value)))
+
 (setf (py-type-attr *py-list-type* "__len__")
       (lambda (obj)
         (py-list-storage obj "__len__")
