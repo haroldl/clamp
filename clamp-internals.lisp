@@ -1052,6 +1052,14 @@
                     :end2 adjusted-end)
             -1))))
 
+(defun py-string-index (value substring &optional
+                        (start *py-none*)
+                        (end *py-none*))
+  (let ((result (py-string-find value substring start end)))
+    (if (= result -1)
+        (error "substring not found")
+        result)))
+
 (defun py-string-tailmatch (value substring start end direction)
   (unless (stringp substring)
     (error "startswith/endswith first arg must be str, not ~S" substring))
@@ -1115,6 +1123,12 @@
                    (start *py-none*)
                    (end *py-none*))
         (py-string-find obj substring start end)))
+
+(setf (py-type-attr *py-str-type* "index")
+      (lambda (obj substring &optional
+                   (start *py-none*)
+                   (end *py-none*))
+        (py-string-index obj substring start end)))
 
 (setf (py-type-attr *py-str-type* "startswith")
       (lambda (obj prefix &optional
