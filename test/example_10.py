@@ -1,0 +1,10 @@
+arr = [10, 20]
+it = iter(arr)
+print(it)
+print(iter(it))
+print(next(it))
+print(next(it))
+left = iter(arr)
+right = iter(arr)
+print(next(left), next(left))
+print(next(right))

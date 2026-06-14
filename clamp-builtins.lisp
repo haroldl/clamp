@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print)
-  (:export :test :dir :plus :times :print :assign))
+  (:export :test :dir :plus :times :print :iter :next :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -57,3 +57,11 @@
                  (princ #\Space))
                (|CLAMP.__CLAMP_INTERNALS__|:PY-DISPLAY x)))
     (terpri)))
+
+(defvar iter
+  (lambda (obj)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-ITER obj)))
+
+(defvar next
+  (lambda (iterator)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-NEXT iterator)))

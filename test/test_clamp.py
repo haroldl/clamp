@@ -90,3 +90,16 @@ def test_example_matches_expected_output(sample):
 def test_interactive_math_expression_prints_result():
     result = run_clamp_repl("1 + 2\nquit\n")
     assert result.stdout == ">>> 3\n>>> "
+
+
+def test_next_raises_stop_iteration_after_exhaustion():
+    command = [str(CLAMP)]
+    result = subprocess.run(
+        command,
+        cwd=ROOT,
+        input="it = iter([])\nnext(it)\n",
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "StopIteration" in result.stderr

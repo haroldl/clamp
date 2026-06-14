@@ -43,6 +43,15 @@
    :py-ge
    :py-not
    :py-display
+   :py-exception
+   :py-exception-value
+   :py-exception-object
+   :py-raise
+   :*py-stop-iteration*
+   :py-stop-iteration-p
+   :py-iter
+   :py-next
+   :py-next-item
    :make-py-list
    :py-append
    :py-getitem
@@ -105,6 +114,24 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-base-exception-type*
+  (make-py-type :type *py-type-type*
+                :name "BaseException"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-exception-type*
+  (make-py-type :type *py-type-type*
+                :name "Exception"
+                :bases (list *py-base-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-stop-iteration-type*
+  (make-py-type :type *py-type-type*
+                :name "StopIteration"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
 
@@ -113,6 +140,7 @@
 
 (defparameter *py-true*
   (make-py-object :type *py-bool-type* :value t))
+
 
 (defun py-bool (value)
   (if value *py-true* *py-false*))
@@ -224,6 +252,34 @@
 (defun py-not (value)
   (py-bool (not (py-truthy-p value))))
 
+(defstruct (py-exception-object (:include py-object))
+  (args '()))
+
+(defun make-py-exception (type &rest args)
+  (make-py-exception-object :type type :value args :args args))
+
+(defparameter *py-stop-iteration*
+  (make-py-exception *py-stop-iteration-type*))
+
+(define-condition py-exception (error)
+  ((value :initarg :value :reader py-exception-value))
+  (:report (lambda (condition stream)
+             (let ((value (py-exception-value condition)))
+               (if (py-exception-object-p value)
+                   (princ (py-type-name (py-object-type value)) stream)
+                   (princ value stream))))))
+
+(defun py-raise (exception)
+  (error 'py-exception :value exception))
+
+(defun py-stop-iteration-p (value)
+  (cond
+    ((typep value 'py-exception)
+     (py-stop-iteration-p (py-exception-value value)))
+    ((py-exception-object-p value)
+     (eq (py-object-type value) *py-stop-iteration-type*))
+    (t nil)))
+
 ;; Internal representation of Python-callable behavior.
 ;;
 ;; BINDING-KIND distinguishes how descriptor binding should work when the
@@ -289,12 +345,22 @@
 (defstruct (py-list-object (:include py-object))
   (allocated 0))
 
+(defstruct (py-list-iterator-object (:include py-object))
+  sequence
+  (index 0))
+
 (defparameter *py-list-type*
   (make-py-type :type *py-type-type*
                 :name "list"
                 :bases (list *py-object-type*)
                 :basicsize 1
                 :itemsize 1))
+
+(defparameter *py-list-iterator-type*
+  (make-py-type :type *py-type-type*
+                :name "list_iterator"
+                :bases (list *py-object-type*)
+                :basicsize 1))
 
 (defun py-list-storage (obj operation)
   (unless (eq (py-object-type obj) *py-list-type*)
@@ -327,11 +393,64 @@
                          :value storage
                          :allocated (array-total-size storage))))
 
+(defun py-iterator-p (obj)
+  (and (py-object-p obj)
+       (eq (py-object-type obj) *py-list-iterator-type*)))
+
+(defun py-iter (obj)
+  (cond
+    ((py-iterator-p obj) obj)
+    ((eq (py-object-type obj) *py-list-type*)
+     (make-py-list-iterator-object :type *py-list-iterator-type*
+                                   :sequence obj
+                                   :index 0))
+    (t
+     (error "Python object of type ~A is not iterable"
+            (if (py-object-p obj)
+                (py-type-name (py-object-type obj))
+                (type-of obj))))))
+
+(defun py-next (iterator)
+  (unless (py-iterator-p iterator)
+    (error "Expected Python iterator, got ~S" iterator))
+  (let* ((sequence (py-list-iterator-object-sequence iterator))
+         (index (py-list-iterator-object-index iterator))
+         (size (or (py-object-size sequence) 0)))
+    (if (and (>= index 0) (< index size))
+        (prog1
+            (aref (py-object-value sequence) index)
+          (setf (py-list-iterator-object-index iterator) (1+ index)))
+        (progn
+          (setf (py-list-iterator-object-index iterator) -1)
+          (py-raise *py-stop-iteration*)))))
+
+(defun py-next-item (iterator)
+  (handler-case
+      (values (py-next iterator) t)
+    (py-exception (condition)
+      (if (py-stop-iteration-p condition)
+          (values nil nil)
+          (error condition)))))
+
+(setf (py-type-attr *py-list-type* "__iter__")
+      (lambda (obj)
+        (py-iter obj)))
+
+(setf (py-type-attr *py-list-iterator-type* "__iter__")
+      (lambda (iterator)
+        (py-iter iterator)))
+
+(setf (py-type-attr *py-list-iterator-type* "__next__")
+      (lambda (iterator)
+        (py-next iterator)))
+
 (defun py-display (value &optional (stream *standard-output*))
   (cond
     ((eq value *py-none*) (princ "None" stream))
     ((eq value *py-true*) (princ "True" stream))
     ((eq value *py-false*) (princ "False" stream))
+    ((py-stop-iteration-p value) (princ "StopIteration" stream))
+    ((py-iterator-p value) (princ "<list_iterator>" stream))
     ((py-list-object-p value)
      (princ "[" stream)
      (loop for index from 0 below (or (py-object-size value) 0)
