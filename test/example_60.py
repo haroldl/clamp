@@ -1,0 +1,10 @@
+text = "clamp"
+it = reversed(text)
+print(iter(it) is it)
+print(it.__length_hint__())
+print(next(it), it.__length_hint__())
+print(next(it), next(it), it.__length_hint__())
+print(next(it), next(it), it.__length_hint__())
+empty = reversed("")
+print(empty.__length_hint__())
+print(next(reversed("x")))

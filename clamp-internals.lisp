@@ -27,6 +27,7 @@
    :py-callable-binding-kind
    :py-callable-owner-type
    :py-string-iterator-object
+   :py-string-reverse-iterator-object
    :py-tuple-iterator-object
    :py-tuple-reverse-iterator-object
    :py-slice-object
@@ -561,6 +562,10 @@
   sequence
   (index 0))
 
+(defstruct (py-string-reverse-iterator-object (:include py-object))
+  sequence
+  (index -1))
+
 (defstruct (py-tuple-iterator-object (:include py-object))
   sequence
   (index 0))
@@ -598,6 +603,12 @@
 (defparameter *py-string-iterator-type*
   (make-py-type :type *py-type-type*
                 :name "str_iterator"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-string-reverse-iterator-type*
+  (make-py-type :type *py-type-type*
+                :name "reversed"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -1232,6 +1243,7 @@
        (or (eq (py-object-type obj) *py-list-iterator-type*)
            (eq (py-object-type obj) *py-list-reverse-iterator-type*)
            (eq (py-object-type obj) *py-string-iterator-type*)
+           (eq (py-object-type obj) *py-string-reverse-iterator-type*)
            (eq (py-object-type obj) *py-tuple-iterator-type*)
            (eq (py-object-type obj) *py-tuple-reverse-iterator-type*))))
 
@@ -1246,6 +1258,10 @@
 (defun py-string-iterator-p (obj)
   (and (py-object-p obj)
        (eq (py-object-type obj) *py-string-iterator-type*)))
+
+(defun py-reverse-string-iterator-p (obj)
+  (and (py-object-p obj)
+       (eq (py-object-type obj) *py-string-reverse-iterator-type*)))
 
 (defun py-tuple-iterator-p (obj)
   (and (py-object-p obj)
@@ -1278,12 +1294,17 @@
 
 (defun py-reversed (obj)
   (cond
-    ((eq (py-object-type obj) *py-list-type*)
+    ((stringp obj)
+     (make-py-string-reverse-iterator-object
+      :type *py-string-reverse-iterator-type*
+      :sequence obj
+      :index (1- (length obj))))
+    ((py-list-object-p obj)
      (make-py-list-reverse-iterator-object
       :type *py-list-reverse-iterator-type*
       :sequence obj
       :index (1- (or (py-object-size obj) 0))))
-    ((eq (py-object-type obj) *py-tuple-type*)
+    ((py-tuple-object-p obj)
      (make-py-tuple-reverse-iterator-object
       :type *py-tuple-reverse-iterator-type*
       :sequence obj
@@ -1328,6 +1349,17 @@
              (setf (py-string-iterator-object-index iterator) (1+ index)))
            (progn
              (setf (py-string-iterator-object-index iterator) -1)
+             (py-raise *py-stop-iteration*)))))
+    ((py-reverse-string-iterator-p iterator)
+     (let* ((sequence (py-string-reverse-iterator-object-sequence iterator))
+            (index (py-string-reverse-iterator-object-index iterator))
+            (size (length sequence)))
+       (if (and (>= index 0) (< index size))
+           (prog1
+               (subseq sequence index (1+ index))
+             (setf (py-string-reverse-iterator-object-index iterator) (1- index)))
+           (progn
+             (setf (py-string-reverse-iterator-object-index iterator) -1)
              (py-raise *py-stop-iteration*)))))
     ((py-tuple-iterator-p iterator)
      (let* ((sequence (py-tuple-iterator-object-sequence iterator))
@@ -1386,6 +1418,15 @@
                                (- (length sequence) index)
                                0)))
     (max length-remaining 0)))
+
+(defun py-string-reverse-iterator-length-hint (iterator)
+  (let* ((sequence (py-string-reverse-iterator-object-sequence iterator))
+         (index (py-string-reverse-iterator-object-index iterator))
+         (length-remaining (1+ index))
+         (size (length sequence)))
+    (if (or (< length-remaining 0) (< size length-remaining))
+        0
+        length-remaining)))
 
 (defun py-tuple-iterator-length-hint (iterator)
   (let* ((sequence (py-tuple-iterator-object-sequence iterator))
@@ -1447,6 +1488,18 @@
 (setf (py-type-attr *py-string-iterator-type* "__length_hint__")
       (lambda (iterator)
         (py-string-iterator-length-hint iterator)))
+
+(setf (py-type-attr *py-string-reverse-iterator-type* "__iter__")
+      (lambda (iterator)
+        (py-iter iterator)))
+
+(setf (py-type-attr *py-string-reverse-iterator-type* "__next__")
+      (lambda (iterator)
+        (py-next iterator)))
+
+(setf (py-type-attr *py-string-reverse-iterator-type* "__length_hint__")
+      (lambda (iterator)
+        (py-string-reverse-iterator-length-hint iterator)))
 
 (setf (py-type-attr *py-tuple-type* "__iter__")
       (lambda (obj)
@@ -1519,6 +1572,7 @@
     ((py-forward-list-iterator-p value) (princ "<list_iterator>" stream))
     ((py-reverse-list-iterator-p value) (princ "<list_reverseiterator>" stream))
     ((py-string-iterator-p value) (princ "<str_iterator>" stream))
+    ((py-reverse-string-iterator-p value) (princ "<reversed>" stream))
     ((py-tuple-iterator-p value) (princ "<tuple_iterator>" stream))
     ((py-reverse-tuple-iterator-p value) (princ "<reversed>" stream))
     ((py-list-object-p value) (py-repr value stream))
