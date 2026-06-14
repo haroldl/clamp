@@ -26,6 +26,11 @@
    :py-callable-fn
    :py-callable-binding-kind
    :py-callable-owner-type
+   :py-slice-object
+   :make-py-slice
+   :py-slice-object-start
+   :py-slice-object-stop
+   :py-slice-object-step
    :*py-object-type*
    :*py-type-type*
    :*py-none*
@@ -140,6 +145,12 @@
                 :bases (list *py-exception-type*)
                 :basicsize 1))
 
+(defparameter *py-slice-type*
+  (make-py-type :type *py-type-type*
+                :name "slice"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
 
@@ -148,6 +159,17 @@
 
 (defparameter *py-true*
   (make-py-object :type *py-bool-type* :value t))
+
+(defstruct (py-slice-object (:include py-object))
+  start
+  stop
+  step)
+
+(defun make-py-slice (start stop step)
+  (make-py-slice-object :type *py-slice-type*
+                        :start start
+                        :stop stop
+                        :step step))
 
 
 (defun py-bool (value)
@@ -423,6 +445,70 @@
 (defun py-list-valid-index-p (index size)
   (and (>= index 0) (< index size)))
 
+(defun py-list-normalized-index (obj index operation)
+  (let* ((size (or (py-object-size obj) 0))
+         (normalized-index (py-list-index obj index)))
+    (unless (py-list-valid-index-p normalized-index size)
+      (error "~A index out of range" operation))
+    normalized-index))
+
+(defun py-slice-bound (value default)
+  (if (eq value *py-none*) default value))
+
+(defun py-list-normalize-slice-index (index size lower upper)
+  (let ((normalized-index index))
+    (when (< normalized-index 0)
+      (incf normalized-index size))
+    (cond
+      ((< normalized-index lower) lower)
+      ((> normalized-index upper) upper)
+      (t normalized-index))))
+
+(defun py-list-slice-parameters (slice size)
+  (let* ((raw-step (py-slice-bound (py-slice-object-step slice) 1))
+         (step raw-step))
+    (when (= step 0)
+      (error "slice step cannot be zero"))
+    (if (> step 0)
+        (let* ((start (py-list-normalize-slice-index
+                       (py-slice-bound (py-slice-object-start slice) 0)
+                       size 0 size))
+               (stop (py-list-normalize-slice-index
+                      (py-slice-bound (py-slice-object-stop slice) size)
+                      size 0 size))
+               (slice-length (if (< start stop)
+                                 (1+ (floor (1- (- stop start)) step))
+                                 0)))
+          (values start step slice-length))
+        (let* ((start (if (eq (py-slice-object-start slice) *py-none*)
+                          (1- size)
+                          (py-list-normalize-slice-index
+                           (py-slice-object-start slice)
+                           size -1 (1- size))))
+               (stop (if (eq (py-slice-object-stop slice) *py-none*)
+                         -1
+                         (py-list-normalize-slice-index
+                          (py-slice-object-stop slice)
+                          size -1 (1- size))))
+               (slice-length (if (> start stop)
+                                 (1+ (floor (1- (- start stop)) (- step)))
+                                 0)))
+          (values start step slice-length)))))
+
+(defun py-list-slice (obj slice)
+  (let* ((storage (py-list-storage obj "__getitem__"))
+         (size (or (py-object-size obj) 0))
+         (result-storage (make-array 0 :adjustable t :fill-pointer 0)))
+    (multiple-value-bind (start step slice-length)
+        (py-list-slice-parameters slice size)
+      (loop for offset from 0 below slice-length
+            for index = start then (+ index step)
+            do (vector-push-extend (aref storage index) result-storage)))
+    (make-py-list-object :type *py-list-type*
+                         :size (fill-pointer result-storage)
+                         :value result-storage
+                         :allocated (array-total-size result-storage))))
+
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
         (let ((storage (py-list-storage obj "append")))
@@ -562,11 +648,16 @@
 
 (setf (py-type-attr *py-list-type* "__getitem__")
       (lambda (obj index)
-        (aref (py-list-storage obj "__getitem__") (py-list-index obj index))))
+        (if (py-slice-object-p index)
+            (py-list-slice obj index)
+            (aref (py-list-storage obj "__getitem__")
+                  (py-list-normalized-index obj index "list")))))
 
 (setf (py-type-attr *py-list-type* "__setitem__")
       (lambda (obj index value)
-        (setf (aref (py-list-storage obj "__setitem__") (py-list-index obj index)) value)
+        (setf (aref (py-list-storage obj "__setitem__")
+                    (py-list-normalized-index obj index "list"))
+              value)
         nil))
 
 (defun make-py-list (&rest values)

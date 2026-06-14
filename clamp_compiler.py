@@ -257,6 +257,14 @@ def codegen_subscript_store(node, value_code: str, context: Context):
     )
 
 
+def codegen_slice(node, context: Context):
+    child_context = context.child()
+    lower = codegen(node.lower, child_context)
+    upper = codegen(node.upper, child_context)
+    step = codegen(node.step, child_context)
+    return f"(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-SLICE {lower} {upper} {step})"
+
+
 def codegen_augassign(node, context: Context):
     child_context = context.child()
     rhs = codegen(node.value, child_context)
@@ -374,6 +382,7 @@ codegen_handlers[ast.List] = lambda node, context: (
     + "".join(f" {codegen(elt, context.child())}" for elt in node.elts)
     + ")"
 )
+codegen_handlers[ast.Slice] = codegen_slice
 codegen_handlers[ast.Name] = lambda node, _: map_name(node.id)
 codegen_handlers[ast.Module] = codegen_module
 codegen_handlers[ast.Subscript] = lambda node, context: (
