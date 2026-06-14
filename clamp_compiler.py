@@ -438,6 +438,7 @@ codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.AugAssign] = codegen_augassign
 codegen_handlers[ast.Delete] = codegen_delete
+codegen_handlers[ast.Pass] = lambda node, _: "COMMON-LISP::nil"
 codegen_handlers[ast.FunctionDef] = codegen_function
 codegen_handlers[ast.Call] = codegen_funcall
 codegen_handlers[ast.List] = lambda node, context: (
