@@ -55,6 +55,7 @@
    :py-next-item
    :make-py-list
    :py-append
+   :py-insert
    :py-pop
    :py-getitem
    :py-setitem))
@@ -393,7 +394,30 @@
           (vector-push-extend value storage)
           (setf (py-object-size obj) (fill-pointer storage))
           (setf (py-list-object-allocated obj) (array-total-size storage)))
-        nil))
+        *py-none*))
+
+(defun py-list-insert-index (size index)
+  (let ((normalized-index index))
+    (when (< normalized-index 0)
+      (incf normalized-index size)
+      (when (< normalized-index 0)
+        (setf normalized-index 0)))
+    (when (> normalized-index size)
+      (setf normalized-index size))
+    normalized-index))
+
+(setf (py-type-attr *py-list-type* "insert")
+      (lambda (obj index value)
+        (let* ((storage (py-list-storage obj "insert"))
+               (size (or (py-object-size obj) 0))
+               (normalized-index (py-list-insert-index size index)))
+          (vector-push-extend *py-none* storage)
+          (loop for i downfrom size above normalized-index
+                do (setf (aref storage i) (aref storage (1- i))))
+          (setf (aref storage normalized-index) value)
+          (setf (py-object-size obj) (fill-pointer storage))
+          (setf (py-list-object-allocated obj) (array-total-size storage)))
+        *py-none*))
 
 (setf (py-type-attr *py-list-type* "pop")
       (lambda (obj &optional (index -1))
@@ -500,6 +524,9 @@
 
 (defun py-append (obj value)
   (py-call-attr obj "append" value))
+
+(defun py-insert (obj index value)
+  (py-call-attr obj "insert" index value))
 
 (defun py-pop (obj &optional (index -1))
   (py-call-attr obj "pop" index))
