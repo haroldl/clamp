@@ -787,6 +787,11 @@
             (py-list-delete-index obj (py-list-normalized-index obj index "list")))
         *py-none*))
 
+(setf (py-type-attr *py-list-type* "__repr__")
+      (lambda (obj)
+        (with-output-to-string (stream)
+          (py-repr obj stream))))
+
 (defun make-py-list (&rest values)
   (let ((storage (make-array 0 :adjustable t :fill-pointer 0)))
     (dolist (value values)
