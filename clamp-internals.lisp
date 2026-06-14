@@ -48,6 +48,8 @@
    :py-iadd
    :py-mul
    :py-imul
+   :py-is
+   :py-is-not
    :py-eq
    :py-ne
    :py-contains
@@ -336,6 +338,12 @@
 
 (defun py-ne (left right)
   (py-bool (not (py-truthy-p (py-eq left right)))))
+
+(defun py-is (left right)
+  (py-bool (eq left right)))
+
+(defun py-is-not (left right)
+  (py-bool (not (eq left right))))
 
 (defun py-contains (item container)
   (cond
