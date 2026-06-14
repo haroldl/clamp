@@ -45,6 +45,7 @@
    :py-add
    :py-iadd
    :py-mul
+   :py-imul
    :py-eq
    :py-ne
    :py-contains
@@ -668,6 +669,10 @@
       (lambda (obj value)
         (py-mul value obj)))
 
+(setf (py-type-attr *py-list-type* "__imul__")
+      (lambda (obj value)
+        (py-imul obj value)))
+
 (defun py-list-slice-index (size index)
   (let ((normalized-index index))
     (when (< normalized-index 0)
@@ -842,6 +847,26 @@
                          :value result-storage
                          :allocated (array-total-size result-storage))))
 
+(defun py-list-inplace-repeat (items count)
+  (let* ((storage (py-list-storage items "*="))
+         (input-size (or (py-object-size items) 0)))
+    (cond
+      ((or (= input-size 0) (= count 1))
+       items)
+      ((< count 1)
+       (setf (py-object-value items)
+             (make-array 0 :adjustable t :fill-pointer 0))
+       (setf (py-object-size items) 0)
+       (setf (py-list-object-allocated items) 0)
+       items)
+      (t
+       (dotimes (_ (1- count))
+         (loop for index from 0 below input-size
+               do (vector-push-extend (aref storage index) storage)))
+       (setf (py-object-size items) (fill-pointer storage))
+       (setf (py-list-object-allocated items) (array-total-size storage))
+       items))))
+
 (defun py-string-repeat (value count)
   (let ((repeat-count (max count 0)))
     (with-output-to-string (stream)
@@ -864,6 +889,12 @@
        (py-string-repeat right normalized-left))
       (t
        (error "Unsupported Python * between ~S and ~S" left right)))))
+
+(defun py-imul (left right)
+  (let ((normalized-right (py-normalize-bool-number right)))
+    (if (and (py-list-object-p left) (integerp normalized-right))
+        (py-list-inplace-repeat left normalized-right)
+        (py-mul left right))))
 
 (defun py-iterator-p (obj)
   (and (py-object-p obj)

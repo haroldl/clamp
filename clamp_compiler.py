@@ -285,6 +285,8 @@ def codegen_augassign(node, context: Context):
     op = codegen(node.op, child_context)
     if isinstance(node.op, ast.Add):
         op = "|CLAMP.__CLAMP_INTERNALS__|:PY-IADD"
+    elif isinstance(node.op, ast.Mult):
+        op = "|CLAMP.__CLAMP_INTERNALS__|:PY-IMUL"
 
     if isinstance(node.target, ast.Name):
         target = codegen(node.target, child_context)
