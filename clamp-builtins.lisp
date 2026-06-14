@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print)
-  (:export :test :dir :plus :times :print :iter :next :assign))
+  (:export :test :dir :plus :times :print :len :iter :next :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -57,6 +57,10 @@
                  (princ #\Space))
                (|CLAMP.__CLAMP_INTERNALS__|:PY-DISPLAY x)))
     (terpri)))
+
+(defvar len
+  (lambda (obj)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-LEN obj)))
 
 (defvar iter
   (lambda (obj)

@@ -35,6 +35,7 @@
    :py-truthy-p
    :py-and
    :py-or
+   :py-len
    :py-eq
    :py-ne
    :py-lt
@@ -154,6 +155,16 @@
     ((stringp value) (> (length value) 0))
     ((null value) nil)
     (t t)))
+
+(defun py-len (value)
+  (cond
+    ((py-list-object-p value) (or (py-object-size value) 0))
+    ((stringp value) (length value))
+    (t
+     (error "Python object of type ~A has no len()"
+            (if (py-object-p value)
+                (py-type-name (py-object-type value))
+                (type-of value))))))
 
 (defmacro py-or (&rest forms)
   (cond
