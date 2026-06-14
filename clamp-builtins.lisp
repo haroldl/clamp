@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
-  (:shadow :print :min :max :sum :sorted :abs :filter :hash :list :tuple :slice :chr :type :str)
-  (:export :test :dir :plus :times :print :len :bool :callable :repr :str :type :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :divmod :all :any :enumerate :zip :filter :range :slice :bin :chr :ord :assign))
+  (:shadow :print :min :max :sum :sorted :abs :filter :hash :list :tuple :slice :chr :hex :type :str)
+  (:export :test :dir :plus :times :print :len :bool :callable :repr :str :type :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :divmod :all :any :enumerate :zip :filter :range :slice :bin :oct :hex :chr :ord :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -159,6 +159,14 @@
 (defvar bin
   (lambda (value)
     (|CLAMP.__CLAMP_INTERNALS__|:PY-BIN value)))
+
+(defvar oct
+  (lambda (value)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-OCT value)))
+
+(defvar hex
+  (lambda (value)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-HEX value)))
 
 (defvar chr
   (lambda (value)

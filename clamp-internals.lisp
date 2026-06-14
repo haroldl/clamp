@@ -61,6 +61,8 @@
    :py-list
    :py-tuple
    :py-bin
+   :py-oct
+   :py-hex
    :py-chr
    :py-ord
    :py-add
@@ -1523,13 +1525,22 @@
   (make-py-tuple (py-floordiv left right)
                  (py-mod left right)))
 
-(defun py-bin (value)
+(defun py-number-to-base (value base prefix)
   (let ((normalized-value (py-normalize-bool-number value)))
     (unless (integerp normalized-value)
-      (error "bin() argument must be an integer"))
+      (error "integer argument expected, got ~S" value))
     (if (< normalized-value 0)
-        (format nil "-0b~B" (- normalized-value))
-        (format nil "0b~B" normalized-value))))
+        (format nil "-~A~VR" prefix base (- normalized-value))
+        (format nil "~A~VR" prefix base normalized-value))))
+
+(defun py-bin (value)
+  (py-number-to-base value 2 "0b"))
+
+(defun py-oct (value)
+  (py-number-to-base value 8 "0o"))
+
+(defun py-hex (value)
+  (string-downcase (py-number-to-base value 16 "0x")))
 
 (defun py-chr (value)
   (let ((normalized-value (py-normalize-bool-number value)))
