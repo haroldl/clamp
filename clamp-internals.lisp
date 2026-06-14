@@ -1111,6 +1111,38 @@
     (setf (py-list-object-allocated obj) (array-total-size storage))
     *py-none*))
 
+(defun py-list-set-slice (obj slice value)
+  (let* ((storage (py-list-storage obj "__setitem__"))
+         (size (or (py-object-size obj) 0))
+         (replacement (py-list value))
+         (replacement-storage (py-list-storage replacement "__setitem__"))
+         (replacement-size (or (py-object-size replacement) 0)))
+    (multiple-value-bind (start step slice-length stop)
+        (py-list-slice-parameters slice size)
+      (if (= step 1)
+          (let ((result-storage (make-array 0 :adjustable t :fill-pointer 0)))
+            (loop for index from 0 below start
+                  do (vector-push-extend (aref storage index) result-storage))
+            (loop for index from 0 below replacement-size
+                  do (vector-push-extend (aref replacement-storage index)
+                                         result-storage))
+            (loop for index from stop below size
+                  do (vector-push-extend (aref storage index) result-storage))
+            (setf (py-object-value obj) result-storage)
+            (setf (py-object-size obj) (fill-pointer result-storage))
+            (setf (py-list-object-allocated obj)
+                  (array-total-size result-storage)))
+          (progn
+            (unless (= replacement-size slice-length)
+              (error "attempt to assign sequence of size ~A to extended slice of size ~A"
+                     replacement-size
+                     slice-length))
+            (loop for offset from 0 below slice-length
+                  for index = start then (+ index step)
+                  do (setf (aref storage index)
+                           (aref replacement-storage offset)))))))
+  *py-none*)
+
 (setf (py-type-attr *py-list-type* "pop")
       (lambda (obj &optional (index -1))
         (let* ((storage (py-list-storage obj "pop"))
@@ -1145,9 +1177,11 @@
 
 (setf (py-type-attr *py-list-type* "__setitem__")
       (lambda (obj index value)
-        (setf (aref (py-list-storage obj "__setitem__")
-                    (py-list-normalized-index obj index "list"))
-              value)
+        (if (py-slice-object-p index)
+            (py-list-set-slice obj index value)
+            (setf (aref (py-list-storage obj "__setitem__")
+                        (py-list-normalized-index obj index "list"))
+                  value))
         *py-none*))
 
 (setf (py-type-attr *py-list-type* "__delitem__")
