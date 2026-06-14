@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
-  (:shadow :print :min :max :sum :sorted :abs :filter :hash :list :tuple)
-  (:export :test :dir :plus :times :print :len :bool :callable :repr :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :divmod :all :any :enumerate :zip :filter :range :assign))
+  (:shadow :print :min :max :sum :sorted :abs :filter :hash :list :tuple :slice)
+  (:export :test :dir :plus :times :print :len :bool :callable :repr :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :hash :divmod :all :any :enumerate :zip :filter :range :slice :assign))
 
 (in-package "CLAMP.__builtins__")
 
@@ -147,3 +147,22 @@
 (defvar range
   (lambda (&rest args)
     (apply #'|CLAMP.__CLAMP_INTERNALS__|:PY-RANGE args)))
+
+(defvar slice
+  (lambda (&rest args)
+    (case (length args)
+      (1 (|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-SLICE
+          |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*
+          (first args)
+          |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*))
+      (2 (|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-SLICE
+          (first args)
+          (second args)
+          |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*))
+      (3 (|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-SLICE
+          (first args)
+          (second args)
+          (third args)))
+      (otherwise
+       (error "slice expected at least 1 argument and at most 3 arguments, got ~A"
+              (length args))))))
