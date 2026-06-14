@@ -318,6 +318,50 @@ def codegen_unary_operator(node, context: Context):
     return f"({op} {operand})"
 
 
+def codegen_for(node, context: Context):
+    if not isinstance(node.target, ast.Name):
+        raise Exception("TODO: unsupported for loop target")
+
+    child_context = context.child()
+    loop_id = id(node)
+    iterator_symbol = f"__clamp_for_iterator_{loop_id}"
+    item_symbol = f"__clamp_for_item_{loop_id}"
+    found_symbol = f"__clamp_for_found_{loop_id}"
+    loop_block_name = f"__clamp_loop_{loop_id}"
+    loop_continue_name = f"__clamp_loop_continue_{loop_id}"
+    loop_broke_name = f"__clamp_loop_broke_{loop_id}"
+    target = codegen(node.target, child_context)
+    iterable = codegen(node.iter, child_context)
+    body_context = replace(
+        child_context,
+        mutation_context=True,
+        loop_block_name=loop_block_name,
+        loop_continue_name=loop_continue_name,
+        loop_broke_name=loop_broke_name,
+    )
+    body = codegen_block(node.body, body_context) or "COMMON-LISP::nil"
+    loop_code = (
+        f"(common-lisp:let (({loop_broke_name} COMMON-LISP::nil) "
+        f"({target} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)) "
+        f"(common-lisp:let (({iterator_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-ITER {iterable}))) "
+        f"(common-lisp:block {loop_block_name} "
+        f"(common-lisp:loop "
+        f"(common-lisp:multiple-value-bind ({item_symbol} {found_symbol}) "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-NEXT-ITEM {iterator_symbol}) "
+        f"(common-lisp:unless {found_symbol} (common-lisp:return)) "
+        f"(common-lisp:setf {target} {item_symbol}) "
+        f"(common-lisp:block {loop_continue_name} "
+        f"(common-lisp:progn {body}))))))"
+    )
+    if node.orelse:
+        else_code = codegen_block(node.orelse, child_context)
+        loop_code += (
+            f" (common-lisp:unless {loop_broke_name} "
+            f"(common-lisp:progn {else_code} ))"
+        )
+    return loop_code + ")"
+
+
 def codegen_while(node, context: Context):
     child_context = context.child()
     loop_id = id(node)
@@ -416,6 +460,7 @@ codegen_handlers[ast.Subscript] = lambda node, context: (
 codegen_handlers[ast.If] = codegen_if
 codegen_handlers[ast.IfExp] = codegen_if
 codegen_handlers[ast.While] = codegen_while
+codegen_handlers[ast.For] = codegen_for
 codegen_handlers[ast.Break] = codegen_break
 codegen_handlers[ast.Continue] = codegen_continue
 codegen_handlers[ast.Add] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-ADD"
