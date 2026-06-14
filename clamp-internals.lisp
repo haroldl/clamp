@@ -607,6 +607,19 @@
                          :value result-storage
                          :allocated (array-total-size result-storage))))
 
+(defun py-tuple-slice (obj slice)
+  (let* ((storage (py-tuple-storage obj "__getitem__"))
+         (size (or (py-object-size obj) 0)))
+    (multiple-value-bind (start step slice-length)
+        (py-list-slice-parameters slice size)
+      (let ((result-storage (make-array slice-length)))
+        (loop for offset from 0 below slice-length
+              for index = start then (+ index step)
+              do (setf (aref result-storage offset) (aref storage index)))
+        (make-py-tuple-object :type *py-tuple-type*
+                              :size slice-length
+                              :value result-storage)))))
+
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
         (let ((storage (py-list-storage obj "append")))
@@ -865,8 +878,10 @@
 
 (setf (py-type-attr *py-tuple-type* "__getitem__")
       (lambda (obj index)
-        (aref (py-tuple-storage obj "__getitem__")
-              (py-list-normalized-index obj index "tuple"))))
+        (if (py-slice-object-p index)
+            (py-tuple-slice obj index)
+            (aref (py-tuple-storage obj "__getitem__")
+                  (py-list-normalized-index obj index "tuple")))))
 
 (setf (py-type-attr *py-tuple-type* "__add__")
       (lambda (obj value)
