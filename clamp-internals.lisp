@@ -55,6 +55,7 @@
    :py-next-item
    :make-py-list
    :py-append
+   :py-pop
    :py-getitem
    :py-setitem))
 
@@ -383,6 +384,9 @@
       (+ index (or (py-object-size obj) 0))
       index))
 
+(defun py-list-valid-index-p (index size)
+  (and (>= index 0) (< index size)))
+
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
         (let ((storage (py-list-storage obj "append")))
@@ -390,6 +394,23 @@
           (setf (py-object-size obj) (fill-pointer storage))
           (setf (py-list-object-allocated obj) (array-total-size storage)))
         nil))
+
+(setf (py-type-attr *py-list-type* "pop")
+      (lambda (obj &optional (index -1))
+        (let* ((storage (py-list-storage obj "pop"))
+               (size (or (py-object-size obj) 0)))
+          (when (= size 0)
+            (error "pop from empty list"))
+          (let ((normalized-index (py-list-index obj index)))
+            (unless (py-list-valid-index-p normalized-index size)
+              (error "pop index out of range"))
+            (let ((value (aref storage normalized-index))
+                  (size-after-pop (1- size)))
+              (loop for i from normalized-index below size-after-pop
+                    do (setf (aref storage i) (aref storage (1+ i))))
+              (vector-pop storage)
+              (setf (py-object-size obj) (fill-pointer storage))
+              value)))))
 
 (setf (py-type-attr *py-list-type* "__getitem__")
       (lambda (obj index)
@@ -479,6 +500,9 @@
 
 (defun py-append (obj value)
   (py-call-attr obj "append" value))
+
+(defun py-pop (obj &optional (index -1))
+  (py-call-attr obj "pop" index))
 
 (defun py-getitem (obj index)
   (py-call-attr obj "__getitem__" index))

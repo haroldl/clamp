@@ -10,6 +10,7 @@ CLAMP = ROOT / "clamp"
 EXAMPLE_1 = TEST_DIR / "example_1.py"
 EXAMPLE_12 = TEST_DIR / "example_12.py"
 EXAMPLE_13 = TEST_DIR / "example_13.py"
+EXAMPLE_14 = TEST_DIR / "example_14.py"
 CPYTHON_314 = Path.home() / "local" / "Python-3.14.5" / "python"
 
 
@@ -90,7 +91,7 @@ def test_example_matches_expected_output(sample):
     assert result.stdout == expected.read_text()
 
 
-@pytest.mark.parametrize("sample", [EXAMPLE_12, EXAMPLE_13], ids=lambda path: path.stem)
+@pytest.mark.parametrize("sample", [EXAMPLE_12, EXAMPLE_13, EXAMPLE_14], ids=lambda path: path.stem)
 def test_examples_match_local_cpython_when_available(sample):
     if not CPYTHON_314.exists():
         pytest.skip("local CPython 3.14.5 interpreter is not built")
