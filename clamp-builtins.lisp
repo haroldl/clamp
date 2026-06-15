@@ -93,8 +93,13 @@
     (|CLAMP.__CLAMP_INTERNALS__|:PY-ITER obj)))
 
 (defvar next
-  (lambda (iterator)
-    (|CLAMP.__CLAMP_INTERNALS__|:PY-NEXT iterator)))
+  (lambda (iterator &optional
+                    (default |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE* default-supplied-p))
+    (if default-supplied-p
+        (common-lisp:multiple-value-bind (item found)
+            (|CLAMP.__CLAMP_INTERNALS__|:PY-NEXT-ITEM iterator)
+          (if found item default))
+        (|CLAMP.__CLAMP_INTERNALS__|:PY-NEXT iterator))))
 
 (defvar reversed
   (lambda (obj)
