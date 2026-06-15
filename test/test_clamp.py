@@ -1716,3 +1716,22 @@ def test_from_import_star_example_matches_local_cpython_when_available():
     )
     clamp_result = run_clamp(sample)
     assert clamp_result.stdout == cpython_result.stdout
+
+
+def test_import_source_file_loader_set_data_errors_match_local_cpython_when_available():
+    sample = TEST_DIR / "example_196.py"
+    output_path = Path("/tmp/clamp_import_loader_set_data_missing/child/data.pyc")
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    output_path.unlink(missing_ok=True)
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    output_path.unlink(missing_ok=True)
+    clamp_result = run_clamp(sample)
+    output_path.unlink(missing_ok=True)
+    assert clamp_result.stdout == cpython_result.stdout

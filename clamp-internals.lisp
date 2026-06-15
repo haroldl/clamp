@@ -1725,12 +1725,16 @@
 
 (defun py-write-file-bytes (path data)
   (let ((storage (py-bytes-storage data "set_data")))
-    (ensure-directories-exist path)
-    (with-open-file (stream path :direction :output
-                                 :element-type (quote (unsigned-byte 8))
-                                 :if-exists :supersede
-                                 :if-does-not-exist :create)
-      (write-sequence storage stream)))
+    (handler-case
+        (progn
+          (ensure-directories-exist path)
+          (with-open-file (stream path :direction :output
+                                       :element-type (quote (unsigned-byte 8))
+                                       :if-exists :supersede
+                                       :if-does-not-exist :create)
+            (write-sequence storage stream)))
+      (file-error () nil)
+      (sb-int:simple-file-error () nil)))
   *py-none*)
 
 (defun py-decode-source-bytes (data)
