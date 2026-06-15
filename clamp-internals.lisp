@@ -1200,6 +1200,17 @@
 (defun py-string-upper (value)
   (string-upcase value))
 
+(defun py-string-swapcase (value)
+  (with-output-to-string (stream)
+    (loop for char across value
+          do (cond
+               ((char= char (char-upcase char))
+                (write-char (char-downcase char) stream))
+               ((char= char (char-downcase char))
+                (write-char (char-upcase char) stream))
+               (t
+                (write-char char stream))))))
+
 (defun py-string-default-strip-char-p (char)
   (member (char-code char) '(9 10 11 12 13 28 29 30 31 32 133 160 5760 8192 8193 8194 8195 8196 8197 8198 8199 8200 8201 8202 8232 8233 8239 8287 12288)))
 
@@ -1302,6 +1313,10 @@
 (setf (py-type-attr *py-str-type* "upper")
       (lambda (obj)
         (py-string-upper obj)))
+
+(setf (py-type-attr *py-str-type* "swapcase")
+      (lambda (obj)
+        (py-string-swapcase obj)))
 
 (setf (py-type-attr *py-str-type* "strip")
       (lambda (obj &optional (chars *py-none*))
