@@ -1,0 +1,6 @@
+print(range(0).__bool__())
+print(range(1).__bool__())
+print(range(2, 2).__bool__())
+print(range(2, 8, 3).__bool__())
+print(range(8, 2, -3).__bool__())
+print([range(0).__bool__(), range(5).__bool__(), bool(range(0)), bool(range(5))])

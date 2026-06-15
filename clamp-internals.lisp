@@ -3261,6 +3261,10 @@
       (lambda (obj)
         (py-range-object-length obj)))
 
+(setf (py-type-attr *py-range-type* "__bool__")
+      (lambda (obj)
+        (py-bool (py-truthy-p obj))))
+
 (setf (py-type-attr *py-range-type* "__contains__")
       (lambda (obj value)
         (py-range-contains obj value)))
