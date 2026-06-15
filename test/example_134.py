@@ -1,0 +1,5 @@
+print(().__sizeof__())
+print((1,).__sizeof__())
+print((1, 2, 3).__sizeof__())
+print(((1,), (1, 2)).__sizeof__())
+print(tuple([1, 2, 3, 4]).__sizeof__())

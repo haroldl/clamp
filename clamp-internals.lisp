@@ -1791,6 +1791,7 @@
                                :allocated (array-total-size copied-storage)))))
 
 (defparameter +py-list-basic-size+ 40)
+(defparameter +py-tuple-basic-size+ 32)
 (defparameter +py-object-pointer-size+ 8)
 
 (setf (py-type-attr *py-list-type* "__sizeof__")
@@ -2047,6 +2048,12 @@
       (lambda (obj)
         (py-tuple-storage obj "__len__")
         (or (py-object-size obj) 0)))
+
+(setf (py-type-attr *py-tuple-type* "__sizeof__")
+      (lambda (obj)
+        (py-tuple-storage obj "__sizeof__")
+        (+ +py-tuple-basic-size+
+           (* (or (py-object-size obj) 0) +py-object-pointer-size+))))
 
 (setf (py-type-attr *py-tuple-type* "count")
       (lambda (obj value)
