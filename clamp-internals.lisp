@@ -1150,6 +1150,26 @@
                            (end *py-none*))
   (py-string-tailmatch value suffix start end 1))
 
+(defun py-string-removeprefix (value prefix)
+  (unless (stringp prefix)
+    (error "removeprefix() argument must be str, not ~S" prefix))
+  (let ((prefix-size (length prefix)))
+    (if (and (<= prefix-size (length value))
+             (string= value prefix :start1 0 :end1 prefix-size))
+        (subseq value prefix-size)
+        value)))
+
+(defun py-string-removesuffix (value suffix)
+  (unless (stringp suffix)
+    (error "removesuffix() argument must be str, not ~S" suffix))
+  (let ((suffix-size (length suffix))
+        (value-size (length value)))
+    (if (and (> suffix-size 0)
+             (<= suffix-size value-size)
+             (string= value suffix :start1 (- value-size suffix-size)))
+        (subseq value 0 (- value-size suffix-size))
+        value)))
+
 (defun py-string-getitem (value index)
   (if (py-slice-object-p index)
       (py-string-slice value index)
@@ -1205,6 +1225,14 @@
                    (start *py-none*)
                    (end *py-none*))
         (py-string-endswith obj suffix start end)))
+
+(setf (py-type-attr *py-str-type* "removeprefix")
+      (lambda (obj prefix)
+        (py-string-removeprefix obj prefix)))
+
+(setf (py-type-attr *py-str-type* "removesuffix")
+      (lambda (obj suffix)
+        (py-string-removesuffix obj suffix)))
 
 (setf (py-type-attr *py-int-type* "bit_length")
       (lambda (obj)

@@ -1,0 +1,10 @@
+text = "pre-middle-suf"
+print(text.removeprefix("pre-"))
+print(text.removeprefix("nope"))
+print(text.removeprefix(""))
+print(text.removesuffix("-suf"))
+print(text.removesuffix("nope"))
+print(text.removesuffix(""))
+print("pre-pre".removeprefix("pre-"))
+print("tailtail".removesuffix("tail"))
+print("archive.tar.gz".removeprefix("archive.").removesuffix(".gz"))
