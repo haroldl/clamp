@@ -1,0 +1,6 @@
+print("abc".ljust(6))
+print("abc".ljust(6, "."))
+print("abc".ljust(3), "abc".ljust(2))
+print("".ljust(3, "x"))
+print("xy".ljust(5, "*"))
+print(["a".ljust(3), "a".ljust(3, "0"), "wide".ljust(True)])

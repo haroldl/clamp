@@ -1312,6 +1312,25 @@
 (defun py-string-upper (value)
   (string-upcase value))
 
+(defun py-string-fill-char (fillchar operation)
+  (unless (and (stringp fillchar)
+               (= (length fillchar) 1))
+    (error "~A() argument 2 must be a single character string" operation))
+  (char fillchar 0))
+
+(defun py-string-ljust (value width &optional (fillchar " "))
+  (let* ((normalized-width (py-normalize-bool-number width))
+         (size (length value)))
+    (unless (integerp normalized-width)
+      (error "str.ljust() width must be an integer, got ~S" width))
+    (if (>= size normalized-width)
+        value
+        (concatenate 'string
+                     value
+                     (make-string (- normalized-width size)
+                                  :initial-element
+                                  (py-string-fill-char fillchar "ljust"))))))
+
 (defun py-string-isascii (value)
   (py-bool
    (loop for char across value
@@ -1520,6 +1539,10 @@
 (setf (py-type-attr *py-str-type* "upper")
       (lambda (obj)
         (py-string-upper obj)))
+
+(setf (py-type-attr *py-str-type* "ljust")
+      (lambda (obj width &optional (fillchar " "))
+        (py-string-ljust obj width fillchar)))
 
 (setf (py-type-attr *py-str-type* "isascii")
       (lambda (obj)
