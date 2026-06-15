@@ -1394,6 +1394,30 @@
                  (setf cased t))))
     (py-bool cased)))
 
+(defun py-string-istitle (value)
+  (let ((cased nil)
+        (previous-is-cased nil))
+    (loop for char across value
+          do (let* ((is-cased (py-string-cased-char-p char))
+                    (is-uppercase (and is-cased
+                                       (char= char (char-upcase char))))
+                    (is-lowercase (and is-cased
+                                       (char= char (char-downcase char)))))
+               (cond
+                 (is-uppercase
+                  (when previous-is-cased
+                    (return-from py-string-istitle *py-false*))
+                  (setf previous-is-cased t)
+                  (setf cased t))
+                 (is-lowercase
+                  (unless previous-is-cased
+                    (return-from py-string-istitle *py-false*))
+                  (setf previous-is-cased t)
+                  (setf cased t))
+                 (t
+                  (setf previous-is-cased nil)))))
+    (py-bool cased)))
+
 (defun py-string-swapcase (value)
   (with-output-to-string (stream)
     (loop for char across value
@@ -1575,6 +1599,10 @@
 (setf (py-type-attr *py-str-type* "isupper")
       (lambda (obj)
         (py-string-isupper obj)))
+
+(setf (py-type-attr *py-str-type* "istitle")
+      (lambda (obj)
+        (py-string-istitle obj)))
 
 (setf (py-type-attr *py-str-type* "swapcase")
       (lambda (obj)
