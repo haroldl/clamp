@@ -290,6 +290,14 @@
 
 (setf (gethash "__module__" (py-object-attrs *py-source-file-loader-type*)) "_frozen_importlib_external")
 
+(defparameter *py-file-reader-type*
+  (make-py-type :type *py-type-type*
+                :name "FileReader"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-file-reader-type*)) "importlib.resources.readers")
+
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
 
@@ -907,6 +915,9 @@
   name
   path)
 
+(defstruct (py-file-reader-object (:include py-object))
+  path)
+
 (defun py-module-spec-parent (spec)
   (let ((name (gethash "name" (py-object-attrs spec)))
         (submodule-search-locations
@@ -939,6 +950,15 @@
     (setf (py-object-attr loader "path") source-path)
     loader))
 
+(defun make-clamp-file-reader (loader)
+  (let* ((path (py-package-source-directory
+                (py-source-file-loader-object-path loader)))
+         (reader (make-py-file-reader-object
+                  :type *py-file-reader-type*
+                  :path path)))
+    (setf (py-object-attr reader "path") path)
+    reader))
+
 (defun py-source-file-loader-check-name (loader fullname)
   (let ((name (or fullname (py-source-file-loader-object-name loader))))
     (unless (string= (py-source-file-loader-object-name loader) name)
@@ -956,6 +976,11 @@
       (lambda (loader path)
         (declare (ignore loader))
         (py-read-file-bytes path)))
+
+(setf (py-type-attr *py-source-file-loader-type* "get_resource_reader")
+      (lambda (loader module)
+        (py-source-file-loader-check-name loader module)
+        (make-clamp-file-reader loader)))
 
 (setf (py-type-attr *py-source-file-loader-type* "path_stats")
       (lambda (loader path)
@@ -1040,6 +1065,16 @@
 (setf (py-type-attr *py-source-file-loader-type* "__hash__")
       (lambda (loader)
         (py-source-file-loader-hash loader)))
+
+(setf (py-type-attr *py-file-reader-type* "resource_path")
+      (lambda (reader resource)
+        (namestring (merge-pathnames resource
+                                     (uiop:ensure-directory-pathname
+                                      (py-file-reader-object-path reader))))))
+
+(setf (py-type-attr *py-file-reader-type* "files")
+      (lambda (reader)
+        (py-file-reader-object-path reader)))
 
 (defun make-clamp-module-spec (name source-path package-p loader)
   (let* ((cached (and source-path (py-source-cache-path source-path)))
