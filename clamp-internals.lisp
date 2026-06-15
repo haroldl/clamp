@@ -801,6 +801,11 @@
     (setf (py-object-attr loader "path") source-path)
     loader))
 
+(setf (py-type-attr *py-source-file-loader-type* "get_filename")
+      (lambda (loader fullname)
+        (declare (ignore fullname))
+        (py-source-file-loader-object-path loader)))
+
 (defun make-clamp-module-spec (name source-path package-p loader)
   (let* ((cached (and source-path (py-source-cache-path source-path)))
          (submodule-search-locations
