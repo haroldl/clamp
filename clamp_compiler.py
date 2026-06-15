@@ -148,20 +148,35 @@ def codegen_block(stmts, context: Context) -> str:
 def codegen_function(node, context : Context):
     child_context = context.child()
 
-    params = codegen_args(node.args, child_context)
+    default_symbols = [
+        f"__clamp_default_{id(node)}_{index}"
+        for index, _ in enumerate(node.args.defaults)
+    ]
+    params = codegen_args(node.args, child_context, default_symbols)
 
     # Python is a Lisp-1, Common Lisp is a Lisp-2
     # For compiled Python code running in SBCL, we'll put functions and other variables in the
     # same namespace which means we need to use funcall/apply to invoke compiled Python functions.
+    default_bindings = ""
+    if node.args.defaults:
+        default_bindings = (
+            "(common-lisp:let ("
+            + " ".join(
+                f"({symbol} {codegen(default, child_context)})"
+                for symbol, default in zip(default_symbols, node.args.defaults)
+            )
+            + ") "
+        )
     hed = (
         f"(common-lisp:setf {node.name} "
+        f"{default_bindings}"
         f"(common-lisp:lambda ({params}) (common-lisp:block {node.name} "
     )
 
     body_context = replace(child_context, block_name=node.name)
     bod = codegen_block(node.body, body_context)
 
-    return hed + bod + ")))\n"
+    return hed + bod + ")))" + (")" if default_bindings else "") + "\n"
 
 
 def codegen_funcall(node, context : Context):
@@ -505,7 +520,7 @@ codegen_handlers[bool] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:*PY-TRUE*"
 # TODO:
 # Exception: Do not have support to codegen <class 'ast.Compare'> node with value Compare(left=Constant(value=5), ops=[Eq()], comparators=[Constant(value=2)])
 
-def codegen_args(args, context: Context):
+def codegen_args(args, context: Context, default_symbols=None):
     #print(args.args)
     #print(args.defaults)
     #print(args.kw_defaults)
@@ -513,7 +528,16 @@ def codegen_args(args, context: Context):
     #print(args.kwonlyargs)
     #print(args.posonlyargs)
     #print(args.vararg)
-    return " ".join([a.arg for a in args.args])
+    default_symbols = default_symbols or []
+    required_count = len(args.args) - len(default_symbols)
+    required_args = [a.arg for a in args.args[:required_count]]
+    optional_args = [
+        f"({arg.arg} {default_symbol})"
+        for arg, default_symbol in zip(args.args[required_count:], default_symbols)
+    ]
+    if optional_args:
+        return " ".join([*required_args, "common-lisp:&optional", *optional_args])
+    return " ".join(required_args)
 
 
 def clamp_compiler(code):
