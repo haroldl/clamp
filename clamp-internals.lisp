@@ -1344,6 +1344,23 @@
                                   (py-string-fill-char fillchar "rjust"))
                      value))))
 
+(defun py-string-center (value width &optional (fillchar " "))
+  (let* ((normalized-width (py-normalize-bool-number width))
+         (size (length value)))
+    (unless (integerp normalized-width)
+      (error "str.center() width must be an integer, got ~S" width))
+    (if (>= size normalized-width)
+        value
+        (let* ((margin (- normalized-width size))
+               (left (+ (floor margin 2)
+                        (if (and (oddp margin) (oddp normalized-width)) 1 0)))
+               (right (- margin left))
+               (fill (py-string-fill-char fillchar "center")))
+          (concatenate 'string
+                       (make-string left :initial-element fill)
+                       value
+                       (make-string right :initial-element fill))))))
+
 (defun py-string-isascii (value)
   (py-bool
    (loop for char across value
@@ -1584,6 +1601,10 @@
 (setf (py-type-attr *py-str-type* "rjust")
       (lambda (obj width &optional (fillchar " "))
         (py-string-rjust obj width fillchar)))
+
+(setf (py-type-attr *py-str-type* "center")
+      (lambda (obj width &optional (fillchar " "))
+        (py-string-center obj width fillchar)))
 
 (setf (py-type-attr *py-str-type* "isascii")
       (lambda (obj)

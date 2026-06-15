@@ -1,0 +1,8 @@
+print("abc".center(7))
+print("abc".center(7, "."))
+print("abc".center(6, "."))
+print("abc".center(3), "abc".center(2))
+print("".center(3, "x"))
+print("a".center(4, "."))
+print("a".center(5, "."))
+print(["a".center(3), "a".center(3, "0"), "wide".center(True)])
