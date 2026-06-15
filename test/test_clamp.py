@@ -1105,6 +1105,51 @@ def test_import_source_file_loader_get_source_example_matches_local_cpython_when
     assert clamp_result.stdout == cpython_result.stdout
 
 
+def test_import_source_file_loader_default_name_example_matches_local_cpython_when_available():
+    sample = TEST_DIR / "example_167.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
+@pytest.mark.parametrize(
+    "sample_name",
+    [
+        "import_loader_name_mismatch.py",
+        "import_loader_get_source_name_mismatch.py",
+        "import_loader_is_package_name_mismatch.py",
+    ],
+)
+def test_import_source_file_loader_name_mismatch_fails_like_local_cpython_when_available(sample_name):
+    sample = TEST_DIR / sample_name
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = subprocess.run(
+        [str(CLAMP), str(sample)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert cpython_result.returncode != 0
+    assert clamp_result.returncode != 0
+    assert "loader for import_value cannot handle other" in cpython_result.stderr
+    assert "loader for import_value cannot handle other" in clamp_result.stderr
+
+
 def test_import_child_of_plain_module_fails_like_local_cpython_when_available():
     sample = TEST_DIR / "import_not_package_attempt.py"
     if not CPYTHON_314.exists():

@@ -801,21 +801,30 @@
     (setf (py-object-attr loader "path") source-path)
     loader))
 
+(defun py-source-file-loader-check-name (loader fullname)
+  (let ((name (or fullname (py-source-file-loader-object-name loader))))
+    (unless (string= (py-source-file-loader-object-name loader) name)
+      (error "loader for ~A cannot handle ~A"
+             (py-source-file-loader-object-name loader)
+             name))
+    name))
+
 (setf (py-type-attr *py-source-file-loader-type* "get_filename")
-      (lambda (loader fullname)
-        (declare (ignore fullname))
+      (lambda (loader &optional fullname)
+        (py-source-file-loader-check-name loader fullname)
         (py-source-file-loader-object-path loader)))
 
 (setf (py-type-attr *py-source-file-loader-type* "get_source")
       (lambda (loader fullname)
-        (declare (ignore fullname))
+        (py-source-file-loader-check-name loader fullname)
         (uiop:read-file-string (py-source-file-loader-object-path loader))))
 
 (setf (py-type-attr *py-source-file-loader-type* "is_package")
       (lambda (loader fullname)
-        (let* ((filename-base (pathname-name (py-source-file-loader-object-path loader)))
-               (tail-pos (position #\. fullname :from-end t))
-               (tail-name (if tail-pos (subseq fullname (1+ tail-pos)) fullname)))
+        (let* ((name (py-source-file-loader-check-name loader fullname))
+               (filename-base (pathname-name (py-source-file-loader-object-path loader)))
+               (tail-pos (position #\. name :from-end t))
+               (tail-name (if tail-pos (subseq name (1+ tail-pos)) name)))
           (py-bool (and (string= filename-base "__init__")
                         (not (string= tail-name "__init__")))))))
 

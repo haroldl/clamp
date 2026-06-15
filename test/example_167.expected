@@ -1,0 +1,9 @@
+True
+VALUE = "module value"
+False
+True
+NAME = "package root"
+True
+True
+VALUE = "submodule value"
+False
