@@ -32,6 +32,7 @@
    :py-import-builtin
    :py-import-name
    :py-import-from
+   :py-import-star
    :py-type-of
    :py-callable
    :py-isinstance
@@ -1368,6 +1369,40 @@
                (when source-path
                  (py-import-module full-name)))))))))
   module)
+
+(defun py-import-star-bind (module name value)
+  (when *py-current-module*
+    (setf (py-object-attr *py-current-module* name) value)
+    (let* ((package (py-ensure-module-package *py-current-module*))
+           (symbol (intern (string-upcase name) package)))
+      (setf (symbol-value symbol) value)))
+  value)
+
+(defun py-import-star-names (module)
+  (multiple-value-bind (all found) (gethash "__all__" (py-object-attrs module))
+    (if found
+        (progn
+          (py-import-handle-fromlist module (list "*"))
+          (py-import-fromlist-names all))
+        (let ((names (quote ())))
+          (maphash (lambda (name value)
+                     (declare (ignore value))
+                     (when (and (stringp name)
+                                (> (length name) 0)
+                                (not (char= (char name 0) #\_)))
+                       (push name names)))
+                   (py-object-attrs module))
+          names))))
+
+(defun py-import-star (name)
+  (let ((module (py-import-name name (list "*"))))
+    (dolist (import-name (py-import-star-names module))
+      (unless (stringp import-name)
+        (error "Item in ~A.__all__ must be str, not ~A"
+               (py-module-object-name module)
+               (py-type-name (py-type-of import-name))))
+      (py-import-star-bind module import-name (py-import-from module import-name)))
+    *py-none*))
 
 (defun py-import-builtin (name &optional
                           (globals *py-none*)

@@ -511,7 +511,9 @@ def codegen_import_from(node, context: Context):
     if node.module is None:
         raise Exception("TODO: relative imports are not supported yet")
     if any(alias.name == "*" for alias in node.names):
-        raise Exception("TODO: star imports are not supported yet")
+        if not context.top_level_stmt:
+            raise Exception("import * only allowed at module level")
+        return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-STAR {lisp_string(node.module)})"
     fromlist = "'(" + " ".join(lisp_string(alias.name) for alias in node.names) + ")"
     module_symbol = f"__clamp_import_module_{id(node)}"
     bindings = []
@@ -547,7 +549,7 @@ def codegen_import_block(node, rest, context: Context) -> str:
         if node.module is None:
             raise Exception("TODO: relative imports are not supported yet")
         if any(alias.name == "*" for alias in node.names):
-            raise Exception("TODO: star imports are not supported yet")
+            raise Exception("import * only allowed at module level")
         fromlist = "'(" + " ".join(lisp_string(alias.name) for alias in node.names) + ")"
         module_symbol = f"__clamp_import_module_{id(node)}"
         module_value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(node.module)} {fromlist})"
