@@ -956,6 +956,11 @@
         (declare (ignore loader))
         (py-read-file-bytes path)))
 
+(setf (py-type-attr *py-source-file-loader-type* "path_stats")
+      (lambda (loader path)
+        (declare (ignore loader))
+        (py-path-stats path)))
+
 (setf (py-type-attr *py-source-file-loader-type* "set_data")
       (lambda (loader path data)
         (declare (ignore loader))
@@ -1519,6 +1524,17 @@
   range
   (index 0))
 
+(defstruct (py-dict-object (:include py-object)))
+
+(defparameter *py-dict-type*
+  (make-py-type :type *py-type-type*
+                :name "dict"
+                :bases (list *py-object-type*)
+                :basicsize 1
+                :mapping-length-fn
+                (lambda (obj)
+                  (or (py-object-size obj) 0))))
+
 (defparameter *py-list-type*
   (make-py-type :type *py-type-type*
                 :name "list"
@@ -1614,6 +1630,20 @@
     (error "~A only supports bytes objects, got ~S" operation obj))
   (py-object-value obj))
 
+(defun py-dict-storage (obj operation)
+  (unless (eq (py-object-type obj) *py-dict-type*)
+    (error "~A only supports dict objects, got ~S" operation obj))
+  (py-object-value obj))
+
+(defun make-py-dict-from-pairs (&rest pairs)
+  (let ((storage (make-hash-table :test #'equal)))
+    (dolist (pair pairs)
+      (destructuring-bind (key value) pair
+        (setf (gethash key storage) value)))
+    (make-py-dict-object :type *py-dict-type*
+                         :size (hash-table-count storage)
+                         :value storage)))
+
 (defun make-py-bytes-from-vector (storage)
   (make-py-bytes-object :type *py-bytes-type*
                         :size (length storage)
@@ -1636,6 +1666,16 @@
                                  :if-does-not-exist :create)
       (write-sequence storage stream)))
   *py-none*)
+
+(defun py-path-size (path)
+  (with-open-file (stream path :direction :input
+                               :element-type (quote (unsigned-byte 8)))
+    (file-length stream)))
+
+(defun py-path-stats (path)
+  (make-py-dict-from-pairs
+   (list "mtime" (file-write-date path))
+   (list "size" (py-path-size path))))
 
 (defun py-list-index (obj index)
   (if (< index 0)
@@ -2973,6 +3013,14 @@
                 (py-list-delete-index obj match-index)
                 *py-none*)
               (error "list.remove(x): x not in list")))))
+
+(setf (py-type-attr *py-dict-type* "__getitem__")
+      (lambda (obj key)
+        (multiple-value-bind (value found)
+            (gethash key (py-dict-storage obj "__getitem__"))
+          (if found
+              value
+              (error "~S" key)))))
 
 (setf (py-type-attr *py-list-type* "__getitem__")
       (lambda (obj index)
