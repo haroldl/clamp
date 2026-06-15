@@ -1,0 +1,5 @@
+print("".islower())
+print("abc".islower(), "abc123".islower(), "abc def".islower())
+print("ABC".islower(), "Abc".islower(), "abc!".islower())
+print("123".islower(), "_".islower(), " ".islower())
+print(["lower".islower(), "lower7".islower(), "Lower".islower()])

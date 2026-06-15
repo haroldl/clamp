@@ -1326,6 +1326,17 @@
               always (or (alpha-char-p char)
                          (py-unicode-digit-char-p char))))))
 
+(defun py-string-islower (value)
+  (let ((cased nil))
+    (loop for char across value
+          do (let ((is-cased (py-string-cased-char-p char)))
+               (when (and is-cased
+                          (char/= char (char-downcase char)))
+                 (return-from py-string-islower *py-false*))
+               (when is-cased
+                 (setf cased t))))
+    (py-bool cased)))
+
 (defun py-string-swapcase (value)
   (with-output-to-string (stream)
     (loop for char across value
@@ -1487,6 +1498,10 @@
 (setf (py-type-attr *py-str-type* "isalnum")
       (lambda (obj)
         (py-string-isalnum obj)))
+
+(setf (py-type-attr *py-str-type* "islower")
+      (lambda (obj)
+        (py-string-islower obj)))
 
 (setf (py-type-attr *py-str-type* "swapcase")
       (lambda (obj)
