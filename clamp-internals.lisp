@@ -779,15 +779,14 @@
     (setf (py-object-attr module "__loader__") *py-none*)
     (setf (py-object-attr module "__spec__") *py-none*)
     (when source-path
-      (setf (py-object-attr module "__file__") source-path))
+      (py-set-module-source-path module source-path))
     module))
 
 (defun py-enter-module (name source-path package-name)
   (let ((module (or (gethash name *py-sys-modules*)
                     (make-clamp-module name :source-path source-path :package-name package-name))))
     (when source-path
-      (setf (py-module-object-source-path module) source-path)
-      (setf (py-object-attr module "__file__") source-path))
+      (py-set-module-source-path module source-path))
     (when package-name
       (setf (py-module-object-package-name module) package-name))
     (setf (gethash name *py-sys-modules*) module)
@@ -838,6 +837,18 @@
              (char= (char directory (1- (length directory))) #\/))
         (subseq directory 0 (1- (length directory)))
         directory)))
+
+(defun py-source-cache-path (source-path)
+  (let* ((source (pathname source-path))
+         (source-directory (uiop:pathname-directory-pathname source))
+         (cache-directory (merge-pathnames "__pycache__/" source-directory))
+         (cache-filename (format nil "~A.cpython-314.pyc" (pathname-name source))))
+    (namestring (merge-pathnames cache-filename cache-directory))))
+
+(defun py-set-module-source-path (module source-path)
+  (setf (py-module-object-source-path module) source-path)
+  (setf (py-object-attr module "__file__") source-path)
+  (setf (py-object-attr module "__cached__") (py-source-cache-path source-path)))
 
 (defun py-find-module-source (name)
   (let* ((components (py-module-path-components name))
