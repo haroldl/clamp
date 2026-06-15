@@ -1747,6 +1747,11 @@
       (lambda (obj index)
         (py-string-getitem obj index)))
 
+(setf (py-type-attr *py-str-type* "__repr__")
+      (lambda (obj)
+        (with-output-to-string (stream)
+          (py-repr obj stream))))
+
 (setf (py-type-attr *py-str-type* "__contains__")
       (lambda (obj value)
         (py-contains value obj)))
