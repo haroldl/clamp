@@ -260,11 +260,15 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(setf (gethash "__module__" (py-object-attrs *py-module-spec-type*)) "_frozen_importlib")
+
 (defparameter *py-source-file-loader-type*
   (make-py-type :type *py-type-type*
                 :name "SourceFileLoader"
                 :bases (list *py-object-type*)
                 :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-source-file-loader-type*)) "_frozen_importlib_external")
 
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
@@ -1109,6 +1113,10 @@
        (return-from py-lookup-attr (py-range-object-step obj)))))
   (when (and (py-type-p obj) (string= name "__name__"))
     (return-from py-lookup-attr (py-type-name obj)))
+  (when (py-type-p obj)
+    (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
+      (when found
+        (return-from py-lookup-attr attr))))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
