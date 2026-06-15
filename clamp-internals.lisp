@@ -1152,6 +1152,28 @@
                            (end *py-none*))
   (py-string-tailmatch value suffix start end 1))
 
+(defun py-string-join (separator iterable)
+  (unless (stringp separator)
+    (error "separator: expected str instance, got ~S" separator))
+  (let ((items '())
+        (iterator (py-iter iterable)))
+    (loop
+      (multiple-value-bind (item found) (py-next-item iterator)
+        (unless found
+          (return))
+        (unless (stringp item)
+          (error "sequence item ~A: expected str instance, got ~S"
+                 (length items)
+                 item))
+        (push item items)))
+    (with-output-to-string (stream)
+      (loop for item in (nreverse items)
+            for first = t then nil
+            do (progn
+                 (unless first
+                   (princ separator stream))
+                 (princ item stream))))))
+
 (defun py-string-removeprefix (value prefix)
   (unless (stringp prefix)
     (error "removeprefix() argument must be str, not ~S" prefix))
@@ -1233,6 +1255,10 @@
                    (start *py-none*)
                    (end *py-none*))
         (py-string-endswith obj suffix start end)))
+
+(setf (py-type-attr *py-str-type* "join")
+      (lambda (obj iterable)
+        (py-string-join obj iterable)))
 
 (setf (py-type-attr *py-str-type* "removeprefix")
       (lambda (obj prefix)
