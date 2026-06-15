@@ -859,6 +859,22 @@
       (setf (py-module-spec-object-initializing spec) value)
       (setf (py-object-attr spec "_initializing") (py-bool value)))))
 
+(defun py-module-spec-repr (spec stream)
+  (princ "ModuleSpec(name=" stream)
+  (py-repr (py-module-spec-object-name spec) stream)
+  (princ ", loader=" stream)
+  (py-repr (py-module-spec-object-loader spec) stream)
+  (let ((origin (py-module-spec-object-origin spec)))
+    (when origin
+      (princ ", origin=" stream)
+      (py-repr origin stream)))
+  (let ((submodule-search-locations
+          (py-module-spec-object-submodule-search-locations spec)))
+    (unless (eq submodule-search-locations *py-none*)
+      (princ ", submodule_search_locations=" stream)
+      (py-repr submodule-search-locations stream)))
+  (princ ")" stream))
+
 (defun make-clamp-module (name &key source-path package-name package-p)
   (let ((module (make-py-module-object :type *py-module-type*
                                        :name name
@@ -3719,6 +3735,10 @@
      (py-list-repr value stream))
     ((py-tuple-object-p value)
      (py-tuple-repr value stream))
+    ((py-module-spec-object-p value)
+     (py-module-spec-repr value stream))
+    ((py-source-file-loader-object-p value)
+     (princ "<_frozen_importlib_external.SourceFileLoader object>" stream))
     ((py-module-object-p value)
      (if (py-module-object-source-path value)
          (format stream "<module '~A' from '~A'>"
@@ -3758,6 +3778,8 @@
     ((py-type-p value) (py-repr value stream))
     ((py-list-object-p value) (py-repr value stream))
     ((py-tuple-object-p value) (py-repr value stream))
+    ((py-module-spec-object-p value) (py-repr value stream))
+    ((py-source-file-loader-object-p value) (py-repr value stream))
     ((py-module-object-p value) (py-repr value stream))
     (t (princ value stream))))
 
