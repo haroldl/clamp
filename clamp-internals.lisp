@@ -254,6 +254,12 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-module-spec-type*
+  (make-py-type :type *py-type-type*
+                :name "ModuleSpec"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
 
@@ -761,8 +767,54 @@
 (defvar *py-module-loader* nil)
 (defvar *py-sys-modules* (make-hash-table :test #'equal))
 
+(defstruct (py-module-spec-object (:include py-object))
+  name
+  loader
+  origin
+  cached
+  submodule-search-locations
+  (has-location nil)
+  (initializing nil)
+  (uninitialized-submodules '()))
+
 (defun py-module-package-name (name)
   (concatenate 'string "CLAMP.__module__." name))
+
+(defun make-clamp-module-spec (name source-path package-p)
+  (let* ((cached (and source-path (py-source-cache-path source-path)))
+         (submodule-search-locations
+           (if package-p
+               (make-py-list (py-package-source-directory source-path))
+               *py-none*))
+         (spec (make-py-module-spec-object
+                :type *py-module-spec-type*
+                :name name
+                :loader *py-none*
+                :origin source-path
+                :cached cached
+                :submodule-search-locations submodule-search-locations
+                :has-location (not (null source-path)))))
+    (setf (py-object-attr spec "name") name)
+    (setf (py-object-attr spec "loader") *py-none*)
+    (setf (py-object-attr spec "origin") (or source-path *py-none*))
+    (setf (py-object-attr spec "cached") (or cached *py-none*))
+    (setf (py-object-attr spec "parent")
+          (if package-p
+              name
+              (let ((pos (position #\. name :from-end t)))
+                (if pos (subseq name 0 pos) ""))))
+    (setf (py-object-attr spec "has_location") (py-bool source-path))
+    (setf (py-object-attr spec "submodule_search_locations")
+          submodule-search-locations)
+    (setf (py-object-attr spec "_initializing") *py-false*)
+    spec))
+
+(defun py-set-module-initializing (module value)
+  (setf (py-module-object-initializing module) value)
+  (let ((spec (py-object-attr module "__spec__")))
+    (when (py-module-spec-object-p spec)
+      (setf (py-module-spec-object-initializing spec) value)
+      (setf (py-object-attr spec "_initializing") (py-bool value)))))
 
 (defun make-clamp-module (name &key source-path package-name package-p)
   (let ((module (make-py-module-object :type *py-module-type*
@@ -780,6 +832,9 @@
     (setf (py-object-attr module "__spec__") *py-none*)
     (when source-path
       (py-set-module-source-path module source-path))
+    (unless (string= name "__main__")
+      (setf (py-object-attr module "__spec__")
+            (make-clamp-module-spec name source-path package-p)))
     module))
 
 (defun py-enter-module (name source-path package-name)
@@ -881,7 +936,7 @@
     (unless source-path
       (error "No module named '~A'" name))
     (let ((module (make-clamp-module name :source-path source-path :package-p package-p)))
-      (setf (py-module-object-initializing module) t)
+      (py-set-module-initializing module t)
       (setf (gethash name *py-sys-modules*) module)
       (when package-p
         (setf (py-object-attr module "__path__")
@@ -893,7 +948,7 @@
               (unless *py-module-loader*
                 (error "Clamp module loader is not installed"))
               (funcall *py-module-loader* source-path name (py-module-object-package-name module))
-              (setf (py-module-object-initializing module) nil))
+              (py-set-module-initializing module nil))
           (error (condition)
             (remhash name *py-sys-modules*)
             (error condition))))
