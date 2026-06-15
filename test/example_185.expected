@@ -1,0 +1,8 @@
+module value
+outer module name
+submodule value
+outer sub
+module value
+outer value
+submodule value
+outer sub

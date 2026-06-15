@@ -1499,3 +1499,18 @@ def test_import_source_file_loader_exec_module_name_mismatch_fails_like_local_cp
         in clamp_result.stderr
     )
     assert "should not execute" not in clamp_result.stdout
+
+
+def test_function_local_import_bindings_match_local_cpython_when_available():
+    sample = TEST_DIR / "example_185.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout

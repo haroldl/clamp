@@ -152,6 +152,9 @@ def codegen_block(stmts, context: Context) -> str:
         rest_code = codegen_block(rest, context)
         return first_code + ("\n" + rest_code if rest_code else "")
 
+    if isinstance(first, (ast.Import, ast.ImportFrom)) and not context.top_level_stmt and not context.mutation_context:
+        return codegen_import_block(first, rest, context)
+
     # Default: emit first form and then the rest
     first_code = codegen(first, context)
     rest_code = codegen_block(rest, context)
@@ -522,6 +525,46 @@ def codegen_import_from(node, context: Context):
         + " ".join(bindings)
         + ")"
     )
+
+def codegen_import_block(node, rest, context: Context) -> str:
+    rest_code = codegen_block(rest, context)
+    if not rest_code:
+        return codegen(node, context)
+
+    bindings = []
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            if alias.asname:
+                bind_name = alias.asname
+                value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(alias.name)} '(\"*\"))"
+            else:
+                bind_name = alias.name.partition('.')[0]
+                value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(alias.name)})"
+            bindings.append((bind_name, value))
+    elif isinstance(node, ast.ImportFrom):
+        if node.level:
+            raise Exception("TODO: relative imports are not supported yet")
+        if node.module is None:
+            raise Exception("TODO: relative imports are not supported yet")
+        if any(alias.name == "*" for alias in node.names):
+            raise Exception("TODO: star imports are not supported yet")
+        fromlist = "'(" + " ".join(lisp_string(alias.name) for alias in node.names) + ")"
+        module_symbol = f"__clamp_import_module_{id(node)}"
+        module_value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(node.module)} {fromlist})"
+        body = rest_code
+        for alias in reversed(node.names):
+            bind_name = alias.asname or alias.name
+            value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-FROM {module_symbol} {lisp_string(alias.name)})"
+            body = f"(|CLAMP.__builtins__|:ASSIGN ({map_name(bind_name)} {value}) {body})"
+        return f"(common-lisp:let (({module_symbol} {module_value})) {body})"
+    else:
+        raise Exception(f"Unsupported import block node: {type(node)}")
+
+    body = rest_code
+    for bind_name, value in reversed(bindings):
+        body = f"(|CLAMP.__builtins__|:ASSIGN ({map_name(bind_name)} {value}) {body})"
+    return body
+
 
 def map_name(name: str) -> str:
     return name
