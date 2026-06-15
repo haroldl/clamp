@@ -375,6 +375,9 @@
       (setf hash -2))
     hash))
 
+(defun py-string-hash (value)
+  (py-int-hash (py-signed-hash (sxhash value))))
+
 (defun py-tuple-hash (obj)
   (let ((cached-hash (py-tuple-object-hash obj)))
     (unless (= cached-hash -1)
@@ -405,10 +408,14 @@
       ((eq value *py-none*) #xFCA86420)
       ((integerp normalized-value)
        (py-int-hash normalized-value))
+      ((stringp value)
+       (py-string-hash value))
       ((py-tuple-object-p value)
        (py-tuple-hash value))
       ((py-range-object-p value)
        (py-range-hash value))
+      ((py-source-file-loader-object-p value)
+       (py-source-file-loader-hash value))
       ((py-list-object-p value)
        (error "unhashable type: 'list'"))
       (t
@@ -503,6 +510,12 @@
        (py-truthy-p
         (py-eq (py-source-file-loader-object-path left)
                (py-source-file-loader-object-path right)))))
+
+(defun py-source-file-loader-hash (loader)
+  (py-int-hash
+   (py-signed-hash
+    (logxor (py-uhash (py-hash (py-source-file-loader-object-name loader)))
+            (py-uhash (py-hash (py-source-file-loader-object-path loader)))))))
 
 (defun py-spec-field-eq (left right reader)
   (py-truthy-p
@@ -920,6 +933,10 @@
       (lambda (loader)
         (with-output-to-string (stream)
           (py-repr loader stream))))
+
+(setf (py-type-attr *py-source-file-loader-type* "__hash__")
+      (lambda (loader)
+        (py-source-file-loader-hash loader)))
 
 (defun make-clamp-module-spec (name source-path package-p loader)
   (let* ((cached (and source-path (py-source-cache-path source-path)))
