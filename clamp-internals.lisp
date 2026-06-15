@@ -1425,6 +1425,34 @@
         (py-string-rsplit-whitespace value normalized-maxsplit)
         (py-string-rsplit-explicit value separator normalized-maxsplit))))
 
+(defun py-string-linebreak-p (char)
+  (member (char-code char)
+          '(#x000a #x000b #x000c #x000d #x001c #x001d #x001e #x0085 #x2028 #x2029)))
+
+(defun py-string-splitlines (value &optional (keepends *py-false*))
+  (let ((items '())
+        (size (length value))
+        (i 0)
+        (j 0)
+        (keepends-p (py-truthy-p keepends)))
+    (loop while (< i size)
+          do (progn
+               (loop while (and (< i size)
+                                (not (py-string-linebreak-p (char value i))))
+                     do (incf i))
+               (let ((eol i))
+                 (when (< i size)
+                   (if (and (char= (char value i) #\Return)
+                            (< (1+ i) size)
+                            (char= (char value (1+ i)) #\Newline))
+                       (incf i 2)
+                       (incf i))
+                   (when keepends-p
+                     (setf eol i)))
+                 (push (subseq value j eol) items)
+                 (setf j i))))
+    (apply #'make-py-list (nreverse items))))
+
 (defun py-string-lower (value)
   (string-downcase value))
 
@@ -1775,6 +1803,10 @@
 (setf (py-type-attr *py-str-type* "rsplit")
       (lambda (obj &optional (separator *py-none*) (maxsplit -1))
         (py-string-rsplit obj separator maxsplit)))
+
+(setf (py-type-attr *py-str-type* "splitlines")
+      (lambda (obj &optional (keepends *py-false*))
+        (py-string-splitlines obj keepends)))
 
 (setf (py-type-attr *py-str-type* "lower")
       (lambda (obj)
