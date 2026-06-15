@@ -806,6 +806,14 @@
         (declare (ignore fullname))
         (py-source-file-loader-object-path loader)))
 
+(setf (py-type-attr *py-source-file-loader-type* "is_package")
+      (lambda (loader fullname)
+        (let* ((filename-base (pathname-name (py-source-file-loader-object-path loader)))
+               (tail-pos (position #\. fullname :from-end t))
+               (tail-name (if tail-pos (subseq fullname (1+ tail-pos)) fullname)))
+          (py-bool (and (string= filename-base "__init__")
+                        (not (string= tail-name "__init__")))))))
+
 (defun make-clamp-module-spec (name source-path package-p loader)
   (let* ((cached (and source-path (py-source-cache-path source-path)))
          (submodule-search-locations
