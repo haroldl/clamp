@@ -764,7 +764,7 @@
 (defun py-module-package-name (name)
   (concatenate 'string "CLAMP.__module__." name))
 
-(defun make-clamp-module (name &key source-path package-name)
+(defun make-clamp-module (name &key source-path package-name package-p)
   (let ((module (make-py-module-object :type *py-module-type*
                                        :name name
                                        :source-path source-path
@@ -772,8 +772,10 @@
     (setf (py-object-attr module "__name__") name)
     (setf (py-object-attr module "__doc__") *py-none*)
     (setf (py-object-attr module "__package__")
-          (let ((pos (position #\. name :from-end t)))
-            (if pos (subseq name 0 pos) "")))
+          (if package-p
+              name
+              (let ((pos (position #\. name :from-end t)))
+                (if pos (subseq name 0 pos) ""))))
     (setf (py-object-attr module "__loader__") *py-none*)
     (setf (py-object-attr module "__spec__") *py-none*)
     (when source-path
@@ -860,7 +862,7 @@
   (multiple-value-bind (source-path package-p) (py-find-module-source name)
     (unless source-path
       (error "No module named '~A'" name))
-    (let ((module (make-clamp-module name :source-path source-path)))
+    (let ((module (make-clamp-module name :source-path source-path :package-p package-p)))
       (setf (py-module-object-initializing module) t)
       (setf (gethash name *py-sys-modules*) module)
       (when package-p
