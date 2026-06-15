@@ -1286,6 +1286,23 @@
                    (string-upcase (subseq value 0 1))
                    (string-downcase (subseq value 1)))))
 
+(defun py-string-cased-char-p (char)
+  (or (char/= char (char-upcase char))
+      (char/= char (char-downcase char))))
+
+(defun py-string-title (value)
+  (with-output-to-string (stream)
+    (let ((previous-is-cased nil))
+      (loop for char across value
+            do (progn
+                 (write-char
+                  (if previous-is-cased
+                      (char-downcase char)
+                      (char-upcase char))
+                  stream)
+                 (setf previous-is-cased
+                       (py-string-cased-char-p char)))))))
+
 (defun py-string-default-strip-char-p (char)
   (member (char-code char) '(9 10 11 12 13 28 29 30 31 32 133 160 5760 8192 8193 8194 8195 8196 8197 8198 8199 8200 8201 8202 8232 8233 8239 8287 12288)))
 
@@ -1400,6 +1417,10 @@
 (setf (py-type-attr *py-str-type* "capitalize")
       (lambda (obj)
         (py-string-capitalize obj)))
+
+(setf (py-type-attr *py-str-type* "title")
+      (lambda (obj)
+        (py-string-title obj)))
 
 (setf (py-type-attr *py-str-type* "strip")
       (lambda (obj &optional (chars *py-none*))

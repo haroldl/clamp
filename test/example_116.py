@@ -1,0 +1,8 @@
+print("hello world".title())
+print("hELLo wORld".title())
+print("already Title".title())
+print("two-words and_two".title())
+print("they're bill's friends".title())
+print("123abc XYZ".title())
+print("".title())
+print(["mixed case".title(), "x y".title()])
