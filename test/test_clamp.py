@@ -1593,3 +1593,22 @@ def test_import_source_file_loader_path_stats_example_matches_local_cpython_when
     )
     clamp_result = run_clamp(sample)
     assert clamp_result.stdout == cpython_result.stdout
+
+
+def test_import_source_file_loader_cache_bytecode_example_matches_local_cpython_when_available():
+    sample = TEST_DIR / "example_191.py"
+    output_path = Path("/tmp/clamp_import_loader_cache_bytecode.tmp")
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    output_path.unlink(missing_ok=True)
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    output_path.unlink(missing_ok=True)
+    clamp_result = run_clamp(sample)
+    output_path.unlink(missing_ok=True)
+    assert clamp_result.stdout == cpython_result.stdout

@@ -966,6 +966,14 @@
         (declare (ignore loader))
         (py-write-file-bytes path data)))
 
+(setf (py-type-attr *py-source-file-loader-type* "_cache_bytecode")
+      (lambda (loader source-path bytecode-path data)
+        (declare (ignore source-path))
+        (funcall (py-type-attr (py-object-type loader) "set_data")
+                 loader
+                 bytecode-path
+                 data)))
+
 (setf (py-type-attr *py-source-file-loader-type* "get_source")
       (lambda (loader fullname)
         (py-source-file-loader-check-name loader fullname)
