@@ -1648,12 +1648,39 @@
             (round obj)
             (error "float.__round__() with ndigits is not supported by Clamp yet"))))
 
+(defun py-list-resize (obj new-size)
+  (let* ((storage (py-list-storage obj "resize"))
+         (old-size (or (py-object-size obj) 0))
+         (allocated (py-list-object-allocated obj)))
+    (if (and (<= new-size allocated)
+             (>= new-size (floor allocated 2)))
+        (progn
+          (setf (fill-pointer storage) new-size)
+          (setf (py-object-size obj) new-size)
+          storage)
+        (let* ((new-allocated
+                 (if (= new-size 0)
+                     0
+                     (logand (+ new-size (ash new-size -3) 6) (lognot 3))))
+               (new-allocated
+                 (if (> (- new-size old-size) (- new-allocated new-size))
+                     (logand (+ new-size 3) (lognot 3))
+                     new-allocated))
+               (new-storage (make-array new-allocated
+                                        :adjustable t
+                                        :fill-pointer new-size)))
+          (loop for index from 0 below (min old-size new-size)
+                do (setf (aref new-storage index) (aref storage index)))
+          (setf (py-object-value obj) new-storage)
+          (setf (py-object-size obj) new-size)
+          (setf (py-list-object-allocated obj) new-allocated)
+          new-storage))))
+
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)
-        (let ((storage (py-list-storage obj "append")))
-          (vector-push-extend value storage)
-          (setf (py-object-size obj) (fill-pointer storage))
-          (setf (py-list-object-allocated obj) (array-total-size storage)))
+        (let* ((size (or (py-object-size obj) 0))
+               (storage (py-list-resize obj (1+ size))))
+          (setf (aref storage size) value))
         *py-none*))
 
 (defun py-list-insert-index (size index)
@@ -1668,15 +1695,12 @@
 
 (setf (py-type-attr *py-list-type* "insert")
       (lambda (obj index value)
-        (let* ((storage (py-list-storage obj "insert"))
-               (size (or (py-object-size obj) 0))
-               (normalized-index (py-list-insert-index size index)))
-          (vector-push-extend *py-none* storage)
+        (let* ((size (or (py-object-size obj) 0))
+               (normalized-index (py-list-insert-index size index))
+               (storage (py-list-resize obj (1+ size))))
           (loop for i downfrom size above normalized-index
                 do (setf (aref storage i) (aref storage (1- i))))
-          (setf (aref storage normalized-index) value)
-          (setf (py-object-size obj) (fill-pointer storage))
-          (setf (py-list-object-allocated obj) (array-total-size storage)))
+          (setf (aref storage normalized-index) value))
         *py-none*))
 
 (defun py-list-extend-iterable (obj iterable)
@@ -1727,6 +1751,15 @@
                                :size (fill-pointer copied-storage)
                                :value copied-storage
                                :allocated (array-total-size copied-storage)))))
+
+(defparameter +py-list-basic-size+ 40)
+(defparameter +py-object-pointer-size+ 8)
+
+(setf (py-type-attr *py-list-type* "__sizeof__")
+      (lambda (obj)
+        (py-list-storage obj "__sizeof__")
+        (+ +py-list-basic-size+
+           (* (py-list-object-allocated obj) +py-object-pointer-size+))))
 
 (setf (py-type-attr *py-list-type* "count")
       (lambda (obj value)

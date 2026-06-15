@@ -105,6 +105,7 @@ EXAMPLE_122 = TEST_DIR / "example_122.py"
 EXAMPLE_123 = TEST_DIR / "example_123.py"
 EXAMPLE_124 = TEST_DIR / "example_124.py"
 EXAMPLE_129 = TEST_DIR / "example_129.py"
+EXAMPLE_131 = TEST_DIR / "example_131.py"
 CPYTHON_314 = Path.home() / "local" / "Python-3.14.5" / "python"
 
 
@@ -638,6 +639,20 @@ def test_str_istitle_example_matches_local_cpython_when_available():
         text=True,
     )
     clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
+def test_list_sizeof_example_matches_local_cpython_when_available():
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(EXAMPLE_131)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(EXAMPLE_131)
     assert clamp_result.stdout == cpython_result.stdout
 
 
