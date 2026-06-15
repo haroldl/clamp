@@ -1200,6 +1200,29 @@
 (defun py-string-upper (value)
   (string-upcase value))
 
+(defun py-string-default-strip-char-p (char)
+  (member (char-code char) '(9 10 11 12 13 28 29 30 31 32 133 160 5760 8192 8193 8194 8195 8196 8197 8198 8199 8200 8201 8202 8232 8233 8239 8287 12288)))
+
+(defun py-string-strip-char-p (char chars)
+  (if (eq chars *py-none*)
+      (py-string-default-strip-char-p char)
+      (find char chars :test #'char=)))
+
+(defun py-string-strip (value &optional (chars *py-none*) (direction :both))
+  (unless (or (eq chars *py-none*) (stringp chars))
+    (error "strip arg must be None or str"))
+  (let ((start 0)
+        (end (length value)))
+    (when (member direction '(:both :left))
+      (loop while (and (< start end)
+                       (py-string-strip-char-p (char value start) chars))
+            do (incf start)))
+    (when (member direction '(:both :right))
+      (loop while (and (< start end)
+                       (py-string-strip-char-p (char value (1- end)) chars))
+            do (decf end)))
+    (subseq value start end)))
+
 (defun py-string-getitem (value index)
   (if (py-slice-object-p index)
       (py-string-slice value index)
@@ -1275,6 +1298,18 @@
 (setf (py-type-attr *py-str-type* "upper")
       (lambda (obj)
         (py-string-upper obj)))
+
+(setf (py-type-attr *py-str-type* "strip")
+      (lambda (obj &optional (chars *py-none*))
+        (py-string-strip obj chars :both)))
+
+(setf (py-type-attr *py-str-type* "lstrip")
+      (lambda (obj &optional (chars *py-none*))
+        (py-string-strip obj chars :left)))
+
+(setf (py-type-attr *py-str-type* "rstrip")
+      (lambda (obj &optional (chars *py-none*))
+        (py-string-strip obj chars :right)))
 
 (setf (py-type-attr *py-int-type* "bit_length")
       (lambda (obj)

@@ -1,0 +1,12 @@
+text = "  clamp  "
+print(text.strip())
+print(text.lstrip())
+print(text.rstrip())
+print("xyxhelloxy".strip("xy"))
+print("xyxhelloxy".lstrip("xy"))
+print("xyxhelloxy".rstrip("xy"))
+print("mississippi".strip("im"))
+print("abc".strip(""))
+print("   ".strip())
+print([" a ".strip(), "--b--".strip("-")])
+print((chr(160) + "wide" + chr(160)).strip())
