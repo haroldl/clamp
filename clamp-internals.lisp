@@ -29,6 +29,7 @@
    :*py-module-loader*
    :py-enter-module
    :py-set-global
+   :py-import-builtin
    :py-import-name
    :py-import-from
    :py-type-of
@@ -1286,6 +1287,69 @@
   (let ((module (py-import-module name)))
     (if (and fromlist (> (length fromlist) 0))
         module
+        (py-import-module (py-module-root-name name)))))
+
+(defun py-import-fromlist-names (fromlist)
+  (cond
+    ((or (null fromlist) (eq fromlist *py-none*))
+     '())
+    ((py-list-object-p fromlist)
+     (let ((storage (py-object-value fromlist))
+           (size (or (py-object-size fromlist) 0)))
+       (loop for index from 0 below size
+             collect (aref storage index))))
+    ((py-tuple-object-p fromlist)
+     (let ((storage (py-object-value fromlist))
+           (size (or (py-object-size fromlist) 0)))
+       (loop for index from 0 below size
+             collect (aref storage index))))
+    (t
+     (if (py-truthy-p fromlist)
+         (error "__import__() fromlist must be a list or tuple in Clamp")
+         '()))))
+
+(defun py-import-handle-fromlist (module fromlist)
+  (dolist (name fromlist)
+    (unless (stringp name)
+      (error "Item in ``from list'' must be str, not ~A"
+             (py-type-name (py-type-of name))))
+    (unless (string= name "*")
+      (multiple-value-bind (attr found) (gethash name (py-object-attrs module))
+        (declare (ignore attr))
+        (unless found
+          (let ((full-name (concatenate 'string
+                                        (py-module-object-name module)
+                                        "."
+                                        name)))
+            (handler-case
+                (py-import-module full-name)
+              (error ()
+                nil)))))))
+  module)
+
+(defun py-import-builtin (name &optional
+                          (globals *py-none*)
+                          (locals *py-none*)
+                          (fromlist *py-none*)
+                          (level 0))
+  (declare (ignore globals locals))
+  (unless (stringp name)
+    (error "module name must be a string"))
+  (let ((normalized-level (py-normalize-bool-number level)))
+    (unless (integerp normalized-level)
+      (error "level must be an integer"))
+    (when (< normalized-level 0)
+      (error "level must be >= 0"))
+    (when (> normalized-level 0)
+      (error "relative imports are not supported yet"))
+    (when (= (length name) 0)
+      (error "Empty module name")))
+  (let* ((module (py-import-module name))
+         (fromlist-names (py-import-fromlist-names fromlist)))
+    (if fromlist-names
+        (if (nth-value 1 (gethash "__path__" (py-object-attrs module)))
+            (py-import-handle-fromlist module fromlist-names)
+            module)
         (py-import-module (py-module-root-name name)))))
 
 (defun py-import-from (module name)
