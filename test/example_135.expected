@@ -1,0 +1,11 @@
+('b', 'ana', 'na bandana')
+('banana band', 'ana', '')
+('banana', ' ', 'bandana')
+('banana', ' ', 'bandana')
+('banana bandana', '', '')
+('', '', 'banana bandana')
+('', 'aa', 'aa')
+('aa', 'aa', '')
+('', '', '')
+('', '', '')
+[('', 'ban', 'ana bandana'), ('banana ', 'ban', 'dana')]

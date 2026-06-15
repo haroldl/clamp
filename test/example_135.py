@@ -1,0 +1,12 @@
+text = "banana bandana"
+print(text.partition("ana"))
+print(text.rpartition("ana"))
+print(text.partition(" "))
+print(text.rpartition(" "))
+print(text.partition("xyz"))
+print(text.rpartition("xyz"))
+print("aaaa".partition("aa"))
+print("aaaa".rpartition("aa"))
+print("".partition("x"))
+print("".rpartition("x"))
+print([text.partition("ban"), text.rpartition("ban")])

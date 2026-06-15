@@ -1306,6 +1306,21 @@
                (when (> normalized-count 0)
                  (decf remaining))))))))))
 
+(defun py-string-partition (value separator &optional (from-end nil))
+  (unless (stringp separator)
+    (error "partition() argument must be str, not ~S" separator))
+  (when (= (length separator) 0)
+    (error "empty separator"))
+  (let ((match (search separator value :from-end from-end)))
+    (if match
+        (make-py-tuple
+         (subseq value 0 match)
+         separator
+         (subseq value (+ match (length separator))))
+        (if from-end
+            (make-py-tuple "" "" value)
+            (make-py-tuple value "" "")))))
+
 (defun py-string-lower (value)
   (string-downcase value))
 
@@ -1585,6 +1600,14 @@
 (setf (py-type-attr *py-str-type* "replace")
       (lambda (obj old new &optional (count -1))
         (py-string-replace obj old new count)))
+
+(setf (py-type-attr *py-str-type* "partition")
+      (lambda (obj separator)
+        (py-string-partition obj separator)))
+
+(setf (py-type-attr *py-str-type* "rpartition")
+      (lambda (obj separator)
+        (py-string-partition obj separator t)))
 
 (setf (py-type-attr *py-str-type* "lower")
       (lambda (obj)
