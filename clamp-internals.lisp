@@ -1691,9 +1691,12 @@
                                :element-type (quote (unsigned-byte 8)))
     (file-length stream)))
 
+(defun py-path-mtime (path)
+  (- (coerce (file-write-date path) 'double-float) 2208988800.0d0))
+
 (defun py-path-stats (path)
   (make-py-dict-from-pairs
-   (list "mtime" (file-write-date path))
+   (list "mtime" (py-path-mtime path))
    (list "size" (py-path-size path))))
 
 (defun py-list-index (obj index)
