@@ -1326,23 +1326,34 @@
          (error "__import__() fromlist must be a list or tuple in Clamp")
          '()))))
 
-(defun py-import-handle-fromlist (module fromlist)
+(defun py-import-handle-fromlist (module fromlist &optional (recursive nil))
   (dolist (name fromlist)
     (unless (stringp name)
-      (error "Item in ``from list'' must be str, not ~A"
+      (error "Item in ~A must be str, not ~A"
+             (if recursive
+                 (concatenate 'string (py-module-object-name module) ".__all__")
+                 "``from list''")
              (py-type-name (py-type-of name))))
-    (unless (string= name "*")
-      (multiple-value-bind (attr found) (gethash name (py-object-attrs module))
-        (declare (ignore attr))
-        (unless found
-          (let ((full-name (concatenate 'string
-                                        (py-module-object-name module)
-                                        "."
-                                        name)))
-            (handler-case
-                (py-import-module full-name)
-              (error ()
-                nil)))))))
+    (cond
+      ((and (string= name "*") (not recursive))
+       (multiple-value-bind (all found) (gethash "__all__" (py-object-attrs module))
+         (when found
+           (py-import-handle-fromlist
+            module
+            (py-import-fromlist-names all)
+            t))))
+      ((not (string= name "*"))
+       (multiple-value-bind (attr found) (gethash name (py-object-attrs module))
+         (declare (ignore attr))
+         (unless found
+           (let ((full-name (concatenate 'string
+                                         (py-module-object-name module)
+                                         "."
+                                         name)))
+             (multiple-value-bind (source-path package-p) (py-find-module-source full-name)
+               (declare (ignore package-p))
+               (when source-path
+                 (py-import-module full-name)))))))))
   module)
 
 (defun py-import-builtin (name &optional
