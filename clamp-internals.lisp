@@ -1223,6 +1223,45 @@
         (subseq value 0 (- value-size suffix-size))
         value)))
 
+(defun py-string-replace (value old new &optional (count -1))
+  (unless (stringp old)
+    (error "replace() argument 1 must be str, not ~S" old))
+  (unless (stringp new)
+    (error "replace() argument 2 must be str, not ~S" new))
+  (let ((normalized-count (py-normalize-bool-number count)))
+    (unless (integerp normalized-count)
+      (error "replace() argument 3 must be int, not ~S" count))
+    (cond
+      ((= normalized-count 0) value)
+      ((string= old new) value)
+      ((= (length old) 0)
+       (let ((remaining normalized-count))
+         (with-output-to-string (stream)
+           (loop for index from 0 to (length value)
+                 do (progn
+                      (when (or (< normalized-count 0) (> remaining 0))
+                        (princ new stream)
+                        (when (> normalized-count 0)
+                          (decf remaining)))
+                      (when (< index (length value))
+                        (write-char (char value index) stream)))))))
+      (t
+       (let ((remaining normalized-count)
+             (position 0)
+             (old-size (length old)))
+         (with-output-to-string (stream)
+           (loop
+             (let ((match (and (or (< normalized-count 0) (> remaining 0))
+                               (search old value :start2 position))))
+               (unless match
+                 (princ (subseq value position) stream)
+                 (return))
+               (princ (subseq value position match) stream)
+               (princ new stream)
+               (setf position (+ match old-size))
+               (when (> normalized-count 0)
+                 (decf remaining))))))))))
+
 (defun py-string-lower (value)
   (string-downcase value))
 
@@ -1341,6 +1380,10 @@
 (setf (py-type-attr *py-str-type* "removesuffix")
       (lambda (obj suffix)
         (py-string-removesuffix obj suffix)))
+
+(setf (py-type-attr *py-str-type* "replace")
+      (lambda (obj old new &optional (count -1))
+        (py-string-replace obj old new count)))
 
 (setf (py-type-attr *py-str-type* "lower")
       (lambda (obj)
