@@ -1,0 +1,5 @@
+import import_metadata_globals
+print(import_metadata_globals.__spec__._initializing)
+import import_metadata_pkg
+print(import_metadata_pkg.__spec__._initializing)
+print(import_metadata_pkg.__path__ is import_metadata_pkg.__spec__.submodule_search_locations)

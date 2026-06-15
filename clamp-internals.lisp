@@ -1088,6 +1088,7 @@
       (py-set-module-source-path module source-path))
     (when package-name
       (setf (py-module-object-package-name module) package-name))
+    (py-bind-module-metadata-globals module)
     (setf (gethash name *py-sys-modules*) module)
     (setf *py-current-module* module)
     module))
@@ -1168,6 +1169,25 @@
                       (make-package package-name :use '("CLAMP.__builtins__")))))
     (setf (py-module-object-package-name module) (package-name package))
     package))
+
+(defun py-bind-module-global-symbol (module name)
+  (multiple-value-bind (value found)
+      (gethash name (py-object-attrs module))
+    (when found
+      (let* ((package (py-ensure-module-package module))
+             (symbol (intern (string-upcase name) package)))
+        (setf (symbol-value symbol) value)))))
+
+(defun py-bind-module-metadata-globals (module)
+  (dolist (name (quote ("__name__"
+                        "__doc__"
+                        "__package__"
+                        "__loader__"
+                        "__spec__"
+                        "__file__"
+                        "__cached__"
+                        "__path__")))
+    (py-bind-module-global-symbol module name)))
 
 (defun py-parent-uninitialized-submodules (name)
   (let ((parent-name (py-module-parent-name name)))

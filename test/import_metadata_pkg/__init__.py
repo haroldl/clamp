@@ -1,0 +1,5 @@
+print(__name__)
+print(__package__)
+print(__spec__.parent)
+print(__spec__._initializing)
+print(__path__ is __spec__.submodule_search_locations)
