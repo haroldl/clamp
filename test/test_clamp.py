@@ -238,6 +238,18 @@ def test_str_index_raises_when_substring_is_missing():
     assert "substring not found" in result.stderr
 
 
+def test_str_rindex_raises_when_substring_is_missing():
+    command = [str(CLAMP)]
+    result = subprocess.run(
+        command,
+        cwd=ROOT,
+        input='"abc".rindex("z")\n',
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "substring not found" in result.stderr
+
 
 def test_isinstance_example_matches_local_cpython_when_available():
     sample = TEST_DIR / "example_101.py"
