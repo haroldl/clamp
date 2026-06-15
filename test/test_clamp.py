@@ -286,6 +286,76 @@ def test_math_module_example_matches_local_cpython_when_available():
     clamp_result = run_clamp(sample)
     assert clamp_result.stdout == cpython_result.stdout
 
+
+def test_math_module_full_api_example_matches_local_cpython_when_available():
+    sample = TEST_DIR / "example_201.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
+def test_math_module_ieee_example_matches_local_cpython_when_available():
+    sample = TEST_DIR / "example_202.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        ("import math\nmath.sqrt(-1)\n", "expected a nonnegative input, got -1.0"),
+        ("import math\nmath.log(0)\n", "expected a positive input"),
+        ("import math\nmath.acos(2)\n", "expected a number in range from -1 up to 1, got 2.0"),
+        ("import math\nmath.atanh(1)\n", "expected a number between -1 and 1, got 1.0"),
+        ("import math\nmath.gamma(0)\n", "expected a noninteger or positive integer, got 0.0"),
+        ("import math\nmath.pow(0, -1)\n", "math domain error"),
+        ("import math\nmath.fmod(1, 0)\n", "math domain error"),
+        ("import math\nmath.remainder(1, 0)\n", "math domain error"),
+        ("import math\nmath.isqrt(-1)\n", "argument must be nonnegative"),
+        ("import math\nmath.comb(-1, 2)\n", "n must be a non-negative integer"),
+        ("import math\nmath.dist([1], [1, 2])\n", "same number of dimensions"),
+        ("import math\nmath.sumprod([1], [1, 2])\n", "same length"),
+    ],
+)
+def test_math_module_error_examples_match_local_cpython_when_available(tmp_path, source, message):
+    sample = tmp_path / "math_error.py"
+    sample.write_text(source)
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = subprocess.run(
+        [str(CLAMP), str(sample)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert cpython_result.returncode != 0
+    assert clamp_result.returncode != 0
+    assert message in cpython_result.stderr
+    assert message in clamp_result.stderr
+
 def test_next_raises_stop_iteration_after_exhaustion():
     command = [str(CLAMP)]
     result = subprocess.run(
