@@ -1,0 +1,7 @@
+print("".capitalize())
+print("hello".capitalize())
+print("Hello".capitalize())
+print("hELLO wORLD".capitalize())
+print("123abc".capitalize())
+print("  mixed CASE".capitalize())
+print(["abc".capitalize(), "XYZ".capitalize(), "x y".capitalize()])

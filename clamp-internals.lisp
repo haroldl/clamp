@@ -1471,6 +1471,13 @@
 (defun py-string-upper (value)
   (string-upcase value))
 
+(defun py-string-capitalize (value)
+  (if (= (length value) 0)
+      value
+      (concatenate 'string
+                   (string-upcase (subseq value 0 1))
+                   (string-downcase (subseq value 1)))))
+
 (defun py-string-fill-char (fillchar operation)
   (unless (and (stringp fillchar)
                (= (length fillchar) 1))
@@ -1849,6 +1856,10 @@
 (setf (py-type-attr *py-str-type* "upper")
       (lambda (obj)
         (py-string-upper obj)))
+
+(setf (py-type-attr *py-str-type* "capitalize")
+      (lambda (obj)
+        (py-string-capitalize obj)))
 
 (setf (py-type-attr *py-str-type* "ljust")
       (lambda (obj width &optional (fillchar " "))
