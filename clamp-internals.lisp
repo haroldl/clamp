@@ -1583,6 +1583,31 @@
               always (or (alpha-char-p char)
                          (py-unicode-digit-char-p char))))))
 
+(defun py-string-identifier-start-char-p (char)
+  (or (char= char #\_)
+      (alpha-char-p char)))
+
+(defun py-unicode-combining-mark-char-p (char)
+  (let ((code (char-code char)))
+    (or (<= #x0300 code #x036f)
+        (<= #x1ab0 code #x1aff)
+        (<= #x1dc0 code #x1dff)
+        (<= #x20d0 code #x20ff)
+        (<= #xfe20 code #xfe2f))))
+
+(defun py-string-identifier-continue-char-p (char)
+  (or (py-string-identifier-start-char-p char)
+      (digit-char-p char 10)
+      (py-unicode-combining-mark-char-p char)))
+
+(defun py-string-isidentifier (value)
+  (py-bool
+   (and (> (length value) 0)
+        (py-string-identifier-start-char-p (char value 0))
+        (loop for index from 1 below (length value)
+              always (py-string-identifier-continue-char-p
+                      (char value index))))))
+
 (defun py-unicode-printable-char-p (char)
   (let ((code (char-code char)))
     (and (or (= code 32)
@@ -1859,6 +1884,10 @@
 (setf (py-type-attr *py-str-type* "isalnum")
       (lambda (obj)
         (py-string-isalnum obj)))
+
+(setf (py-type-attr *py-str-type* "isidentifier")
+      (lambda (obj)
+        (py-string-isidentifier obj)))
 
 (setf (py-type-attr *py-str-type* "isprintable")
       (lambda (obj)

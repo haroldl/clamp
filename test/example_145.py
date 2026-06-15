@@ -1,0 +1,6 @@
+print("".isidentifier())
+print("_".isidentifier(), "name".isidentifier(), "name_2".isidentifier())
+print("2name".isidentifier(), "has space".isidentifier(), "has-hyphen".isidentifier())
+print("class".isidentifier(), "def".isidentifier())
+print((chr(233) + "clair").isidentifier(), (chr(960) + "2").isidentifier(), ("x" + chr(178)).isidentifier(), ("x" + chr(189)).isidentifier(), ("x" + chr(769)).isidentifier())
+print(["ok".isidentifier(), "not ok".isidentifier(), "_1".isidentifier()])
