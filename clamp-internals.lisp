@@ -943,7 +943,16 @@
       (return-from py-load-module cached)))
   (let ((parent-name (py-module-parent-name name)))
     (when parent-name
-      (py-load-module parent-name)))
+      (py-load-module parent-name)
+      (multiple-value-bind (cached found) (gethash name *py-sys-modules*)
+        (when found
+          (return-from py-load-module cached)))
+      (let ((parent (gethash parent-name *py-sys-modules*)))
+        (unless (and parent
+                     (nth-value 1 (gethash "__path__" (py-object-attrs parent))))
+          (error "No module named '~A'; '~A' is not a package"
+                 name
+                 parent-name)))))
   (multiple-value-bind (source-path package-p) (py-find-module-source name)
     (unless source-path
       (error "No module named '~A'" name))
