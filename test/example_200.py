@@ -1,0 +1,21 @@
+import math
+from math import sqrt as root, factorial
+
+print(math.floor(3.9))
+print(math.ceil(-3.1))
+print(math.trunc(-3.9))
+print(root(81))
+print(math.gcd(24, 36, 60))
+print(math.lcm(6, 10, 15))
+print(factorial(6))
+print(math.isclose(math.sin(math.pi / 2), 1.0))
+print(math.isclose(math.cos(0), 1.0))
+print(math.isclose(math.log(8, 2), 3.0))
+print(math.isclose(math.log10(100), 2.0))
+print(math.isclose(math.log2(8), 3.0))
+print(math.isclose(math.degrees(math.pi), 180.0))
+print(math.isclose(math.radians(180), math.pi))
+print(math.hypot(3, 4))
+print(math.dist([1, 2], [4, 6]))
+print(math.isinf(math.inf))
+print(math.isfinite(math.pi))

@@ -906,6 +906,7 @@
 (defvar *py-module-search-paths* nil)
 (defvar *py-module-loader* nil)
 (defvar *py-sys-modules* (make-hash-table :test #'equal))
+(defvar *py-builtin-module-builders* (make-hash-table :test #'equal))
 
 (defstruct (py-module-spec-object (:include py-object))
   name
@@ -1389,6 +1390,11 @@
   (multiple-value-bind (cached found) (gethash name *py-sys-modules*)
     (when found
       (return-from py-load-module cached)))
+  (multiple-value-bind (builder found) (gethash name *py-builtin-module-builders*)
+    (when found
+      (let ((module (funcall builder)))
+        (setf (gethash name *py-sys-modules*) module)
+        (return-from py-load-module module))))
   (let ((parent-name (py-module-parent-name name)))
     (when parent-name
       (py-load-module parent-name)
@@ -1567,6 +1573,235 @@
         (py-import-module full-name)
       (error ()
         (error "cannot import name '~A' from '~A'" name (py-module-object-name module))))))
+
+(defun py-register-builtin-module (name builder)
+  (setf (gethash name *py-builtin-module-builders*) builder))
+
+(defun py-math-number (value function-name)
+  (let ((normalized-value (py-normalize-bool-number value)))
+    (unless (numberp normalized-value)
+      (error "must be real number, not ~A" (py-type-name (py-type-of value))))
+    normalized-value))
+
+(defun py-math-float (value)
+  (coerce value 'single-float))
+
+(defun py-math-unary (function-name fn value)
+  (py-math-float (funcall fn (py-math-number value function-name))))
+
+(defun py-math-binary (function-name fn left right)
+  (py-math-float
+   (funcall fn
+            (py-math-number left function-name)
+            (py-math-number right function-name))))
+
+(defun py-math-domain-check (function-name value predicate)
+  (unless (funcall predicate value)
+    (error "math domain error in ~A()" function-name))
+  value)
+
+(defun py-math-sqrt (value)
+  (py-math-unary "sqrt"
+                 (lambda (x)
+                   (sqrt (py-math-domain-check "sqrt" x (lambda (n) (>= n 0)))))
+                 value))
+
+(defun py-math-log (value &optional (base *py-none*))
+  (let* ((x (py-math-domain-check "log"
+                                  (py-math-number value "log")
+                                  (lambda (n) (> n 0))))
+         (result (if (eq base *py-none*)
+                     (log x)
+                     (/ (log x)
+                        (log (py-math-domain-check
+                              "log"
+                              (py-math-number base "log")
+                              (lambda (n) (and (> n 0) (/= n 1)))))))))
+    (py-math-float result)))
+
+(defun py-math-log10 (value)
+  (py-math-log value 10))
+
+(defun py-math-log2 (value)
+  (py-math-log value 2))
+
+(defun py-math-exp (value)
+  (py-math-unary "exp" #'exp value))
+
+(defun py-math-pow (left right)
+  (let ((x (py-math-number left "pow"))
+        (y (py-math-number right "pow")))
+    (when (and (< x 0) (not (integerp y)))
+      (error "math domain error in pow()"))
+    (py-math-float (expt x y))))
+
+(defun py-math-floor (value)
+  (floor (py-math-number value "floor")))
+
+(defun py-math-ceil (value)
+  (ceiling (py-math-number value "ceil")))
+
+(defun py-math-trunc (value)
+  (truncate (py-math-number value "trunc")))
+
+(defun py-math-factorial (value)
+  (let ((n (py-math-number value "factorial")))
+    (unless (and (integerp n) (>= n 0))
+      (error "factorial() only accepts non-negative integral values"))
+    (loop with result = 1
+          for i from 2 to n
+          do (setf result (* result i))
+          finally (return result))))
+
+(defun py-math-gcd (&rest values)
+  (reduce #'gcd
+          (mapcar (lambda (value)
+                    (let ((n (py-math-number value "gcd")))
+                      (unless (integerp n)
+                        (error "gcd() arguments must be integers"))
+                      n))
+                  values)
+          :initial-value 0))
+
+(defun py-math-lcm (&rest values)
+  (reduce (lambda (left right)
+            (if (or (= left 0) (= right 0))
+                0
+                (abs (/ (* left right) (gcd left right)))))
+          (mapcar (lambda (value)
+                    (let ((n (py-math-number value "lcm")))
+                      (unless (integerp n)
+                        (error "lcm() arguments must be integers"))
+                      n))
+                  values)
+          :initial-value 1))
+
+(defun py-math-fmod (left right)
+  (py-math-binary "fmod" #'rem left right))
+
+(defun py-math-remainder (left right)
+  (let ((x (py-math-number left "remainder"))
+        (y (py-math-number right "remainder")))
+    (when (= y 0)
+      (error "math domain error in remainder()"))
+    (py-math-float (- x (* y (round (/ x y)))))))
+
+(defun py-math-copysign (left right)
+  (let ((magnitude (abs (py-math-number left "copysign")))
+        (sign (py-math-number right "copysign")))
+    (py-math-float (if (minusp sign) (- magnitude) magnitude))))
+
+(defun py-math-degrees (value)
+  (py-math-float (* (py-math-number value "degrees") (/ 180 pi))))
+
+(defun py-math-radians (value)
+  (py-math-float (* (py-math-number value "radians") (/ pi 180))))
+
+(defun py-math-hypot (&rest coordinates)
+  (py-math-float
+   (sqrt (reduce #'+
+                 (mapcar (lambda (value)
+                           (let ((x (py-math-number value "hypot")))
+                             (* x x)))
+                         coordinates)
+                 :initial-value 0))))
+
+(defun py-math-dist (left right)
+  (let ((left-items '())
+        (right-items '()))
+    (let ((iterator (py-iter left)))
+      (loop
+        (multiple-value-bind (item found) (py-next-item iterator)
+          (unless found (return))
+          (push (py-math-number item "dist") left-items))))
+    (let ((iterator (py-iter right)))
+      (loop
+        (multiple-value-bind (item found) (py-next-item iterator)
+          (unless found (return))
+          (push (py-math-number item "dist") right-items))))
+    (unless (= (length left-items) (length right-items))
+      (error "both points must have the same number of dimensions"))
+    (py-math-float
+     (sqrt (loop for x in left-items
+                 for y in right-items
+                 sum (let ((delta (- x y))) (* delta delta)))))))
+
+(defun py-math-isfinite (value)
+  (let ((x (py-math-number value "isfinite")))
+    (py-bool (and (not (sb-ext:float-infinity-p (float x 1.0d0)))
+                  (not (sb-ext:float-nan-p (float x 1.0d0)))))))
+
+(defun py-math-isinf (value)
+  (py-bool (sb-ext:float-infinity-p (float (py-math-number value "isinf") 1.0d0))))
+
+(defun py-math-isnan (value)
+  (py-bool (sb-ext:float-nan-p (float (py-math-number value "isnan") 1.0d0))))
+
+(defun py-math-isclose (left right &optional (rel-tol 1.0e-09) (abs-tol 0.0))
+  (let ((a (py-math-number left "isclose"))
+        (b (py-math-number right "isclose"))
+        (relative-tolerance (py-math-number rel-tol "isclose"))
+        (absolute-tolerance (py-math-number abs-tol "isclose")))
+    (when (or (< relative-tolerance 0) (< absolute-tolerance 0))
+      (error "tolerances must be non-negative"))
+    (py-bool (<= (abs (- a b))
+                 (max relative-tolerance absolute-tolerance
+                      (* relative-tolerance (abs a))
+                      (* relative-tolerance (abs b)))))))
+
+(defun make-clamp-math-module ()
+  (let ((module (make-clamp-module "math")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in math module")
+    (setf (py-object-attr module "pi") (py-math-float pi))
+    (setf (py-object-attr module "e") (py-math-float (exp 1)))
+    (setf (py-object-attr module "tau") (py-math-float (* 2 pi)))
+    (setf (py-object-attr module "inf") sb-ext:double-float-positive-infinity)
+    (setf (py-object-attr module "acos")
+          (lambda (x)
+            (py-math-unary "acos"
+                           (lambda (n)
+                             (acos (py-math-domain-check
+                                    "acos" n (lambda (value) (<= -1 value 1)))))
+                           x)))
+    (setf (py-object-attr module "asin")
+          (lambda (x)
+            (py-math-unary "asin"
+                           (lambda (n)
+                             (asin (py-math-domain-check
+                                    "asin" n (lambda (value) (<= -1 value 1)))))
+                           x)))
+    (setf (py-object-attr module "atan") (lambda (x) (py-math-unary "atan" #'atan x)))
+    (setf (py-object-attr module "atan2") (lambda (y x) (py-math-binary "atan2" #'atan y x)))
+    (setf (py-object-attr module "ceil") #'py-math-ceil)
+    (setf (py-object-attr module "copysign") #'py-math-copysign)
+    (setf (py-object-attr module "cos") (lambda (x) (py-math-unary "cos" #'cos x)))
+    (setf (py-object-attr module "degrees") #'py-math-degrees)
+    (setf (py-object-attr module "dist") #'py-math-dist)
+    (setf (py-object-attr module "exp") #'py-math-exp)
+    (setf (py-object-attr module "fabs") (lambda (x) (py-math-float (abs (py-math-number x "fabs")))))
+    (setf (py-object-attr module "factorial") #'py-math-factorial)
+    (setf (py-object-attr module "floor") #'py-math-floor)
+    (setf (py-object-attr module "fmod") #'py-math-fmod)
+    (setf (py-object-attr module "gcd") #'py-math-gcd)
+    (setf (py-object-attr module "hypot") #'py-math-hypot)
+    (setf (py-object-attr module "isclose") #'py-math-isclose)
+    (setf (py-object-attr module "isfinite") #'py-math-isfinite)
+    (setf (py-object-attr module "isinf") #'py-math-isinf)
+    (setf (py-object-attr module "isnan") #'py-math-isnan)
+    (setf (py-object-attr module "lcm") #'py-math-lcm)
+    (setf (py-object-attr module "log") #'py-math-log)
+    (setf (py-object-attr module "log10") #'py-math-log10)
+    (setf (py-object-attr module "log2") #'py-math-log2)
+    (setf (py-object-attr module "pow") #'py-math-pow)
+    (setf (py-object-attr module "radians") #'py-math-radians)
+    (setf (py-object-attr module "remainder") #'py-math-remainder)
+    (setf (py-object-attr module "sin") (lambda (x) (py-math-unary "sin" #'sin x)))
+    (setf (py-object-attr module "sqrt") #'py-math-sqrt)
+    (setf (py-object-attr module "tan") (lambda (x) (py-math-unary "tan" #'tan x)))
+    (setf (py-object-attr module "trunc") #'py-math-trunc)
+    module))
+
+(py-register-builtin-module "math" #'make-clamp-math-module)
 
 (defun py-find-type-attr (type name)
   (multiple-value-bind (attr found) (gethash name (py-type-attrs type))
