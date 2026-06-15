@@ -62,6 +62,7 @@
    :py-sorted
    :py-list
    :py-tuple
+   :py-round
    :py-bin
    :py-oct
    :py-hex
@@ -649,6 +650,11 @@
     (if (numberp normalized-value)
         (abs normalized-value)
         (error "bad operand type for abs(): ~S" value))))
+
+(defun py-round (value &optional (ndigits *py-none*))
+  (if (eq ndigits *py-none*)
+      (py-call-attr value "__round__")
+      (error "round() with ndigits is not supported by Clamp yet")))
 
 (defun py-pos (value)
   (let ((normalized-value (py-normalize-bool-number value)))
@@ -1487,6 +1493,18 @@
 (setf (py-type-attr *py-int-type* "bit_count")
       (lambda (obj)
         (py-int-bit-count obj)))
+
+(setf (py-type-attr *py-int-type* "__round__")
+      (lambda (obj &optional (ndigits *py-none*))
+        (if (eq ndigits *py-none*)
+            (py-normalize-bool-number obj)
+            (error "int.__round__() with ndigits is not supported by Clamp yet"))))
+
+(setf (py-type-attr *py-float-type* "__round__")
+      (lambda (obj &optional (ndigits *py-none*))
+        (if (eq ndigits *py-none*)
+            (round obj)
+            (error "float.__round__() with ndigits is not supported by Clamp yet"))))
 
 (setf (py-type-attr *py-list-type* "append")
       (lambda (obj value)

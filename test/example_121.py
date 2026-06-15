@@ -1,0 +1,8 @@
+print(round(0))
+print(round(12))
+print(round(-12))
+print(round(True), round(False))
+print(round(2.3), round(2.5), round(3.5))
+print(round(-2.3), round(-2.5), round(-3.5))
+print((7).__round__(), True.__round__())
+print((2.5).__round__(), (-2.5).__round__())
