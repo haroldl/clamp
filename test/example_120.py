@@ -1,0 +1,7 @@
+print("".isalpha())
+print("abc".isalpha(), "ABC".isalpha())
+print("abc123".isalpha(), "abc def".isalpha())
+print("123".isalpha(), "_".isalpha())
+print(chr(233).isalpha(), chr(937).isalpha(), chr(223).isalpha())
+print(chr(20013).isalpha())
+print(["alpha".isalpha(), "alpha7".isalpha(), "".isalpha()])

@@ -1296,6 +1296,12 @@
         (loop for char across value
               always (digit-char-p char 10)))))
 
+(defun py-string-isalpha (value)
+  (py-bool
+   (and (> (length value) 0)
+        (loop for char across value
+              always (alpha-char-p char)))))
+
 (defun py-string-swapcase (value)
   (with-output-to-string (stream)
     (loop for char across value
@@ -1445,6 +1451,10 @@
 (setf (py-type-attr *py-str-type* "isdecimal")
       (lambda (obj)
         (py-string-isdecimal obj)))
+
+(setf (py-type-attr *py-str-type* "isalpha")
+      (lambda (obj)
+        (py-string-isalpha obj)))
 
 (setf (py-type-attr *py-str-type* "swapcase")
       (lambda (obj)
