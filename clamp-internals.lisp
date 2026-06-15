@@ -1302,6 +1302,17 @@
         (loop for char across value
               always (digit-char-p char 10)))))
 
+(defun py-unicode-digit-char-p (char)
+  (let ((code (char-code char)))
+    (or (digit-char-p char 10)
+        (member code '(#x00b2 #x00b3 #x00b9)))))
+
+(defun py-string-isdigit (value)
+  (py-bool
+   (and (> (length value) 0)
+        (loop for char across value
+              always (py-unicode-digit-char-p char)))))
+
 (defun py-string-isalpha (value)
   (py-bool
    (and (> (length value) 0)
@@ -1457,6 +1468,10 @@
 (setf (py-type-attr *py-str-type* "isdecimal")
       (lambda (obj)
         (py-string-isdecimal obj)))
+
+(setf (py-type-attr *py-str-type* "isdigit")
+      (lambda (obj)
+        (py-string-isdigit obj)))
 
 (setf (py-type-attr *py-str-type* "isalpha")
       (lambda (obj)
