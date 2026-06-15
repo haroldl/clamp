@@ -152,7 +152,10 @@
   (bases '())
   (basicsize 0)
   (itemsize 0)
-  (flags 0))
+  (flags 0)
+  number-bool-fn
+  mapping-length-fn
+  sequence-length-fn)
 
 (defparameter *py-type-type*
   (make-py-type :name "type" :basicsize 1))
@@ -194,7 +197,8 @@
   (make-py-type :type *py-type-type*
                 :name "str"
                 :bases (list *py-object-type*)
-                :basicsize 1))
+                :basicsize 1
+                :sequence-length-fn #'length))
 
 (defparameter *py-base-exception-type*
   (make-py-type :type *py-type-type*
@@ -256,29 +260,48 @@
 (defun py-bool (value)
   (if value *py-true* *py-false*))
 
+(defun py-type-slot-truth (type value)
+  (let ((number-bool (py-type-number-bool-fn type))
+        (mapping-length (py-type-mapping-length-fn type))
+        (sequence-length (py-type-sequence-length-fn type)))
+    (cond
+      (number-bool (> (funcall number-bool value) 0))
+      (mapping-length (> (funcall mapping-length value) 0))
+      (sequence-length (> (funcall sequence-length value) 0))
+      (t t))))
+
+(defun py-type-slot-length (type value)
+  (let ((sequence-length (py-type-sequence-length-fn type))
+        (mapping-length (py-type-mapping-length-fn type)))
+    (cond
+      (sequence-length (funcall sequence-length value))
+      (mapping-length (funcall mapping-length value))
+      (t nil))))
+
 (defun py-truthy-p (value)
   (cond
     ((eq value *py-true*) t)
     ((or (eq value *py-false*) (eq value *py-none*)) nil)
-    ((py-list-object-p value) (> (or (py-object-size value) 0) 0))
-    ((py-tuple-object-p value) (> (or (py-object-size value) 0) 0))
-    ((py-range-object-p value) (> (py-range-object-length value) 0))
+    ((py-object-p value) (py-type-slot-truth (py-object-type value) value))
     ((numberp value) (not (zerop value)))
-    ((stringp value) (> (length value) 0))
+    ((stringp value) (py-type-slot-truth *py-str-type* value))
     ((null value) nil)
     (t t)))
 
 (defun py-len (value)
-  (cond
-    ((py-list-object-p value) (or (py-object-size value) 0))
-    ((py-tuple-object-p value) (or (py-object-size value) 0))
-    ((py-range-object-p value) (py-range-object-length value))
-    ((stringp value) (length value))
-    (t
-     (error "Python object of type ~A has no len()"
-            (if (py-object-p value)
-                (py-type-name (py-object-type value))
-                (type-of value))))))
+  (let ((length
+          (cond
+            ((py-object-p value)
+             (py-type-slot-length (py-object-type value) value))
+            ((stringp value)
+             (py-type-slot-length *py-str-type* value))
+            (t nil))))
+    (if length
+        length
+        (error "Python object of type ~A has no len()"
+               (if (py-object-p value)
+                   (py-type-name (py-object-type value))
+                   (type-of value))))))
 
 (defun py-type-of (value)
   (cond
@@ -843,14 +866,20 @@
                 :name "list"
                 :bases (list *py-object-type*)
                 :basicsize 1
-                :itemsize 1))
+                :itemsize 1
+                :sequence-length-fn
+                (lambda (obj)
+                  (or (py-object-size obj) 0))))
 
 (defparameter *py-tuple-type*
   (make-py-type :type *py-type-type*
                 :name "tuple"
                 :bases (list *py-object-type*)
                 :basicsize 1
-                :itemsize 1))
+                :itemsize 1
+                :sequence-length-fn
+                (lambda (obj)
+                  (or (py-object-size obj) 0))))
 
 (defparameter *py-list-iterator-type*
   (make-py-type :type *py-type-type*
@@ -2571,6 +2600,12 @@
 (setf (py-type-attr *py-map-type* "__next__")
       (lambda (iterator)
         (py-next iterator)))
+
+(setf (py-type-number-bool-fn *py-range-type*)
+      (lambda (obj)
+        (if (> (py-range-object-length obj) 0) 1 0)))
+
+(setf (py-type-mapping-length-fn *py-range-type*) #'py-range-object-length)
 
 (setf (py-type-attr *py-range-type* "__iter__")
       (lambda (obj)

@@ -383,3 +383,18 @@ def test_str_contains_dunder_example_matches_local_cpython_when_available():
     clamp_result = run_clamp(EXAMPLE_110)
     assert clamp_result.stdout == cpython_result.stdout
 
+
+
+def test_type_slot_truth_and_len_example_matches_local_cpython_when_available():
+    sample = TEST_DIR / "example_112.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
