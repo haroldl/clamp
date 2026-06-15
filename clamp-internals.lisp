@@ -806,6 +806,11 @@
         (declare (ignore fullname))
         (py-source-file-loader-object-path loader)))
 
+(setf (py-type-attr *py-source-file-loader-type* "get_source")
+      (lambda (loader fullname)
+        (declare (ignore fullname))
+        (uiop:read-file-string (py-source-file-loader-object-path loader))))
+
 (setf (py-type-attr *py-source-file-loader-type* "is_package")
       (lambda (loader fullname)
         (let* ((filename-base (pathname-name (py-source-file-loader-object-path loader)))
