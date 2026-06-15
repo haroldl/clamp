@@ -1240,6 +1240,13 @@
                (t
                 (write-char char stream))))))
 
+(defun py-string-capitalize (value)
+  (if (= (length value) 0)
+      value
+      (concatenate 'string
+                   (string-upcase (subseq value 0 1))
+                   (string-downcase (subseq value 1)))))
+
 (defun py-string-default-strip-char-p (char)
   (member (char-code char) '(9 10 11 12 13 28 29 30 31 32 133 160 5760 8192 8193 8194 8195 8196 8197 8198 8199 8200 8201 8202 8232 8233 8239 8287 12288)))
 
@@ -1346,6 +1353,10 @@
 (setf (py-type-attr *py-str-type* "swapcase")
       (lambda (obj)
         (py-string-swapcase obj)))
+
+(setf (py-type-attr *py-str-type* "capitalize")
+      (lambda (obj)
+        (py-string-capitalize obj)))
 
 (setf (py-type-attr *py-str-type* "strip")
       (lambda (obj &optional (chars *py-none*))
