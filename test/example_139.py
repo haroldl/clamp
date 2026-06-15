@@ -1,0 +1,8 @@
+print("a,b,,c".split(","))
+print("a,b,,c".split(",", 2))
+print("a--b--".split("--"))
+print("abc".split("z"))
+print("  alpha  beta  gamma  ".split())
+print("  alpha  beta  gamma  ".split(None, 1))
+print("".split(","), "".split())
+print("a b c".split(None, True))
