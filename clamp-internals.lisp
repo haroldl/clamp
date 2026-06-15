@@ -946,6 +946,10 @@
         (with-output-to-string (stream)
           (py-repr loader stream))))
 
+(setf (py-type-attr *py-source-file-loader-type* "__eq__")
+      (lambda (loader other)
+        (py-bool (py-source-file-loader-eq loader other))))
+
 (setf (py-type-attr *py-source-file-loader-type* "__hash__")
       (lambda (loader)
         (py-source-file-loader-hash loader)))
@@ -1010,6 +1014,10 @@
       (lambda (spec)
         (with-output-to-string (stream)
           (py-repr spec stream))))
+
+(setf (py-type-attr *py-module-spec-type* "__eq__")
+      (lambda (spec other)
+        (py-bool (py-module-spec-eq spec other))))
 
 (defun make-clamp-module (name &key source-path package-name package-p)
   (let ((module (make-py-module-object :type *py-module-type*
