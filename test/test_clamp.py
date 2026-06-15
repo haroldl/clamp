@@ -102,6 +102,7 @@ EXAMPLE_119 = TEST_DIR / "example_119.py"
 EXAMPLE_120 = TEST_DIR / "example_120.py"
 EXAMPLE_121 = TEST_DIR / "example_121.py"
 EXAMPLE_122 = TEST_DIR / "example_122.py"
+EXAMPLE_123 = TEST_DIR / "example_123.py"
 CPYTHON_314 = Path.home() / "local" / "Python-3.14.5" / "python"
 
 
@@ -530,5 +531,19 @@ def test_str_isdigit_example_matches_local_cpython_when_available():
         text=True,
     )
     clamp_result = run_clamp(EXAMPLE_122)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
+def test_str_isalnum_example_matches_local_cpython_when_available():
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(EXAMPLE_123)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(EXAMPLE_123)
     assert clamp_result.stdout == cpython_result.stdout
 

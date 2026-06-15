@@ -1,0 +1,8 @@
+print("".isalnum())
+print("abc".isalnum(), "ABC123".isalnum())
+print("123".isalnum(), "abc123".isalnum())
+print("abc def".isalnum(), "abc_def".isalnum())
+print("12.3".isalnum(), "_".isalnum())
+print(chr(233).isalnum(), chr(937).isalnum(), chr(223).isalnum())
+print(chr(178).isalnum(), chr(178).isalpha(), chr(178).isdigit())
+print(["alpha7".isalnum(), "alpha 7".isalnum(), "".isalnum()])

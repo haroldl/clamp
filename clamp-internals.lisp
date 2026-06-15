@@ -1319,6 +1319,13 @@
         (loop for char across value
               always (alpha-char-p char)))))
 
+(defun py-string-isalnum (value)
+  (py-bool
+   (and (> (length value) 0)
+        (loop for char across value
+              always (or (alpha-char-p char)
+                         (py-unicode-digit-char-p char))))))
+
 (defun py-string-swapcase (value)
   (with-output-to-string (stream)
     (loop for char across value
@@ -1476,6 +1483,10 @@
 (setf (py-type-attr *py-str-type* "isalpha")
       (lambda (obj)
         (py-string-isalpha obj)))
+
+(setf (py-type-attr *py-str-type* "isalnum")
+      (lambda (obj)
+        (py-string-isalnum obj)))
 
 (setf (py-type-attr *py-str-type* "swapcase")
       (lambda (obj)
