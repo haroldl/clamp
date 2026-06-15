@@ -951,9 +951,9 @@
 
 (setf (py-type-attr *py-source-file-loader-type* "exec_module")
       (lambda (loader module)
-        (declare (ignore loader))
         (unless (py-module-object-p module)
           (error "exec_module() expected module object, got ~S" module))
+        (py-source-file-loader-check-name loader (py-object-attr module "__name__"))
         (unless *py-module-loader*
           (error "Clamp module loader is not installed"))
         (let ((*py-current-module* module))

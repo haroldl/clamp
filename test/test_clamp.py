@@ -1470,3 +1470,32 @@ def test_import_source_file_loader_exec_module_matches_local_cpython_when_availa
     )
     clamp_result = run_clamp(sample)
     assert clamp_result.stdout == cpython_result.stdout
+
+
+def test_import_source_file_loader_exec_module_name_mismatch_fails_like_local_cpython_when_available():
+    sample = TEST_DIR / "import_loader_exec_module_name_mismatch.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = subprocess.run(
+        [str(CLAMP), str(sample)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert cpython_result.returncode != 0
+    assert clamp_result.returncode != 0
+    assert (
+        "loader for import_exec_module_target cannot handle renamed_exec_module_target"
+        in cpython_result.stderr
+    )
+    assert (
+        "loader for import_exec_module_target cannot handle renamed_exec_module_target"
+        in clamp_result.stderr
+    )
+    assert "should not execute" not in clamp_result.stdout
