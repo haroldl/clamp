@@ -949,6 +949,21 @@
         (declare (ignore loader spec))
         *py-none*))
 
+(setf (py-type-attr *py-source-file-loader-type* "exec_module")
+      (lambda (loader module)
+        (declare (ignore loader))
+        (unless (py-module-object-p module)
+          (error "exec_module() expected module object, got ~S" module))
+        (unless *py-module-loader*
+          (error "Clamp module loader is not installed"))
+        (let ((*py-current-module* module))
+          (py-ensure-module-package module)
+          (funcall *py-module-loader*
+                   (py-module-object-source-path module)
+                   (py-module-object-name module)
+                   (py-module-object-package-name module)))
+        *py-none*))
+
 (setf (py-type-attr *py-source-file-loader-type* "load_module")
       (lambda (loader fullname)
         (py-source-file-loader-check-name loader fullname)
