@@ -1326,6 +1326,12 @@
               always (or (alpha-char-p char)
                          (py-unicode-digit-char-p char))))))
 
+(defun py-string-isspace (value)
+  (py-bool
+   (and (> (length value) 0)
+        (loop for char across value
+              always (py-string-default-strip-char-p char)))))
+
 (defun py-string-islower (value)
   (let ((cased nil))
     (loop for char across value
@@ -1498,6 +1504,10 @@
 (setf (py-type-attr *py-str-type* "isalnum")
       (lambda (obj)
         (py-string-isalnum obj)))
+
+(setf (py-type-attr *py-str-type* "isspace")
+      (lambda (obj)
+        (py-string-isspace obj)))
 
 (setf (py-type-attr *py-str-type* "islower")
       (lambda (obj)

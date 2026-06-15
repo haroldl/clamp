@@ -1,0 +1,6 @@
+print("".isspace())
+print(" ".isspace(), "\t\n\r\v\f".isspace())
+print(" a ".isspace(), "abc".isspace())
+print("1".isspace(), "_".isspace())
+print(chr(160).isspace(), chr(8195).isspace(), chr(133).isspace())
+print([" ".isspace(), " \t".isspace(), "x y".isspace()])
