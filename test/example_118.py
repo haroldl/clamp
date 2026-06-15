@@ -1,0 +1,5 @@
+print("".isascii())
+print("abc".isascii(), "ABC123".isascii())
+print(chr(0).isascii(), chr(127).isascii(), chr(128).isascii())
+print(("a" + chr(128)).isascii())
+print(["plain".isascii(), ("caf" + chr(233)).isascii()])

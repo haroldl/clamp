@@ -1285,6 +1285,11 @@
 (defun py-string-upper (value)
   (string-upcase value))
 
+(defun py-string-isascii (value)
+  (py-bool
+   (loop for char across value
+         always (<= (char-code char) #x7f))))
+
 (defun py-string-swapcase (value)
   (with-output-to-string (stream)
     (loop for char across value
@@ -1426,6 +1431,10 @@
 (setf (py-type-attr *py-str-type* "upper")
       (lambda (obj)
         (py-string-upper obj)))
+
+(setf (py-type-attr *py-str-type* "isascii")
+      (lambda (obj)
+        (py-string-isascii obj)))
 
 (setf (py-type-attr *py-str-type* "swapcase")
       (lambda (obj)
