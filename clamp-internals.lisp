@@ -2844,29 +2844,57 @@
              (otherwise (princ char stream))))
   (princ "'" stream))
 
+(defvar *py-repr-stack* nil)
+
+(defun py-repr-enter (value)
+  (if (member value *py-repr-stack* :test #'eq)
+      t
+      (progn
+        (push value *py-repr-stack*)
+        nil)))
+
+(defun py-repr-leave (value)
+  (setf *py-repr-stack* (remove value *py-repr-stack* :test #'eq :count 1)))
+
+(defun py-list-repr (value stream)
+  (if (py-repr-enter value)
+      (princ "[...]" stream)
+      (unwind-protect
+           (progn
+             (princ "[" stream)
+             (loop for index from 0 below (or (py-object-size value) 0)
+                   do (progn
+                        (when (> index 0)
+                          (princ ", " stream))
+                        (py-repr (aref (py-object-value value) index) stream)))
+             (princ "]" stream))
+        (py-repr-leave value))))
+
+(defun py-tuple-repr (value stream)
+  (if (py-repr-enter value)
+      (princ "(...)" stream)
+      (unwind-protect
+           (progn
+             (princ "(" stream)
+             (loop for index from 0 below (or (py-object-size value) 0)
+                   do (progn
+                        (when (> index 0)
+                          (princ ", " stream))
+                        (py-repr (aref (py-object-value value) index) stream)))
+             (when (= (or (py-object-size value) 0) 1)
+               (princ "," stream))
+             (princ ")" stream))
+        (py-repr-leave value))))
+
 (defun py-repr (value &optional (stream *standard-output*))
   (cond
     ((py-type-p value)
      (format stream "<class '~A'>" (py-type-name value)))
     ((stringp value) (py-string-repr value stream))
     ((py-list-object-p value)
-     (princ "[" stream)
-     (loop for index from 0 below (or (py-object-size value) 0)
-           do (progn
-                (when (> index 0)
-                  (princ ", " stream))
-                (py-repr (aref (py-object-value value) index) stream)))
-     (princ "]" stream))
+     (py-list-repr value stream))
     ((py-tuple-object-p value)
-     (princ "(" stream)
-     (loop for index from 0 below (or (py-object-size value) 0)
-           do (progn
-                (when (> index 0)
-                  (princ ", " stream))
-                (py-repr (aref (py-object-value value) index) stream)))
-     (when (= (or (py-object-size value) 0) 1)
-       (princ "," stream))
-     (princ ")" stream))
+     (py-tuple-repr value stream))
     ((py-range-object-p value)
      (if (= (py-range-object-step value) 1)
          (format stream "range(~A, ~A)"
