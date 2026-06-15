@@ -1172,6 +1172,12 @@
         (subseq value 0 (- value-size suffix-size))
         value)))
 
+(defun py-string-lower (value)
+  (string-downcase value))
+
+(defun py-string-upper (value)
+  (string-upcase value))
+
 (defun py-string-getitem (value index)
   (if (py-slice-object-p index)
       (py-string-slice value index)
@@ -1235,6 +1241,14 @@
 (setf (py-type-attr *py-str-type* "removesuffix")
       (lambda (obj suffix)
         (py-string-removesuffix obj suffix)))
+
+(setf (py-type-attr *py-str-type* "lower")
+      (lambda (obj)
+        (py-string-lower obj)))
+
+(setf (py-type-attr *py-str-type* "upper")
+      (lambda (obj)
+        (py-string-upper obj)))
 
 (setf (py-type-attr *py-int-type* "bit_length")
       (lambda (obj)
