@@ -892,6 +892,17 @@
           (if pos (subseq name 0 pos) ""))
         name)))
 
+(defun py-module-spec-cached (spec)
+  (let ((cached (py-module-spec-object-cached spec)))
+    (when (and (eq cached *py-none*)
+               (py-module-spec-object-origin spec)
+               (py-module-spec-object-set-fileattr spec))
+      (setf cached (py-source-cache-path (py-module-spec-object-origin spec)))
+      (setf (py-module-spec-object-cached spec) cached)
+      (setf (gethash "cached" (py-object-attrs spec)) cached)
+      (setf (gethash "_cached" (py-object-attrs spec)) cached))
+    cached))
+
 (defun py-module-package-name (name)
   (concatenate 'string "CLAMP.__module__." name))
 
@@ -1252,6 +1263,8 @@
         (return-from py-lookup-attr attr))))
   (when (and (py-module-spec-object-p obj) (string= name "parent"))
     (return-from py-lookup-attr (py-module-spec-parent obj)))
+  (when (and (py-module-spec-object-p obj) (string= name "cached"))
+    (return-from py-lookup-attr (py-module-spec-cached obj)))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
