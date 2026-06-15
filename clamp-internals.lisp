@@ -494,6 +494,32 @@
                       (= (py-range-object-step left)
                          (py-range-object-step right))))))))
 
+(defun py-source-file-loader-eq (left right)
+  (and (py-source-file-loader-object-p right)
+       (eq (py-object-type left) (py-object-type right))
+       (py-truthy-p
+        (py-eq (py-source-file-loader-object-name left)
+               (py-source-file-loader-object-name right)))
+       (py-truthy-p
+        (py-eq (py-source-file-loader-object-path left)
+               (py-source-file-loader-object-path right)))))
+
+(defun py-spec-field-eq (left right reader)
+  (py-truthy-p
+   (py-eq (or (funcall reader left) *py-none*)
+          (or (funcall reader right) *py-none*))))
+
+(defun py-module-spec-eq (left right)
+  (and (py-module-spec-object-p right)
+       (py-spec-field-eq left right #'py-module-spec-object-name)
+       (py-spec-field-eq left right #'py-module-spec-object-loader)
+       (py-spec-field-eq left right #'py-module-spec-object-origin)
+       (py-spec-field-eq left right
+                         #'py-module-spec-object-submodule-search-locations)
+       (py-spec-field-eq left right #'py-module-spec-object-cached)
+       (eq (py-bool (py-module-spec-object-has-location left))
+           (py-bool (py-module-spec-object-has-location right)))))
+
 (defun py-list-compare (left right operation)
   (let* ((left-size (or (py-object-size left) 0))
          (right-size (or (py-object-size right) 0))
@@ -565,6 +591,10 @@
         (py-tuple-eq left right))
        ((and (py-range-object-p left) (py-range-object-p right))
         (py-range-eq left right))
+       ((py-module-spec-object-p left)
+        (py-module-spec-eq left right))
+       ((py-source-file-loader-object-p left)
+        (py-source-file-loader-eq left right))
        ((and (numberp normalized-left) (numberp normalized-right))
         (= normalized-left normalized-right))
        ((and (stringp left) (stringp right))
