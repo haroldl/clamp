@@ -2543,6 +2543,10 @@
       (lambda (obj)
         (py-iter obj)))
 
+(setf (py-type-attr *py-str-type* "__iter__")
+      (lambda (obj)
+        (py-iter obj)))
+
 (setf (py-type-attr *py-list-iterator-type* "__iter__")
       (lambda (iterator)
         (py-iter iterator)))
