@@ -786,6 +786,7 @@
            (if package-p
                (make-py-list (py-package-source-directory source-path))
                *py-none*))
+         (uninitialized-submodules (make-py-list))
          (spec (make-py-module-spec-object
                 :type *py-module-spec-type*
                 :name name
@@ -793,7 +794,8 @@
                 :origin source-path
                 :cached cached
                 :submodule-search-locations submodule-search-locations
-                :has-location (not (null source-path)))))
+                :has-location (not (null source-path))
+                :uninitialized-submodules uninitialized-submodules)))
     (setf (py-object-attr spec "name") name)
     (setf (py-object-attr spec "loader") *py-none*)
     (setf (py-object-attr spec "origin") (or source-path *py-none*))
@@ -807,6 +809,8 @@
     (setf (py-object-attr spec "submodule_search_locations")
           submodule-search-locations)
     (setf (py-object-attr spec "_initializing") *py-false*)
+    (setf (py-object-attr spec "_uninitialized_submodules")
+          uninitialized-submodules)
     spec))
 
 (defun py-set-module-initializing (module value)
@@ -925,6 +929,14 @@
     (setf (py-module-object-package-name module) (package-name package))
     package))
 
+(defun py-parent-uninitialized-submodules (name)
+  (let ((parent-name (py-module-parent-name name)))
+    (when parent-name
+      (let* ((parent (gethash parent-name *py-sys-modules*))
+             (spec (and parent (py-object-attr parent "__spec__"))))
+        (when (py-module-spec-object-p spec)
+          (py-module-spec-object-uninitialized-submodules spec))))))
+
 (defun py-load-module (name)
   (multiple-value-bind (cached found) (gethash name *py-sys-modules*)
     (when found
@@ -941,17 +953,24 @@
       (when package-p
         (setf (py-object-attr module "__path__")
               (make-py-list (py-package-source-directory source-path))))
-      (let ((*py-current-module* module))
-        (py-ensure-module-package module)
-        (handler-case
-            (progn
-              (unless *py-module-loader*
-                (error "Clamp module loader is not installed"))
-              (funcall *py-module-loader* source-path name (py-module-object-package-name module))
-              (py-set-module-initializing module nil))
-          (error (condition)
-            (remhash name *py-sys-modules*)
-            (error condition))))
+      (let ((parent-uninitialized-submodules
+              (py-parent-uninitialized-submodules name)))
+        (when parent-uninitialized-submodules
+          (py-append parent-uninitialized-submodules (py-module-child-name name)))
+        (unwind-protect
+            (let ((*py-current-module* module))
+              (py-ensure-module-package module)
+              (handler-case
+                  (progn
+                    (unless *py-module-loader*
+                      (error "Clamp module loader is not installed"))
+                    (funcall *py-module-loader* source-path name (py-module-object-package-name module))
+                    (py-set-module-initializing module nil))
+                (error (condition)
+                  (remhash name *py-sys-modules*)
+                  (error condition))))
+          (when parent-uninitialized-submodules
+            (py-pop parent-uninitialized-submodules))))
       (let ((parent-name (py-module-parent-name name)))
         (when parent-name
           (let ((parent (gethash parent-name *py-sys-modules*)))
