@@ -1,0 +1,12 @@
+VALUE = "module value"
+False
+True
+import_value
+NAME = "package root"
+True
+True
+import_pkg
+VALUE = "submodule value"
+False
+True
+import_pkg.sub

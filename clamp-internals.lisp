@@ -982,9 +982,9 @@
         *py-none*))
 
 (setf (py-type-attr *py-source-file-loader-type* "load_module")
-      (lambda (loader fullname)
+      (lambda (loader &optional fullname)
         (py-source-file-loader-check-name loader fullname)
-        (py-import-module fullname)))
+        (py-import-module (or fullname (py-source-file-loader-object-name loader)))))
 
 (setf (py-type-attr *py-source-file-loader-type* "is_package")
       (lambda (loader fullname)
