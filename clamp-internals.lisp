@@ -47,6 +47,7 @@
    :py-zip-object
    :py-filter-object
    :py-map-object
+   :py-bytes-object
    :py-range-object
    :py-range-iterator-object
    :py-slice-object
@@ -218,6 +219,16 @@
                 :bases (list *py-object-type*)
                 :basicsize 1
                 :sequence-length-fn #'length))
+
+(defparameter *py-bytes-type*
+  (make-py-type :type *py-type-type*
+                :name "bytes"
+                :bases (list *py-object-type*)
+                :basicsize 1
+                :itemsize 1
+                :sequence-length-fn
+                (lambda (obj)
+                  (or (py-object-size obj) 0))))
 
 (defparameter *py-base-exception-type*
   (make-py-type :type *py-type-type*
@@ -939,6 +950,11 @@
         (py-source-file-loader-check-name loader fullname)
         (py-source-file-loader-object-path loader)))
 
+(setf (py-type-attr *py-source-file-loader-type* "get_data")
+      (lambda (loader path)
+        (declare (ignore loader))
+        (py-read-file-bytes path)))
+
 (setf (py-type-attr *py-source-file-loader-type* "get_source")
       (lambda (loader fullname)
         (py-source-file-loader-check-name loader fullname)
@@ -1396,6 +1412,9 @@
   package-name
   (initializing nil))
 
+(defstruct (py-bytes-object (:include py-object)))
+
+
 (defstruct (py-tuple-iterator-object (:include py-object))
   sequence
   (index 0))
@@ -1521,6 +1540,24 @@
     (error "~A only supports tuple objects, got ~S" operation obj))
   (py-object-value obj))
 
+(defun py-bytes-storage (obj operation)
+  (unless (eq (py-object-type obj) *py-bytes-type*)
+    (error "~A only supports bytes objects, got ~S" operation obj))
+  (py-object-value obj))
+
+(defun make-py-bytes-from-vector (storage)
+  (make-py-bytes-object :type *py-bytes-type*
+                        :size (length storage)
+                        :value storage))
+
+(defun py-read-file-bytes (path)
+  (with-open-file (stream path :direction :input
+                               :element-type (quote (unsigned-byte 8)))
+    (let* ((size (file-length stream))
+           (storage (make-array size :element-type (quote (unsigned-byte 8)))))
+      (read-sequence storage stream)
+      (make-py-bytes-from-vector storage))))
+
 (defun py-list-index (obj index)
   (if (< index 0)
       (+ index (or (py-object-size obj) 0))
@@ -1607,6 +1644,17 @@
             (make-py-tuple-object :type *py-tuple-type*
                                   :size slice-length
                                   :value result-storage))))))
+
+(defun py-bytes-slice (obj slice)
+  (let* ((storage (py-bytes-storage obj "__getitem__"))
+         (size (or (py-object-size obj) 0)))
+    (multiple-value-bind (start step slice-length)
+        (py-list-slice-parameters slice size)
+      (let ((result-storage (make-array slice-length :element-type (quote (unsigned-byte 8)))))
+        (loop for offset from 0 below slice-length
+              for index = start then (+ index step)
+              do (setf (aref result-storage offset) (aref storage index)))
+        (make-py-bytes-from-vector result-storage)))))
 
 (defun py-string-normalized-index (value index)
   (let* ((size (length value))
@@ -2875,6 +2923,23 @@
         (with-output-to-string (stream)
           (py-repr obj stream))))
 
+(setf (py-type-attr *py-bytes-type* "__len__")
+      (lambda (obj)
+        (py-bytes-storage obj "__len__")
+        (or (py-object-size obj) 0)))
+
+(setf (py-type-attr *py-bytes-type* "__getitem__")
+      (lambda (obj index)
+        (if (py-slice-object-p index)
+            (py-bytes-slice obj index)
+            (aref (py-bytes-storage obj "__getitem__")
+                  (py-list-normalized-index obj index "bytes")))))
+
+(setf (py-type-attr *py-bytes-type* "__repr__")
+      (lambda (obj)
+        (with-output-to-string (stream)
+          (py-repr obj stream))))
+
 (setf (py-type-attr *py-tuple-type* "__contains__")
       (lambda (obj value)
         (py-contains value obj)))
@@ -3959,6 +4024,14 @@
     ((stringp value) (py-string-repr value stream))
     ((py-list-object-p value)
      (py-list-repr value stream))
+    ((py-bytes-object-p value)
+     (princ "b" stream)
+     (py-string-repr
+      (with-output-to-string (bytes-stream)
+        (loop for index from 0 below (or (py-object-size value) 0)
+              do (write-char (code-char (aref (py-object-value value) index))
+                             bytes-stream)))
+      stream))
     ((py-tuple-object-p value)
      (py-tuple-repr value stream))
     ((py-module-spec-object-p value)
@@ -4004,6 +4077,7 @@
     ((py-range-iterator-p value) (princ "<range_iterator>" stream))
     ((py-type-p value) (py-repr value stream))
     ((py-list-object-p value) (py-repr value stream))
+    ((py-bytes-object-p value) (py-repr value stream))
     ((py-tuple-object-p value) (py-repr value stream))
     ((py-module-spec-object-p value) (py-repr value stream))
     ((py-source-file-loader-object-p value) (py-repr value stream))
