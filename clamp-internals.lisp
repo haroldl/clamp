@@ -260,6 +260,12 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-source-file-loader-type*
+  (make-py-type :type *py-type-type*
+                :name "SourceFileLoader"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
 
@@ -779,10 +785,23 @@
   (initializing nil)
   (uninitialized-submodules '()))
 
+(defstruct (py-source-file-loader-object (:include py-object))
+  name
+  path)
+
 (defun py-module-package-name (name)
   (concatenate 'string "CLAMP.__module__." name))
 
-(defun make-clamp-module-spec (name source-path package-p)
+(defun make-clamp-source-file-loader (name source-path)
+  (let ((loader (make-py-source-file-loader-object
+                 :type *py-source-file-loader-type*
+                 :name name
+                 :path source-path)))
+    (setf (py-object-attr loader "name") name)
+    (setf (py-object-attr loader "path") source-path)
+    loader))
+
+(defun make-clamp-module-spec (name source-path package-p loader)
   (let* ((cached (and source-path (py-source-cache-path source-path)))
          (submodule-search-locations
            (if package-p
@@ -792,7 +811,7 @@
          (spec (make-py-module-spec-object
                 :type *py-module-spec-type*
                 :name name
-                :loader *py-none*
+                :loader loader
                 :loader-state *py-none*
                 :origin source-path
                 :cached cached
@@ -801,7 +820,7 @@
                 :has-location (not (null source-path))
                 :uninitialized-submodules uninitialized-submodules)))
     (setf (py-object-attr spec "name") name)
-    (setf (py-object-attr spec "loader") *py-none*)
+    (setf (py-object-attr spec "loader") loader)
     (setf (py-object-attr spec "loader_state") *py-none*)
     (setf (py-object-attr spec "origin") (or source-path *py-none*))
     (setf (py-object-attr spec "cached") (or cached *py-none*))
@@ -831,7 +850,10 @@
   (let ((module (make-py-module-object :type *py-module-type*
                                        :name name
                                        :source-path source-path
-                                       :package-name (or package-name (py-module-package-name name)))))
+                                       :package-name (or package-name (py-module-package-name name))))
+        (loader (if source-path
+                    (make-clamp-source-file-loader name source-path)
+                    *py-none*)))
     (setf (py-object-attr module "__name__") name)
     (setf (py-object-attr module "__doc__") *py-none*)
     (setf (py-object-attr module "__package__")
@@ -839,13 +861,13 @@
               name
               (let ((pos (position #\. name :from-end t)))
                 (if pos (subseq name 0 pos) ""))))
-    (setf (py-object-attr module "__loader__") *py-none*)
+    (setf (py-object-attr module "__loader__") loader)
     (setf (py-object-attr module "__spec__") *py-none*)
     (when source-path
       (py-set-module-source-path module source-path))
     (unless (string= name "__main__")
       (setf (py-object-attr module "__spec__")
-            (make-clamp-module-spec name source-path package-p)))
+            (make-clamp-module-spec name source-path package-p loader)))
     module))
 
 (defun py-enter-module (name source-path package-name)
