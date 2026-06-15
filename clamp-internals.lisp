@@ -997,13 +997,15 @@
          (size (or (py-object-size obj) 0)))
     (multiple-value-bind (start step slice-length)
         (py-list-slice-parameters slice size)
-      (let ((result-storage (make-array slice-length)))
-        (loop for offset from 0 below slice-length
-              for index = start then (+ index step)
-              do (setf (aref result-storage offset) (aref storage index)))
-        (make-py-tuple-object :type *py-tuple-type*
-                              :size slice-length
-                              :value result-storage)))))
+      (if (and (= start 0) (= step 1) (= slice-length size))
+          obj
+          (let ((result-storage (make-array slice-length)))
+            (loop for offset from 0 below slice-length
+                  for index = start then (+ index step)
+                  do (setf (aref result-storage offset) (aref storage index)))
+            (make-py-tuple-object :type *py-tuple-type*
+                                  :size slice-length
+                                  :value result-storage))))))
 
 (defun py-string-normalized-index (value index)
   (let* ((size (length value))
