@@ -729,6 +729,8 @@
        (return-from py-lookup-attr (py-range-object-stop obj)))
       ((string= name "step")
        (return-from py-lookup-attr (py-range-object-step obj)))))
+  (when (and (py-type-p obj) (string= name "__name__"))
+    (return-from py-lookup-attr (py-type-name obj)))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found

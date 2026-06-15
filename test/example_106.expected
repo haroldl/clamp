@@ -1,0 +1,10 @@
+int
+bool
+NoneType
+str
+list
+tuple
+range
+type
+list_iterator
+range_iterator
