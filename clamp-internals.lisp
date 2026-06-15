@@ -20,6 +20,17 @@
    :py-object-attr
    :py-lookup-attr
    :py-call-attr
+   :py-module-object
+   :py-module-object-name
+   :py-module-object-source-path
+   :py-module-object-package-name
+   :*py-current-module*
+   :*py-module-search-paths*
+   :*py-module-loader*
+   :py-enter-module
+   :py-set-global
+   :py-import-name
+   :py-import-from
    :py-type-of
    :py-callable
    :py-isinstance
@@ -237,6 +248,12 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-module-type*
+  (make-py-type :type *py-type-type*
+                :name "module"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
 
@@ -306,6 +323,7 @@
 
 (defun py-type-of (value)
   (cond
+    ((py-module-object-p value) *py-module-type*)
     ((py-object-p value) (py-object-type value))
     ((integerp value) *py-int-type*)
     ((floatp value) *py-float-type*)
@@ -738,6 +756,156 @@
 (defun (setf py-object-attr) (value obj name)
   (setf (gethash name (py-object-attrs obj)) value))
 
+(defvar *py-current-module* nil)
+(defvar *py-module-search-paths* nil)
+(defvar *py-module-loader* nil)
+(defvar *py-sys-modules* (make-hash-table :test #'equal))
+
+(defun py-module-package-name (name)
+  (concatenate 'string "CLAMP.__module__." name))
+
+(defun make-clamp-module (name &key source-path package-name)
+  (let ((module (make-py-module-object :type *py-module-type*
+                                       :name name
+                                       :source-path source-path
+                                       :package-name (or package-name (py-module-package-name name)))))
+    (setf (py-object-attr module "__name__") name)
+    (setf (py-object-attr module "__doc__") *py-none*)
+    (setf (py-object-attr module "__package__")
+          (let ((pos (position #\. name :from-end t)))
+            (if pos (subseq name 0 pos) "")))
+    (setf (py-object-attr module "__loader__") *py-none*)
+    (setf (py-object-attr module "__spec__") *py-none*)
+    (when source-path
+      (setf (py-object-attr module "__file__") source-path))
+    module))
+
+(defun py-enter-module (name source-path package-name)
+  (let ((module (or (gethash name *py-sys-modules*)
+                    (make-clamp-module name :source-path source-path :package-name package-name))))
+    (when source-path
+      (setf (py-module-object-source-path module) source-path)
+      (setf (py-object-attr module "__file__") source-path))
+    (when package-name
+      (setf (py-module-object-package-name module) package-name))
+    (setf (gethash name *py-sys-modules*) module)
+    (setf *py-current-module* module)
+    module))
+
+(defmacro py-set-global (name symbol value)
+  `(progn
+     (setq ,symbol ,value)
+     (when *py-current-module*
+       (setf (py-object-attr *py-current-module* ,name) ,symbol))
+     ,symbol))
+
+(defun py-module-root-name (name)
+  (let ((pos (position #\. name)))
+    (if pos (subseq name 0 pos) name)))
+
+(defun py-module-parent-name (name)
+  (let ((pos (position #\. name :from-end t)))
+    (and pos (subseq name 0 pos))))
+
+(defun py-module-child-name (name)
+  (let ((pos (position #\. name :from-end t)))
+    (if pos (subseq name (1+ pos)) name)))
+
+(defun split-string-on-char (value char)
+  (let ((parts '()) (start 0))
+    (loop for pos = (position char value :start start)
+          do (if pos
+                 (progn
+                   (push (subseq value start pos) parts)
+                   (setf start (1+ pos)))
+                 (progn
+                   (push (subseq value start) parts)
+                   (return))))
+    (nreverse parts)))
+
+(defun py-module-path-components (name)
+  (split-string-on-char name #\.))
+
+(defun py-probe-file (path)
+  (let ((probe (probe-file path)))
+    (and probe (namestring probe))))
+
+(defun py-find-module-source (name)
+  (let* ((components (py-module-path-components name))
+         (relative-file (format nil "~{~A~^/~}.py" components))
+         (relative-init (format nil "~{~A~^/~}/__init__.py" components)))
+    (loop for root in (or *py-module-search-paths* (list (namestring (uiop:getcwd))))
+          for file-path = (merge-pathnames relative-file (uiop:ensure-directory-pathname root))
+          for init-path = (merge-pathnames relative-init (uiop:ensure-directory-pathname root))
+          for file = (py-probe-file file-path)
+          for init = (py-probe-file init-path)
+          when file do (return (values file nil))
+          when init do (return (values init t))
+          finally (return (values nil nil)))))
+
+(defun py-ensure-module-package (module)
+  (let* ((package-name (py-module-object-package-name module))
+         (package (or (find-package package-name)
+                      (make-package package-name :use '("CLAMP.__builtins__")))))
+    (setf (py-module-object-package-name module) (package-name package))
+    package))
+
+(defun py-load-module (name)
+  (multiple-value-bind (cached found) (gethash name *py-sys-modules*)
+    (when found
+      (return-from py-load-module cached)))
+  (let ((parent-name (py-module-parent-name name)))
+    (when parent-name
+      (py-load-module parent-name)))
+  (multiple-value-bind (source-path package-p) (py-find-module-source name)
+    (unless source-path
+      (error "No module named '~A'" name))
+    (let ((module (make-clamp-module name :source-path source-path)))
+      (setf (py-module-object-initializing module) t)
+      (setf (gethash name *py-sys-modules*) module)
+      (when package-p
+        (setf (py-object-attr module "__path__")
+              (namestring (uiop:pathname-directory-pathname source-path))))
+      (let ((*py-current-module* module))
+        (py-ensure-module-package module)
+        (handler-case
+            (progn
+              (unless *py-module-loader*
+                (error "Clamp module loader is not installed"))
+              (funcall *py-module-loader* source-path name (py-module-object-package-name module))
+              (setf (py-module-object-initializing module) nil))
+          (error (condition)
+            (remhash name *py-sys-modules*)
+            (error condition))))
+      (let ((parent-name (py-module-parent-name name)))
+        (when parent-name
+          (let ((parent (gethash parent-name *py-sys-modules*)))
+            (when parent
+              (setf (py-object-attr parent (py-module-child-name name)) module)))))
+      module)))
+
+(defun py-import-module (name)
+  (py-load-module name))
+
+(defun py-import-name (name &optional fromlist)
+  (let ((module (py-import-module name)))
+    (if (and fromlist (> (length fromlist) 0))
+        module
+        (py-import-module (py-module-root-name name)))))
+
+(defun py-import-from (module name)
+  (multiple-value-bind (attr found) (gethash name (py-object-attrs module))
+    (when found
+      (return-from py-import-from attr)))
+  (let ((full-name (concatenate 'string (py-module-object-name module) "." name)))
+    (multiple-value-bind (cached found) (gethash full-name *py-sys-modules*)
+      (when found
+        (return-from py-import-from cached)))
+    (handler-case
+        (py-import-module full-name)
+      (error ()
+        (error "cannot import name '~A' from '~A'" name (py-module-object-name module))))))
+
 (defun py-find-type-attr (type name)
   (multiple-value-bind (attr found) (gethash name (py-type-attrs type))
     (if found
@@ -808,7 +976,10 @@
      (error "isinstance() arg 2 must be a type or tuple of types"))))
 
 (defun py-call-attr (obj name &rest args)
-  (apply #'py-invoke-callable (py-lookup-attr obj name) obj args))
+  (let ((callable (py-lookup-attr obj name)))
+    (if (py-module-object-p obj)
+        (apply #'py-invoke-callable callable args)
+        (apply #'py-invoke-callable callable obj args))))
 
 (defstruct (py-list-object (:include py-object))
   (allocated 0))
@@ -831,6 +1002,12 @@
 (defstruct (py-string-reverse-iterator-object (:include py-object))
   sequence
   (index -1))
+
+(defstruct (py-module-object (:include py-object))
+  name
+  source-path
+  package-name
+  (initializing nil))
 
 (defstruct (py-tuple-iterator-object (:include py-object))
   sequence
@@ -3397,6 +3574,12 @@
      (py-list-repr value stream))
     ((py-tuple-object-p value)
      (py-tuple-repr value stream))
+    ((py-module-object-p value)
+     (if (py-module-object-source-path value)
+         (format stream "<module '~A' from '~A'>"
+                 (py-module-object-name value)
+                 (py-module-object-source-path value))
+         (format stream "<module '~A'>" (py-module-object-name value))))
     ((py-range-object-p value)
      (if (= (py-range-object-step value) 1)
          (format stream "range(~A, ~A)"
@@ -3430,6 +3613,7 @@
     ((py-type-p value) (py-repr value stream))
     ((py-list-object-p value) (py-repr value stream))
     ((py-tuple-object-p value) (py-repr value stream))
+    ((py-module-object-p value) (py-repr value stream))
     (t (princ value stream))))
 
 (defun py-append (obj value)

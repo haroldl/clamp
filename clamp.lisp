@@ -121,42 +121,61 @@
   (write-line "Locals:")
   (write-line (python-to-lisp-string py-locals)))
 
-(defun clamp-compile-and-run (python-code py-globals py-locals interactive)
-  ;; Set a local variable to hold the code to be compiled:
+(defun clamp-compile-source (python-code py-globals py-locals module-name package-name source-path)
+  ;; Set local variables to hold the compile request for embedded Python.
   (py-dict-set-item py-locals (py-unicode-from-string "python_source_to_compile") (py-unicode-from-string python-code))
+  (py-dict-set-item py-locals (py-unicode-from-string "clamp_module_name") (py-unicode-from-string module-name))
+  (py-dict-set-item py-locals (py-unicode-from-string "clamp_package_name") (py-unicode-from-string package-name))
+  (py-dict-set-item py-locals
+                    (py-unicode-from-string "clamp_source_path")
+                    (if source-path
+                        (py-unicode-from-string source-path)
+                        *py-none*))
+  (py-run-string "clamp_compiler(python_source_to_compile, clamp_module_name, clamp_package_name, clamp_source_path)"
+                 py-eval-input
+                 py-globals
+                 py-locals))
 
+(defun eval-generated-lisp (generated-lisp-code interactive)
+  (let ((*package* *package*)
+        (result nil)
+        (eof (gensym "EOF")))
+    (with-input-from-string (stream generated-lisp-code)
+      (loop for form = (read stream nil eof)
+            until (eq form eof)
+            do (progn
+                 (when *verbose*
+                   (write-line "code-to-run:")
+                   (print form)
+                   (write-line "")
+                   (write-line "")
+                   (write-line "running:"))
+                 (setf result (eval form)))))
+    (when (and interactive (not (eq result |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)))
+      (|CLAMP.__CLAMP_INTERNALS__|:PY-DISPLAY result)
+      (terpri))
+    (when *verbose*
+      (write-line "")
+      (write-line "Result:")
+      (print result)
+      (write-line ""))))
+
+(defun clamp-compile-and-run (python-code py-globals py-locals interactive &optional source-path)
   ;; Invoke the Python code to compile the input Python code to Common Lisp:
-  (let ((result (py-run-string "clamp_compiler(python_source_to_compile)" py-eval-input py-globals py-locals)))
+  (let ((result (clamp-compile-source python-code py-globals py-locals "__main__" "CLAMP" source-path)))
     (if (py-err-occurred)
-	(py-err-print))
-    (if (and result (not (eq *py-none* result)))
-	(let ((generated-lisp-code (python-to-lisp-string result)))
-	  (if (not (string= "<NULL>" generated-lisp-code))
-	      (progn
-		(when *verbose*
-		  (write-line "Generated Lisp code:")
-		  (write-line generated-lisp-code))
-		(if *compile-only*
-		    (write-line generated-lisp-code)
-		    (let ((code-to-run (read-from-string
-					(concatenate 'string "(cl::progn " generated-lisp-code ")"))))
-		      (when *verbose*
-			(write-line "code-to-run:")
-			(print code-to-run)
-			(write-line "")
-			(write-line "")
-			(write-line "running:"))
-		      (let ((result (eval code-to-run)))
-			(when (and interactive (not (eq result |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)))
-			  (|CLAMP.__CLAMP_INTERNALS__|:PY-DISPLAY result)
-			  (terpri))
-			(when *verbose*
-			  (write-line "")
-			  (write-line "Result:")
-			  (print result)
-			  (write-line "")))))
-		(when *verbose*
-		  (write-line ""))))))))
+        (py-err-print))
+    (when (and result (not (eq *py-none* result)))
+      (let ((generated-lisp-code (python-to-lisp-string result)))
+        (unless (string= "<NULL>" generated-lisp-code)
+          (when *verbose*
+            (write-line "Generated Lisp code:")
+            (write-line generated-lisp-code))
+          (if *compile-only*
+              (write-line generated-lisp-code)
+              (eval-generated-lisp generated-lisp-code interactive))
+          (when *verbose*
+            (write-line "")))))))
 
 (defun main ()
   ;; save-lisp-and-die does not save the current package info
@@ -221,6 +240,20 @@
 	      (if (py-err-occurred)
 		  (py-err-print))
 
+              (setf |CLAMP.__CLAMP_INTERNALS__|:*PY-MODULE-LOADER*
+                    (lambda (source-path module-name package-name)
+                      (let* ((python-code (uiop:read-file-string source-path))
+                             (result (clamp-compile-source python-code
+                                                           py-globals-and-locals
+                                                           py-globals-and-locals
+                                                           module-name
+                                                           package-name
+                                                           source-path)))
+                        (if (py-err-occurred)
+                            (py-err-print))
+                        (when (and result (not (eq *py-none* result)))
+                          (eval-generated-lisp (python-to-lisp-string result) nil)))))
+
 	      (loop while (not done)
 		    do (progn
 			 (let ((code nil))
@@ -230,7 +263,16 @@
 			       (setf code new-code)
 			       (setf done new-done)))
 			   (if code
-			       (clamp-compile-and-run code py-globals-and-locals py-globals-and-locals interactive))))))
+			       (let ((source-path (and (not interactive) (namestring (truename (car args))))))
+                         (when source-path
+                           (setf |CLAMP.__CLAMP_INTERNALS__|:*PY-MODULE-SEARCH-PATHS*
+                                 (list (namestring (uiop:pathname-directory-pathname source-path))
+                                       (namestring (uiop:getcwd)))))
+                         (clamp-compile-and-run code
+                                                py-globals-and-locals
+                                                py-globals-and-locals
+                                                interactive
+                                                source-path)))))))
 	 (progn
 	   (py-finalize)))))))
 

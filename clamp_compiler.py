@@ -57,6 +57,9 @@ class Context():
     top_level_stmt: bool = True
     block_name: str | None = None
     mutation_context: bool = False
+    module_name: str = "__main__"
+    package_name: str = "CLAMP"
+    source_path: str | None = None
     loop_block_name: str | None = None
     loop_continue_name: str | None = None
     loop_broke_name: str | None = None
@@ -86,7 +89,7 @@ def codegen_assign(node, context : Context):
             return codegen_subscript_store(target, rhs, context.child())
         lhs = codegen(target, context.child())
         if context.top_level_stmt:
-            return f"(|CLAMP.__builtins__|:ASSIGN (:GLOBAL {lhs} {rhs}))"
+            return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {codegen(target.id, context.child())} {lhs} {rhs})"
         else:
             return f"(|CLAMP.__builtins__|:ASSIGN ({lhs} {rhs}))"
     else:
@@ -121,9 +124,9 @@ def codegen_block(stmts, context: Context) -> str:
         if context.top_level_stmt:
             # Top-level module assignment: set global and continue
             if rest_code:
-                return f"(|CLAMP.__builtins__|:ASSIGN (:GLOBAL {lhs} {rhs}) {rest_code})"
+                return f"(common-lisp:progn (|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {codegen(target.id, context.child())} {lhs} {rhs}) {rest_code})"
             else:
-                return f"(|CLAMP.__builtins__|:ASSIGN (:GLOBAL {lhs} {rhs}))"
+                return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {codegen(target.id, context.child())} {lhs} {rhs})"
         elif context.mutation_context:
             assignment_code = f"(common-lisp:setf {lhs} {rhs})"
             return assignment_code + ("\n" + rest_code if rest_code else "")
@@ -167,10 +170,15 @@ def codegen_function(node, context : Context):
             )
             + ") "
         )
+    setter = (
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {codegen(node.name, child_context)} {node.name} "
+        if context.top_level_stmt
+        else f"(common-lisp:setf {node.name} "
+    )
     hed = (
-        f"(common-lisp:setf {node.name} "
-        f"{default_bindings}"
-        f"(common-lisp:lambda ({params}) (common-lisp:block {node.name} "
+        setter
+        + f"{default_bindings}"
+        + f"(common-lisp:lambda ({params}) (common-lisp:block {node.name} "
     )
 
     body_context = replace(child_context, block_name=node.name)
@@ -202,13 +210,26 @@ def codegen_funcall(node, context : Context):
     return f"(common-lisp:funcall {target} {args_str})"
 
 
-def codegen_module(node, context : Context):
-    header_code = """(common-lisp:in-package :clamp)\n(common-lisp:use-package "CLAMP.__builtins__")\n"""
-    name_code = """(common-lisp:setq __name__ "__main__")\n"""
-    # Keep top-level context so ASSIGN can perform global SETQ at module level
-    body_code = codegen_block(node.body, context)
-    return (header_code + name_code + body_code)
+def lisp_string(value: str) -> str:
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
+
+def codegen_module(node, context : Context):
+    header_code = (
+        f"(common-lisp:in-package {lisp_string(context.package_name)})\n"
+        f"(common-lisp:use-package \"CLAMP.__builtins__\")\n"
+    )
+    source_code = "COMMON-LISP::nil" if context.source_path is None else lisp_string(context.source_path)
+    enter_code = (
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-ENTER-MODULE "
+        f"{lisp_string(context.module_name)} {source_code} {lisp_string(context.package_name)})\n"
+    )
+    name_code = (
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL \"__name__\" __name__ "
+        f"{lisp_string(context.module_name)})\n"
+    )
+    body_code = codegen_block(node.body, context)
+    return (header_code + enter_code + name_code + body_code)
 
 def codegen_return(node, context : Context):
     if not context.block_name:
@@ -307,7 +328,7 @@ def codegen_augassign(node, context: Context):
         target = codegen(node.target, child_context)
         value_code = f"({op} {target} {rhs})"
         if context.top_level_stmt:
-            return f"(common-lisp:setq {target} {value_code})"
+            return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {codegen(node.target.id, child_context)} {target} {value_code})"
         return f"(common-lisp:setf {target} {value_code})"
 
     if isinstance(node.target, ast.Subscript):
@@ -444,6 +465,48 @@ def codegen_if(node, context : Context):
     return f"(COMMON-LISP::if (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P {conditional}) {true_branch} {false_branch})"
 
 
+
+def codegen_import_binding(context: Context, local_name: str, value_code: str) -> str:
+    symbol = map_name(local_name)
+    if context.top_level_stmt:
+        return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {lisp_string(local_name)} {symbol} {value_code})"
+    return f"(common-lisp:setf {symbol} {value_code})"
+
+
+def codegen_import(node, context: Context):
+    forms = []
+    for alias in node.names:
+        if alias.asname:
+            bind_name = alias.asname
+            value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(alias.name)} '(\"*\"))"
+        else:
+            bind_name = alias.name.partition('.')[0]
+            value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(alias.name)})"
+        forms.append(codegen_import_binding(context, bind_name, value))
+    return "(common-lisp:progn " + " ".join(forms) + ")"
+
+
+def codegen_import_from(node, context: Context):
+    if node.level:
+        raise Exception("TODO: relative imports are not supported yet")
+    if node.module is None:
+        raise Exception("TODO: relative imports are not supported yet")
+    if any(alias.name == "*" for alias in node.names):
+        raise Exception("TODO: star imports are not supported yet")
+    fromlist = "'(" + " ".join(lisp_string(alias.name) for alias in node.names) + ")"
+    module_symbol = f"__clamp_import_module_{id(node)}"
+    bindings = []
+    for alias in node.names:
+        bind_name = alias.asname or alias.name
+        value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-FROM {module_symbol} {lisp_string(alias.name)})"
+        bindings.append(codegen_import_binding(context, bind_name, value))
+    return (
+        f"(common-lisp:let (({module_symbol} "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(node.module)} {fromlist}))) "
+        + " ".join(bindings)
+        + ")"
+    )
+
 def map_name(name: str) -> str:
     return name
 
@@ -453,6 +516,8 @@ codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
 codegen_handlers[ast.Assign] = codegen_assign
 codegen_handlers[ast.AugAssign] = codegen_augassign
 codegen_handlers[ast.Delete] = codegen_delete
+codegen_handlers[ast.Import] = codegen_import
+codegen_handlers[ast.ImportFrom] = codegen_import_from
 codegen_handlers[ast.Pass] = lambda node, _: "COMMON-LISP::nil"
 codegen_handlers[ast.FunctionDef] = codegen_function
 codegen_handlers[ast.Call] = codegen_funcall
@@ -540,11 +605,19 @@ def codegen_args(args, context: Context, default_symbols=None):
     return " ".join(required_args)
 
 
-def clamp_compiler(code):
+def clamp_compiler(code, module_name="__main__", package_name="CLAMP", source_path=None):
     if CLAMP_VERBOSE:
         print("Preparing to compile:", code)
     code_tree = ast.parse(code)
-    return codegen(code_tree, Context(top_level_stmt=True))
+    return codegen(
+        code_tree,
+        Context(
+            top_level_stmt=True,
+            module_name=module_name,
+            package_name=package_name,
+            source_path=source_path,
+        ),
+    )
 
 
 def demo():
