@@ -770,6 +770,7 @@
 (defstruct (py-module-spec-object (:include py-object))
   name
   loader
+  loader-state
   origin
   cached
   submodule-search-locations
@@ -791,6 +792,7 @@
                 :type *py-module-spec-type*
                 :name name
                 :loader *py-none*
+                :loader-state *py-none*
                 :origin source-path
                 :cached cached
                 :submodule-search-locations submodule-search-locations
@@ -798,6 +800,7 @@
                 :uninitialized-submodules uninitialized-submodules)))
     (setf (py-object-attr spec "name") name)
     (setf (py-object-attr spec "loader") *py-none*)
+    (setf (py-object-attr spec "loader_state") *py-none*)
     (setf (py-object-attr spec "origin") (or source-path *py-none*))
     (setf (py-object-attr spec "cached") (or cached *py-none*))
     (setf (py-object-attr spec "parent")
