@@ -1226,6 +1226,27 @@
                    (princ separator stream))
                  (princ item stream))))))
 
+(defun py-string-expandtabs (value &optional (tabsize 8))
+  (let ((normalized-tabsize (py-normalize-bool-number tabsize)))
+    (unless (integerp normalized-tabsize)
+      (error "integer argument expected, got ~S" tabsize))
+    (with-output-to-string (stream)
+      (let ((line-position 0))
+        (loop for char across value
+              do (cond
+                   ((char= char #\Tab)
+                    (when (> normalized-tabsize 0)
+                      (let ((spaces (- normalized-tabsize
+                                       (mod line-position normalized-tabsize))))
+                        (loop repeat spaces do (write-char #\Space stream))
+                        (incf line-position spaces))))
+                   (t
+                    (write-char char stream)
+                    (incf line-position)
+                    (when (or (char= char #\Newline)
+                              (= (char-code char) 13))
+                      (setf line-position 0)))))))))
+
 (defun py-string-removeprefix (value prefix)
   (unless (stringp prefix)
     (error "removeprefix() argument must be str, not ~S" prefix))
@@ -1475,6 +1496,10 @@
 (setf (py-type-attr *py-str-type* "join")
       (lambda (obj iterable)
         (py-string-join obj iterable)))
+
+(setf (py-type-attr *py-str-type* "expandtabs")
+      (lambda (obj &optional (tabsize 8))
+        (py-string-expandtabs obj tabsize)))
 
 (setf (py-type-attr *py-str-type* "removeprefix")
       (lambda (obj prefix)

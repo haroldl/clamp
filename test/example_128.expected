@@ -1,0 +1,14 @@
+a       b       c
+a   b   c
+    start
+ab  c
+abc
+abc
+a
+    b
+a
+    b
+no tabs
+['x  y', 'x     y', '']
+x y
+xy
