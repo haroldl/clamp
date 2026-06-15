@@ -273,6 +273,8 @@
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
 
+(setf (gethash "__hash__" (py-type-attrs *py-module-spec-type*)) *py-none*)
+
 (defparameter *py-false*
   (make-py-object :type *py-bool-type* :value nil))
 
@@ -416,6 +418,8 @@
        (py-range-hash value))
       ((py-source-file-loader-object-p value)
        (py-source-file-loader-hash value))
+      ((py-module-spec-object-p value)
+       (error "unhashable type: 'ModuleSpec'"))
       ((py-list-object-p value)
        (error "unhashable type: 'list'"))
       (t
