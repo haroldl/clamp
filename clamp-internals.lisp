@@ -1331,6 +1331,19 @@
                                   :initial-element
                                   (py-string-fill-char fillchar "ljust"))))))
 
+(defun py-string-rjust (value width &optional (fillchar " "))
+  (let* ((normalized-width (py-normalize-bool-number width))
+         (size (length value)))
+    (unless (integerp normalized-width)
+      (error "str.rjust() width must be an integer, got ~S" width))
+    (if (>= size normalized-width)
+        value
+        (concatenate 'string
+                     (make-string (- normalized-width size)
+                                  :initial-element
+                                  (py-string-fill-char fillchar "rjust"))
+                     value))))
+
 (defun py-string-isascii (value)
   (py-bool
    (loop for char across value
@@ -1567,6 +1580,10 @@
 (setf (py-type-attr *py-str-type* "ljust")
       (lambda (obj width &optional (fillchar " "))
         (py-string-ljust obj width fillchar)))
+
+(setf (py-type-attr *py-str-type* "rjust")
+      (lambda (obj width &optional (fillchar " "))
+        (py-string-rjust obj width fillchar)))
 
 (setf (py-type-attr *py-str-type* "isascii")
       (lambda (obj)
