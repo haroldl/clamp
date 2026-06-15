@@ -1237,6 +1237,10 @@
       (lambda (obj index)
         (py-string-getitem obj index)))
 
+(setf (py-type-attr *py-str-type* "__contains__")
+      (lambda (obj value)
+        (py-contains value obj)))
+
 (setf (py-type-attr *py-str-type* "count")
       (lambda (obj substring &optional
                    (start *py-none*)
