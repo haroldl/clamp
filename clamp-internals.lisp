@@ -959,6 +959,31 @@
     (setf (py-object-attr reader "path") path)
     reader))
 
+(defun py-file-reader-resource-path (reader resource)
+  (namestring (merge-pathnames resource
+                               (uiop:ensure-directory-pathname
+                                (py-file-reader-object-path reader)))))
+
+(defun py-directory-entry-name (path)
+  (let ((file-name (file-namestring path)))
+    (if (> (length file-name) 0)
+        file-name
+        (let ((directory (pathname-directory
+                          (uiop:ensure-directory-pathname path))))
+          (first (last directory))))))
+
+(defun py-file-reader-contents (reader)
+  (let* ((directory (uiop:ensure-directory-pathname
+                     (py-file-reader-object-path reader)))
+         (entries (append (uiop:directory-files directory)
+                          (uiop:subdirectories directory))))
+    (apply (function make-py-list)
+           (mapcar (function py-directory-entry-name) entries))))
+
+(defun py-file-reader-resource-p (reader resource)
+  (let ((path (probe-file (py-file-reader-resource-path reader resource))))
+    (py-bool (and path (not (uiop:directory-pathname-p path))))))
+
 (defun py-source-file-loader-check-name (loader fullname)
   (let ((name (or fullname (py-source-file-loader-object-name loader))))
     (unless (string= (py-source-file-loader-object-name loader) name)
@@ -1068,13 +1093,19 @@
 
 (setf (py-type-attr *py-file-reader-type* "resource_path")
       (lambda (reader resource)
-        (namestring (merge-pathnames resource
-                                     (uiop:ensure-directory-pathname
-                                      (py-file-reader-object-path reader))))))
+        (py-file-reader-resource-path reader resource)))
 
 (setf (py-type-attr *py-file-reader-type* "files")
       (lambda (reader)
         (py-file-reader-object-path reader)))
+
+(setf (py-type-attr *py-file-reader-type* "is_resource")
+      (lambda (reader resource)
+        (py-file-reader-resource-p reader resource)))
+
+(setf (py-type-attr *py-file-reader-type* "contents")
+      (lambda (reader)
+        (py-file-reader-contents reader)))
 
 (defun make-clamp-module-spec (name source-path package-p loader)
   (let* ((cached (and source-path (py-source-cache-path source-path)))
