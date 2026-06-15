@@ -1321,6 +1321,9 @@
   (cond
     ((or (null fromlist) (eq fromlist *py-none*))
      '())
+    ((stringp fromlist)
+     (loop for char across fromlist
+           collect (string char)))
     ((py-list-object-p fromlist)
      (let ((storage (py-object-value fromlist))
            (size (or (py-object-size fromlist) 0)))
@@ -1333,7 +1336,7 @@
              collect (aref storage index))))
     (t
      (if (py-truthy-p fromlist)
-         (error "__import__() fromlist must be a list or tuple in Clamp")
+         (error "'~A' object is not iterable" (py-type-name (py-type-of fromlist)))
          '()))))
 
 (defun py-import-handle-fromlist (module fromlist &optional (recursive nil))
@@ -1383,11 +1386,10 @@
       (error "relative imports are not supported yet"))
     (when (= (length name) 0)
       (error "Empty module name")))
-  (let* ((module (py-import-module name))
-         (fromlist-names (py-import-fromlist-names fromlist)))
-    (if fromlist-names
+  (let ((module (py-import-module name)))
+    (if (py-truthy-p fromlist)
         (if (nth-value 1 (gethash "__path__" (py-object-attrs module)))
-            (py-import-handle-fromlist module fromlist-names)
+            (py-import-handle-fromlist module (py-import-fromlist-names fromlist))
             module)
         (py-import-module (py-module-root-name name)))))
 
