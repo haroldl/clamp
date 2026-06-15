@@ -832,6 +832,13 @@
   (let ((probe (probe-file path)))
     (and probe (namestring probe))))
 
+(defun py-package-source-directory (source-path)
+  (let ((directory (namestring (uiop:pathname-directory-pathname source-path))))
+    (if (and (> (length directory) 1)
+             (char= (char directory (1- (length directory))) #\/))
+        (subseq directory 0 (1- (length directory)))
+        directory)))
+
 (defun py-find-module-source (name)
   (let* ((components (py-module-path-components name))
          (relative-file (format nil "~{~A~^/~}.py" components))
@@ -867,7 +874,7 @@
       (setf (gethash name *py-sys-modules*) module)
       (when package-p
         (setf (py-object-attr module "__path__")
-              (namestring (uiop:pathname-directory-pathname source-path))))
+              (make-py-list (py-package-source-directory source-path))))
       (let ((*py-current-module* module))
         (py-ensure-module-package module)
         (handler-case
