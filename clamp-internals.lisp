@@ -794,7 +794,13 @@
          (setf (py-module-spec-object-has-location obj)
                (py-truthy-p value))
          (setf (gethash "has_location" (py-object-attrs obj)) truth-value)
-         (setf (gethash "_set_fileattr" (py-object-attrs obj)) truth-value))))))
+         (setf (gethash "_set_fileattr" (py-object-attrs obj)) truth-value)))))
+  (when (py-source-file-loader-object-p obj)
+    (cond
+      ((string= name "name")
+       (setf (py-source-file-loader-object-name obj) value))
+      ((string= name "path")
+       (setf (py-source-file-loader-object-path obj) value)))))
 
 (defun (setf py-object-attr) (value obj name)
   (setf (gethash name (py-object-attrs obj)) value)
