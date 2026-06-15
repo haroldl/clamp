@@ -772,6 +772,17 @@
 (defun py-sync-object-attr (obj name value)
   (when (py-module-spec-object-p obj)
     (cond
+      ((string= name "name")
+       (setf (py-module-spec-object-name obj) value))
+      ((string= name "loader")
+       (setf (py-module-spec-object-loader obj) value))
+      ((string= name "loader_state")
+       (setf (py-module-spec-object-loader-state obj) value))
+      ((string= name "origin")
+       (setf (py-module-spec-object-origin obj)
+             (unless (eq value *py-none*) value)))
+      ((string= name "submodule_search_locations")
+       (setf (py-module-spec-object-submodule-search-locations obj) value))
       ((or (string= name "cached") (string= name "_cached"))
        (setf (py-module-spec-object-cached obj) value)
        (setf (gethash "cached" (py-object-attrs obj)) value)
@@ -810,6 +821,15 @@
 (defstruct (py-source-file-loader-object (:include py-object))
   name
   path)
+
+(defun py-module-spec-parent (spec)
+  (let ((name (gethash "name" (py-object-attrs spec)))
+        (submodule-search-locations
+          (gethash "submodule_search_locations" (py-object-attrs spec))))
+    (if (eq submodule-search-locations *py-none*)
+        (let ((pos (position #\. name :from-end t)))
+          (if pos (subseq name 0 pos) ""))
+        name)))
 
 (defun py-module-package-name (name)
   (concatenate 'string "CLAMP.__module__." name))
@@ -884,11 +904,6 @@
     (setf (py-object-attr spec "origin") (or source-path *py-none*))
     (setf (py-object-attr spec "cached") (or cached *py-none*))
     (setf (py-object-attr spec "_cached") (or cached *py-none*))
-    (setf (py-object-attr spec "parent")
-          (if package-p
-              name
-              (let ((pos (position #\. name :from-end t)))
-                (if pos (subseq name 0 pos) ""))))
     (setf (py-object-attr spec "has_location") (py-bool source-path))
     (setf (py-object-attr spec "_set_fileattr") (py-bool source-path))
     (setf (py-object-attr spec "submodule_search_locations")
@@ -1140,6 +1155,8 @@
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
         (return-from py-lookup-attr attr))))
+  (when (and (py-module-spec-object-p obj) (string= name "parent"))
+    (return-from py-lookup-attr (py-module-spec-parent obj)))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
