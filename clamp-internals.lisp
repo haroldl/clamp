@@ -916,6 +916,11 @@
           (py-bool (and (string= filename-base "__init__")
                         (not (string= tail-name "__init__")))))))
 
+(setf (py-type-attr *py-source-file-loader-type* "__repr__")
+      (lambda (loader)
+        (with-output-to-string (stream)
+          (py-repr loader stream))))
+
 (defun make-clamp-module-spec (name source-path package-p loader)
   (let* ((cached (and source-path (py-source-cache-path source-path)))
          (submodule-search-locations
@@ -972,6 +977,11 @@
       (py-repr submodule-search-locations stream)))
   (princ ")" stream))
 
+(setf (py-type-attr *py-module-spec-type* "__repr__")
+      (lambda (spec)
+        (with-output-to-string (stream)
+          (py-repr spec stream))))
+
 (defun make-clamp-module (name &key source-path package-name package-p)
   (let ((module (make-py-module-object :type *py-module-type*
                                        :name name
@@ -989,6 +999,10 @@
                 (if pos (subseq name 0 pos) ""))))
     (setf (py-object-attr module "__loader__") loader)
     (setf (py-object-attr module "__spec__") *py-none*)
+    (setf (py-object-attr module "__repr__")
+          (lambda ()
+            (with-output-to-string (stream)
+              (py-repr module stream))))
     (when source-path
       (py-set-module-source-path module source-path))
     (unless (string= name "__main__")
