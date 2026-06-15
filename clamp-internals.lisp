@@ -290,6 +290,14 @@
 
 (setf (gethash "__module__" (py-object-attrs *py-source-file-loader-type*)) "_frozen_importlib_external")
 
+(defparameter *py-buffered-reader-type*
+  (make-py-type :type *py-type-type*
+                :name "BufferedReader"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-buffered-reader-type*)) "_io")
+
 (defparameter *py-file-reader-type*
   (make-py-type :type *py-type-type*
                 :name "FileReader"
@@ -918,6 +926,11 @@
 (defstruct (py-file-reader-object (:include py-object))
   path)
 
+(defstruct (py-buffered-reader-object (:include py-object))
+  data
+  (position 0)
+  (closed nil))
+
 (defun py-module-spec-parent (spec)
   (let ((name (gethash "name" (py-object-attrs spec)))
         (submodule-search-locations
@@ -983,6 +996,39 @@
 (defun py-file-reader-resource-p (reader resource)
   (let ((path (probe-file (py-file-reader-resource-path reader resource))))
     (py-bool (and path (not (uiop:directory-pathname-p path))))))
+
+(defun make-clamp-buffered-reader (path)
+  (let ((reader (make-py-buffered-reader-object
+                 :type *py-buffered-reader-type*
+                 :data (py-read-file-bytes path))))
+    (setf (py-object-attr reader "closed") *py-false*)
+    reader))
+
+(defun py-buffered-reader-read (reader &optional size)
+  (when (py-buffered-reader-object-closed reader)
+    (error "read of closed file"))
+  (let* ((storage (py-object-value (py-buffered-reader-object-data reader)))
+         (storage-size (length storage))
+         (position (py-buffered-reader-object-position reader))
+         (normalized-size (and size
+                               (not (eq size *py-none*))
+                               (py-normalize-bool-number size)))
+         (read-size (cond
+                      ((null normalized-size)
+                       (- storage-size position))
+                      ((not (integerp normalized-size))
+                       (error "argument should be integer or None, not ~A"
+                              (py-type-name (py-type-of size))))
+                      ((< normalized-size 0)
+                       (- storage-size position))
+                      (t
+                       (min normalized-size (- storage-size position)))))
+         (result-storage (make-array read-size :element-type (quote (unsigned-byte 8)))))
+    (loop for offset from 0 below read-size
+          do (setf (aref result-storage offset)
+                   (aref storage (+ position offset))))
+    (incf (py-buffered-reader-object-position reader) read-size)
+    (make-py-bytes-from-vector result-storage)))
 
 (defun py-source-file-loader-check-name (loader fullname)
   (let ((name (or fullname (py-source-file-loader-object-name loader))))
@@ -1095,6 +1141,11 @@
       (lambda (reader resource)
         (py-file-reader-resource-path reader resource)))
 
+(setf (py-type-attr *py-file-reader-type* "open_resource")
+      (lambda (reader resource)
+        (make-clamp-buffered-reader
+         (py-file-reader-resource-path reader resource))))
+
 (setf (py-type-attr *py-file-reader-type* "files")
       (lambda (reader)
         (py-file-reader-object-path reader)))
@@ -1106,6 +1157,16 @@
 (setf (py-type-attr *py-file-reader-type* "contents")
       (lambda (reader)
         (py-file-reader-contents reader)))
+
+(setf (py-type-attr *py-buffered-reader-type* "read")
+      (lambda (reader &optional size)
+        (py-buffered-reader-read reader size)))
+
+(setf (py-type-attr *py-buffered-reader-type* "close")
+      (lambda (reader)
+        (setf (py-buffered-reader-object-closed reader) t)
+        (setf (py-object-attr reader "closed") *py-true*)
+        *py-none*))
 
 (defun make-clamp-module-spec (name source-path package-p loader)
   (let* ((cached (and source-path (py-source-cache-path source-path)))
