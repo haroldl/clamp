@@ -1018,8 +1018,9 @@
       (py-set-module-initializing module t)
       (setf (gethash name *py-sys-modules*) module)
       (when package-p
-        (setf (py-object-attr module "__path__")
-              (make-py-list (py-package-source-directory source-path))))
+        (let ((spec (py-object-attr module "__spec__")))
+          (setf (py-object-attr module "__path__")
+                (py-module-spec-object-submodule-search-locations spec))))
       (let ((parent-uninitialized-submodules
               (py-parent-uninitialized-submodules name)))
         (when parent-uninitialized-submodules
