@@ -1,0 +1,6 @@
+print("".isupper())
+print("ABC".isupper(), "ABC123".isupper(), "ABC DEF".isupper())
+print("abc".isupper(), "Abc".isupper(), "ABC!".isupper())
+print("123".isupper(), "_".isupper(), " ".isupper())
+print(chr(937).isupper(), chr(1040).isupper(), chr(223).isupper())
+print(["UPPER".isupper(), "UPPER7".isupper(), "Upper".isupper()])
