@@ -1425,3 +1425,18 @@ def test_import_module_spec_cached_lazy_recompute_example_matches_local_cpython_
     )
     clamp_result = run_clamp(sample)
     assert clamp_result.stdout == cpython_result.stdout
+
+
+def test_import_module_spec_direct_comparison_notimplemented_matches_local_cpython_when_available():
+    sample = TEST_DIR / "example_182.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout

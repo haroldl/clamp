@@ -59,6 +59,7 @@
    :*py-none*
    :*py-false*
    :*py-true*
+   :*py-not-implemented*
    :py-bool
    :py-truthy-p
    :py-and
@@ -185,6 +186,12 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-not-implemented-type*
+  (make-py-type :type *py-type-type*
+                :name "NotImplementedType"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-bool-type*
   (make-py-type :type *py-type-type*
                 :name "bool"
@@ -272,6 +279,9 @@
 
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
+
+(defparameter *py-not-implemented*
+  (make-py-object :type *py-not-implemented-type* :value nil))
 
 (setf (gethash "__hash__" (py-type-attrs *py-module-spec-type*)) *py-none*)
 
@@ -408,6 +418,7 @@
   (let ((normalized-value (py-normalize-bool-number value)))
     (cond
       ((eq value *py-none*) #xFCA86420)
+      ((eq value *py-not-implemented*) #xFBA98765)
       ((integerp normalized-value)
        (py-int-hash normalized-value))
       ((stringp value)
@@ -1032,11 +1043,15 @@
 
 (setf (py-type-attr *py-module-spec-type* "__eq__")
       (lambda (spec other)
-        (py-bool (py-module-spec-eq spec other))))
+        (if (py-module-spec-object-p other)
+            (py-bool (py-module-spec-eq spec other))
+            *py-not-implemented*)))
 
 (setf (py-type-attr *py-module-spec-type* "__ne__")
       (lambda (spec other)
-        (py-ne spec other)))
+        (if (py-module-spec-object-p other)
+            (py-ne spec other)
+            *py-not-implemented*)))
 
 (defun make-clamp-module (name &key source-path package-name package-p)
   (let ((module (make-py-module-object :type *py-module-type*
@@ -3935,6 +3950,7 @@
 (defun py-display (value &optional (stream *standard-output*))
   (cond
     ((eq value *py-none*) (princ "None" stream))
+    ((eq value *py-not-implemented*) (princ "NotImplemented" stream))
     ((eq value *py-true*) (princ "True" stream))
     ((eq value *py-false*) (princ "False" stream))
     ((stringp value) (princ value stream))
