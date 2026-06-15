@@ -1,0 +1,7 @@
+print("".isdecimal())
+print("0".isdecimal(), "12345".isdecimal())
+print("12 3".isdecimal(), "12.3".isdecimal())
+print("abc".isdecimal(), "1abc".isdecimal())
+print(chr(48).isdecimal(), chr(57).isdecimal(), chr(58).isdecimal())
+print(chr(1632).isdecimal(), chr(1776).isdecimal(), chr(178).isdecimal())
+print(["007".isdecimal(), "x7".isdecimal()])
