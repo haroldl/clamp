@@ -961,6 +961,11 @@
         (declare (ignore loader))
         (py-path-stats path)))
 
+(setf (py-type-attr *py-source-file-loader-type* "path_mtime")
+      (lambda (loader path)
+        (declare (ignore loader path))
+        (error "OSError")))
+
 (setf (py-type-attr *py-source-file-loader-type* "set_data")
       (lambda (loader path data)
         (declare (ignore loader))

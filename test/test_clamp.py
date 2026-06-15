@@ -1629,6 +1629,30 @@ def test_import_source_file_loader_path_stats_mtime_matches_local_cpython_when_a
     assert clamp_result.stdout == cpython_result.stdout
 
 
+def test_import_source_file_loader_path_mtime_fails_like_local_cpython_when_available():
+    sample = TEST_DIR / "import_loader_path_mtime_attempt.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = subprocess.run(
+        [str(CLAMP), str(sample)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert cpython_result.returncode != 0
+    assert clamp_result.returncode != 0
+    assert cpython_result.stdout == ""
+    assert clamp_result.stdout == ""
+    assert "OSError" in cpython_result.stderr
+    assert "OSError" in clamp_result.stderr
+
+
 def test_import_fromlist_star_uses_package_all_like_local_cpython_when_available():
     sample = TEST_DIR / "example_192.py"
     if not CPYTHON_314.exists():
