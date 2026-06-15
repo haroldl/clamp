@@ -1763,6 +1763,18 @@
       (lambda (obj value)
         (py-contains value obj)))
 
+(setf (py-type-attr *py-str-type* "__add__")
+      (lambda (obj value)
+        (py-add obj value)))
+
+(setf (py-type-attr *py-str-type* "__mul__")
+      (lambda (obj value)
+        (py-mul obj value)))
+
+(setf (py-type-attr *py-str-type* "__rmul__")
+      (lambda (obj value)
+        (py-mul value obj)))
+
 (setf (py-type-attr *py-str-type* "count")
       (lambda (obj substring &optional
                    (start *py-none*)
