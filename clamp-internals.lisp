@@ -1359,6 +1359,23 @@
                                   (py-string-fill-char fillchar "rjust"))
                      value))))
 
+(defun py-string-zfill (value width)
+  (let* ((normalized-width (py-normalize-bool-number width))
+         (size (length value)))
+    (unless (integerp normalized-width)
+      (error "str.zfill() width must be an integer, got ~S" width))
+    (if (>= size normalized-width)
+        value
+        (let* ((fill (- normalized-width size))
+               (padded (concatenate 'string
+                                    (make-string fill :initial-element #\0)
+                                    value)))
+          (when (and (> size 0)
+                     (member (char value 0) '(#\+ #\-) :test #'char=))
+            (setf (char padded 0) (char value 0))
+            (setf (char padded fill) #\0))
+          padded))))
+
 (defun py-string-center (value width &optional (fillchar " "))
   (let* ((normalized-width (py-normalize-bool-number width))
          (size (length value)))
@@ -1624,6 +1641,10 @@
 (setf (py-type-attr *py-str-type* "rjust")
       (lambda (obj width &optional (fillchar " "))
         (py-string-rjust obj width fillchar)))
+
+(setf (py-type-attr *py-str-type* "zfill")
+      (lambda (obj width)
+        (py-string-zfill obj width)))
 
 (setf (py-type-attr *py-str-type* "center")
       (lambda (obj width &optional (fillchar " "))
