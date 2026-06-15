@@ -601,6 +601,21 @@ def test_str_isnumeric_example_matches_local_cpython_when_available():
     assert clamp_result.stdout == cpython_result.stdout
 
 
+def test_str_casefold_example_matches_local_cpython_when_available():
+    sample = TEST_DIR / "example_143.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
 def test_str_zfill_example_matches_local_cpython_when_available():
     sample = TEST_DIR / "example_136.py"
     if not CPYTHON_314.exists():

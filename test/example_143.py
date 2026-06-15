@@ -1,0 +1,6 @@
+print("".casefold())
+print("ABC xyz 123".casefold())
+print("Already lower".casefold())
+print("Straße".casefold())
+print("MIXED Straße 123".casefold())
+print(["ABC".casefold(), "Straße".casefold()])

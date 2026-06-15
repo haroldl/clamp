@@ -1428,6 +1428,18 @@
 (defun py-string-lower (value)
   (string-downcase value))
 
+(defun py-string-folded-full-char (char)
+  (case (char-code char)
+    (#x00df "ss")
+    (otherwise (string (char-downcase char)))))
+
+(defun py-string-casefold (value)
+  (if (py-truthy-p (py-string-isascii value))
+      (string-downcase value)
+      (with-output-to-string (stream)
+        (loop for char across value
+              do (princ (py-string-folded-full-char char) stream)))))
+
 (defun py-string-upper (value)
   (string-upcase value))
 
@@ -1767,6 +1779,10 @@
 (setf (py-type-attr *py-str-type* "lower")
       (lambda (obj)
         (py-string-lower obj)))
+
+(setf (py-type-attr *py-str-type* "casefold")
+      (lambda (obj)
+        (py-string-casefold obj)))
 
 (setf (py-type-attr *py-str-type* "upper")
       (lambda (obj)
