@@ -819,6 +819,11 @@
         (py-source-file-loader-check-name loader fullname)
         (uiop:read-file-string (py-source-file-loader-object-path loader))))
 
+(setf (py-type-attr *py-source-file-loader-type* "create_module")
+      (lambda (loader spec)
+        (declare (ignore loader spec))
+        *py-none*))
+
 (setf (py-type-attr *py-source-file-loader-type* "is_package")
       (lambda (loader fullname)
         (let* ((name (py-source-file-loader-check-name loader fullname))
