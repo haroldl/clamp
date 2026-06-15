@@ -956,6 +956,11 @@
         (declare (ignore loader))
         (py-read-file-bytes path)))
 
+(setf (py-type-attr *py-source-file-loader-type* "set_data")
+      (lambda (loader path data)
+        (declare (ignore loader))
+        (py-write-file-bytes path data)))
+
 (setf (py-type-attr *py-source-file-loader-type* "get_source")
       (lambda (loader fullname)
         (py-source-file-loader-check-name loader fullname)
@@ -1621,6 +1626,16 @@
            (storage (make-array size :element-type (quote (unsigned-byte 8)))))
       (read-sequence storage stream)
       (make-py-bytes-from-vector storage))))
+
+(defun py-write-file-bytes (path data)
+  (let ((storage (py-bytes-storage data "set_data")))
+    (ensure-directories-exist path)
+    (with-open-file (stream path :direction :output
+                                 :element-type (quote (unsigned-byte 8))
+                                 :if-exists :supersede
+                                 :if-does-not-exist :create)
+      (write-sequence storage stream)))
+  *py-none*)
 
 (defun py-list-index (obj index)
   (if (< index 0)
