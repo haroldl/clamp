@@ -250,6 +250,21 @@ def test_str_rsplit_example_matches_local_cpython_when_available():
     assert clamp_result.stdout == cpython_result.stdout
 
 
+def test_range_reduce_example_matches_local_cpython_when_available():
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    sample = TEST_DIR / "example_141.py"
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
 def test_interactive_math_expression_prints_result():
     result = run_clamp_repl("1 + 2\nquit\n")
     assert result.stdout == ">>> 3\n>>> "

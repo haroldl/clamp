@@ -1,0 +1,6 @@
+r = range(2, 9, 3)
+print(r.__reduce__())
+print(range(3).__reduce__())
+print(range(10, 2, -2).__reduce__())
+data = r.__reduce__()
+print(data[0] is type(r), data[1] == (2, 9, 3))

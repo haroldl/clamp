@@ -3169,6 +3169,15 @@
       (lambda (obj)
         (py-hash obj)))
 
+(setf (py-type-attr *py-range-type* "__reduce__")
+      (lambda (obj)
+        (make-py-tuple
+         (py-type-of obj)
+         (make-py-tuple
+          (py-range-object-start obj)
+          (py-range-object-stop obj)
+          (py-range-object-step obj)))))
+
 (setf (py-type-attr *py-range-type* "__getitem__")
       (lambda (obj index)
         (if (py-slice-object-p index)
