@@ -1629,6 +1629,26 @@ def test_import_source_file_loader_path_stats_mtime_matches_local_cpython_when_a
     assert clamp_result.stdout == cpython_result.stdout
 
 
+def test_import_source_file_loader_get_source_normalizes_newlines_like_local_cpython_when_available():
+    sample = TEST_DIR / "import_loader_get_source_newlines.py"
+    source_path = Path("/tmp/clamp_import_loader_crlf_source.py")
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    source_path.write_bytes(b"left\r\nright\r\n")
+    try:
+        cpython_result = subprocess.run(
+            [str(CPYTHON_314), str(sample)],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        clamp_result = run_clamp(sample)
+    finally:
+        source_path.unlink(missing_ok=True)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
 def test_import_source_file_loader_path_mtime_fails_like_local_cpython_when_available():
     sample = TEST_DIR / "import_loader_path_mtime_attempt.py"
     if not CPYTHON_314.exists():

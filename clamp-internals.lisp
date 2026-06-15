@@ -981,8 +981,13 @@
 
 (setf (py-type-attr *py-source-file-loader-type* "get_source")
       (lambda (loader fullname)
-        (py-source-file-loader-check-name loader fullname)
-        (uiop:read-file-string (py-source-file-loader-object-path loader))))
+        (let* ((path (funcall (py-type-attr (py-object-type loader) "get_filename")
+                              loader
+                              fullname))
+               (data (funcall (py-type-attr (py-object-type loader) "get_data")
+                              loader
+                              path)))
+          (py-decode-source-bytes data))))
 
 (setf (py-type-attr *py-source-file-loader-type* "create_module")
       (lambda (loader spec)
@@ -1690,6 +1695,23 @@
                                  :if-does-not-exist :create)
       (write-sequence storage stream)))
   *py-none*)
+
+(defun py-decode-source-bytes (data)
+  "Decode source bytes for SourceLoader.get_source, including universal newlines."
+  (let ((storage (py-bytes-storage data "get_source")))
+    (with-output-to-string (stream)
+      (loop for index from 0 below (length storage)
+            for byte = (aref storage index)
+            do (cond
+                 ((= byte 13)
+                  (when (and (< (1+ index) (length storage))
+                             (= (aref storage (1+ index)) 10))
+                    (incf index))
+                  (write-char #\Newline stream))
+                 ((= byte 10)
+                  (write-char #\Newline stream))
+                 (t
+                  (write-char (code-char byte) stream)))))))
 
 (defun py-path-size (path)
   (with-open-file (stream path :direction :input
