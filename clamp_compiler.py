@@ -87,6 +87,8 @@ def codegen_assign(node, context : Context):
         rhs = codegen(node.value, context.child())
         if isinstance(target, ast.Subscript):
             return codegen_subscript_store(target, rhs, context.child())
+        if isinstance(target, ast.Attribute):
+            return codegen_attribute_store(target, rhs, context.child())
         lhs = codegen(target, context.child())
         if context.top_level_stmt:
             return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {codegen(target.id, context.child())} {lhs} {rhs})"
@@ -113,6 +115,14 @@ def codegen_block(stmts, context: Context) -> str:
         if len(first.targets) != 1:
             raise Exception("TODO: destructuring bind")
         target = first.targets[0]
+        if isinstance(target, ast.Subscript):
+            first_code = codegen_subscript_store(target, codegen(first.value, context.child()), context.child())
+            rest_code = codegen_block(rest, context)
+            return first_code + ("\n" + rest_code if rest_code else "")
+        if isinstance(target, ast.Attribute):
+            first_code = codegen_attribute_store(target, codegen(first.value, context.child()), context.child())
+            rest_code = codegen_block(rest, context)
+            return first_code + ("\n" + rest_code if rest_code else "")
         if not isinstance(target, ast.Name):
             first_code = codegen_assign(first, context)
             rest_code = codegen_block(rest, context)
@@ -291,6 +301,12 @@ def codegen_subscript_store(node, value_code: str, context: Context):
         "(|CLAMP.__CLAMP_INTERNALS__|:PY-SETITEM "
         f"{target} {index} {value_code})"
     )
+
+def codegen_attribute_store(node, value_code: str, context: Context):
+    child_context = context.child()
+    target = codegen(node.value, child_context)
+    attr = codegen(node.attr, child_context)
+    return f"(common-lisp:setf (|CLAMP.__CLAMP_INTERNALS__|:PY-OBJECT-ATTR {target} {attr}) {value_code})"
 
 
 def codegen_delete(node, context: Context):

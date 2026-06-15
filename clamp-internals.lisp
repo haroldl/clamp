@@ -769,8 +769,26 @@
 (defun py-object-attr (obj name)
   (gethash name (py-object-attrs obj)))
 
+(defun py-sync-object-attr (obj name value)
+  (when (py-module-spec-object-p obj)
+    (cond
+      ((or (string= name "cached") (string= name "_cached"))
+       (setf (py-module-spec-object-cached obj) value)
+       (setf (gethash "cached" (py-object-attrs obj)) value)
+       (setf (gethash "_cached" (py-object-attrs obj)) value))
+      ((or (string= name "has_location") (string= name "_set_fileattr"))
+       (let ((truth-value (py-bool (py-truthy-p value))))
+         (setf (py-module-spec-object-set-fileattr obj)
+               (py-truthy-p value))
+         (setf (py-module-spec-object-has-location obj)
+               (py-truthy-p value))
+         (setf (gethash "has_location" (py-object-attrs obj)) truth-value)
+         (setf (gethash "_set_fileattr" (py-object-attrs obj)) truth-value))))))
+
 (defun (setf py-object-attr) (value obj name)
-  (setf (gethash name (py-object-attrs obj)) value))
+  (setf (gethash name (py-object-attrs obj)) value)
+  (py-sync-object-attr obj name value)
+  value)
 
 (defvar *py-current-module* nil)
 (defvar *py-module-search-paths* nil)
