@@ -1329,3 +1329,18 @@ def test_import_source_file_loader_hash_example_matches_local_cpython_when_avail
     clamp_result = run_clamp(sample)
     assert clamp_result.stdout == cpython_result.stdout
 
+
+def test_import_source_file_loader_extra_attrs_affect_equality_like_local_cpython_when_available():
+    sample = TEST_DIR / "example_177.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
+

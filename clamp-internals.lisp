@@ -501,15 +501,23 @@
                       (= (py-range-object-step left)
                          (py-range-object-step right))))))))
 
+(defun py-object-attrs-eq (left right)
+  (let ((left-attrs (py-object-attrs left))
+        (right-attrs (py-object-attrs right)))
+    (and (= (hash-table-count left-attrs)
+            (hash-table-count right-attrs))
+         (loop for key being the hash-keys of left-attrs
+                 using (hash-value left-value)
+               always (multiple-value-bind (right-value found)
+                          (gethash key right-attrs)
+                        (and found
+                             (py-truthy-p
+                              (py-eq left-value right-value))))))))
+
 (defun py-source-file-loader-eq (left right)
   (and (py-source-file-loader-object-p right)
        (eq (py-object-type left) (py-object-type right))
-       (py-truthy-p
-        (py-eq (py-source-file-loader-object-name left)
-               (py-source-file-loader-object-name right)))
-       (py-truthy-p
-        (py-eq (py-source-file-loader-object-path left)
-               (py-source-file-loader-object-path right)))))
+       (py-object-attrs-eq left right)))
 
 (defun py-source-file-loader-hash (loader)
   (py-int-hash
