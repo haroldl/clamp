@@ -1143,9 +1143,10 @@
         (error "substring not found")
         result)))
 
-(defun py-string-tailmatch (value substring start end direction)
+(defun py-string-tailmatch-one (value substring start end direction operation)
   (unless (stringp substring)
-    (error "startswith/endswith first arg must be str, not ~S" substring))
+    (error "~A first arg must be str or a tuple of str, not ~S"
+           operation substring))
   (let* ((size (length value))
          (adjusted-start
            (let ((index (if (eq start *py-none*)
@@ -1171,15 +1172,31 @@
                    :start1 offset
                    :end1 (+ offset substring-size))))))))
 
+(defun py-string-tailmatch (value substring start end direction operation)
+  (if (py-tuple-object-p substring)
+      (let ((storage (py-tuple-storage substring operation))
+            (size (or (py-object-size substring) 0)))
+        (loop for index from 0 below size
+              for item = (aref storage index)
+              do (progn
+                   (unless (stringp item)
+                     (error "tuple for ~A must only contain str, not ~S"
+                            operation item))
+                   (when (py-truthy-p
+                          (py-string-tailmatch-one value item start end direction operation))
+                     (return *py-true*)))
+              finally (return *py-false*)))
+      (py-string-tailmatch-one value substring start end direction operation)))
+
 (defun py-string-startswith (value prefix &optional
                              (start *py-none*)
                              (end *py-none*))
-  (py-string-tailmatch value prefix start end -1))
+  (py-string-tailmatch value prefix start end -1 "startswith"))
 
 (defun py-string-endswith (value suffix &optional
                            (start *py-none*)
                            (end *py-none*))
-  (py-string-tailmatch value suffix start end 1))
+  (py-string-tailmatch value suffix start end 1 "endswith"))
 
 (defun py-string-join (separator iterable)
   (unless (stringp separator)
