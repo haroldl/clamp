@@ -1428,6 +1428,21 @@
               always (or (alpha-char-p char)
                          (py-unicode-digit-char-p char))))))
 
+(defun py-unicode-printable-char-p (char)
+  (let ((code (char-code char)))
+    (and (or (= code 32)
+             (not (or (<= 0 code 31)
+                      (<= 127 code 159)
+                      (member code '(160 173 5760 8192 8193 8194 8195 8196
+                                     8197 8198 8199 8200 8201 8202 8232
+                                     8233 8239 8287 12288)))))
+         t)))
+
+(defun py-string-isprintable (value)
+  (py-bool
+   (loop for char across value
+         always (py-unicode-printable-char-p char))))
+
 (defun py-string-isspace (value)
   (py-bool
    (and (> (length value) 0)
@@ -1669,6 +1684,10 @@
 (setf (py-type-attr *py-str-type* "isalnum")
       (lambda (obj)
         (py-string-isalnum obj)))
+
+(setf (py-type-attr *py-str-type* "isprintable")
+      (lambda (obj)
+        (py-string-isprintable obj)))
 
 (setf (py-type-attr *py-str-type* "isspace")
       (lambda (obj)

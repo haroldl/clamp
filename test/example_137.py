@@ -1,0 +1,5 @@
+print("".isprintable())
+print("abc 123!?".isprintable())
+print(("line" + chr(10)).isprintable(), ("tab" + chr(9)).isprintable())
+print(" ".isprintable(), chr(127).isprintable(), chr(160).isprintable())
+print(["ok".isprintable(), ("bad" + chr(31)).isprintable(), chr(173).isprintable()])
