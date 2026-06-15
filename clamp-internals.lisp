@@ -773,6 +773,7 @@
   loader-state
   origin
   cached
+  set-fileattr
   submodule-search-locations
   (has-location nil)
   (initializing nil)
@@ -795,6 +796,7 @@
                 :loader-state *py-none*
                 :origin source-path
                 :cached cached
+                :set-fileattr (not (null source-path))
                 :submodule-search-locations submodule-search-locations
                 :has-location (not (null source-path))
                 :uninitialized-submodules uninitialized-submodules)))
@@ -803,12 +805,14 @@
     (setf (py-object-attr spec "loader_state") *py-none*)
     (setf (py-object-attr spec "origin") (or source-path *py-none*))
     (setf (py-object-attr spec "cached") (or cached *py-none*))
+    (setf (py-object-attr spec "_cached") (or cached *py-none*))
     (setf (py-object-attr spec "parent")
           (if package-p
               name
               (let ((pos (position #\. name :from-end t)))
                 (if pos (subseq name 0 pos) ""))))
     (setf (py-object-attr spec "has_location") (py-bool source-path))
+    (setf (py-object-attr spec "_set_fileattr") (py-bool source-path))
     (setf (py-object-attr spec "submodule_search_locations")
           submodule-search-locations)
     (setf (py-object-attr spec "_initializing") *py-false*)
