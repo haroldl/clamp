@@ -1180,6 +1180,17 @@
        ((string= parent "/") (concatenate 'string "/" name))
        (t (concatenate 'string parent "/" name))))))
 
+(defun py-path-with-suffix (path suffix)
+  (unless (stringp suffix)
+    (error "argument must be a str object, not ~A" (py-type-name (py-type-of suffix))))
+  (let ((stem (py-path-stem path)))
+    (when (= (length stem) 0)
+      (error "~A has an empty name" (py-path-string path)))
+    (when (and (> (length suffix) 0)
+               (not (char= (char suffix 0) #\.)))
+      (error "Invalid suffix ~S" suffix))
+    (py-path-with-name path (concatenate 'string stem suffix))))
+
 (defun make-py-path (path)
   (let* ((path-string (py-path-string path))
          (obj (make-py-path-object :type *py-path-type*
@@ -1595,6 +1606,10 @@
 (setf (py-type-attr *py-path-type* "with_name")
       (lambda (path name)
         (py-path-with-name path name)))
+
+(setf (py-type-attr *py-path-type* "with_suffix")
+      (lambda (path suffix)
+        (py-path-with-suffix path suffix)))
 
 (setf (py-type-attr *py-path-type* "iterdir")
       (lambda (path)

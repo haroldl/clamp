@@ -1,0 +1,9 @@
+PosixPath
+sub.txt .txt sub
+resource.tar.zip .zip resource.tar
+resource.tar .tar resource
+README.md .md README
+.profile.bak .bak .profile
+True
+True
+True
