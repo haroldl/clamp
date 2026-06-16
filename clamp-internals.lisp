@@ -1041,6 +1041,28 @@
         (subseq trimmed dot)
         "")))
 
+(defun py-path-suffixes (path)
+  (let* ((name (py-path-name path))
+         (start (loop for index from 0 below (length name)
+                      while (char= (char name index) #\.)
+                      finally (return index)))
+         (trimmed (subseq name start))
+         (first-dot (position #\. trimmed))
+         (suffixes '()))
+    (when first-dot
+      (let ((segment-start (1+ first-dot)))
+        (loop for dot = (position #\. trimmed :start segment-start)
+              while dot
+              do (progn
+                   (push (concatenate 'string
+                                      "."
+                                      (subseq trimmed segment-start dot))
+                         suffixes)
+                   (setf segment-start (1+ dot))))
+        (push (concatenate 'string "." (subseq trimmed segment-start))
+              suffixes)))
+    (apply #'make-py-list (nreverse suffixes))))
+
 (defun py-path-stem (path)
   (let* ((name (py-path-name path))
          (dot (position #\. name :from-end t)))
@@ -2531,6 +2553,8 @@
     (return-from py-lookup-attr (py-path-parent obj)))
   (when (and (py-path-object-p obj) (string= name "suffix"))
     (return-from py-lookup-attr (py-path-suffix obj)))
+  (when (and (py-path-object-p obj) (string= name "suffixes"))
+    (return-from py-lookup-attr (py-path-suffixes obj)))
   (when (and (py-path-object-p obj) (string= name "stem"))
     (return-from py-lookup-attr (py-path-stem obj)))
   (when (py-object-p obj)
