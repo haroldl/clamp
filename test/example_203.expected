@@ -1,0 +1,6 @@
+2 1 2 True
+3 22 4
+True False True
+1 9 {'x': 9}
+0 False {}
+{'first': 1, 'second': 22, 'third': [3, 4]}

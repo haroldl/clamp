@@ -127,6 +127,7 @@
    :py-next
    :py-next-item
    :make-py-list
+   :make-py-dict-from-pairs
    :make-py-tuple
    :py-append
    :py-insert
@@ -702,6 +703,11 @@
               thereis (py-truthy-p (py-eq (aref storage index) item))))))
     ((py-range-object-p container)
      (py-range-contains container item))
+    ((py-dict-object-p container)
+     (multiple-value-bind (value found)
+         (gethash item (py-dict-storage container "__contains__"))
+       (declare (ignore value))
+       (py-bool found)))
     ((stringp container)
      (unless (stringp item)
        (error "'in <string>' requires string as left operand, got ~S" item))
@@ -2217,7 +2223,8 @@
   range
   (index 0))
 
-(defstruct (py-dict-object (:include py-object)))
+(defstruct (py-dict-object (:include py-object))
+  (keys (make-array 0 :adjustable t :fill-pointer 0)))
 
 (defparameter *py-dict-type*
   (make-py-type :type *py-type-type*
@@ -2328,14 +2335,25 @@
     (error "~A only supports dict objects, got ~S" operation obj))
   (py-object-value obj))
 
+(defun py-dict-set-entry (obj key value)
+  (let ((storage (py-dict-storage obj "__setitem__")))
+    (multiple-value-bind (old-value found)
+        (gethash key storage)
+      (declare (ignore old-value))
+      (unless found
+        (vector-push-extend key (py-dict-object-keys obj))
+        (incf (py-object-size obj)))
+      (setf (gethash key storage) value)))
+  value)
+
 (defun make-py-dict-from-pairs (&rest pairs)
-  (let ((storage (make-hash-table :test #'equal)))
+  (let ((dict (make-py-dict-object :type *py-dict-type*
+                                   :size 0
+                                   :value (make-hash-table :test #'equal))))
     (dolist (pair pairs)
       (destructuring-bind (key value) pair
-        (setf (gethash key storage) value)))
-    (make-py-dict-object :type *py-dict-type*
-                         :size (hash-table-count storage)
-                         :value storage)))
+        (py-dict-set-entry dict key value)))
+    dict))
 
 (defun make-py-bytes-from-vector (storage)
   (make-py-bytes-object :type *py-bytes-type*
@@ -3731,6 +3749,18 @@
                 *py-none*)
               (error "list.remove(x): x not in list")))))
 
+(setf (py-type-attr *py-dict-type* "__len__")
+      (lambda (obj)
+        (py-dict-storage obj "__len__")
+        (or (py-object-size obj) 0)))
+
+(setf (py-type-attr *py-dict-type* "__contains__")
+      (lambda (obj key)
+        (multiple-value-bind (value found)
+            (gethash key (py-dict-storage obj "__contains__"))
+          (declare (ignore value))
+          (py-bool found))))
+
 (setf (py-type-attr *py-dict-type* "__getitem__")
       (lambda (obj key)
         (multiple-value-bind (value found)
@@ -3738,6 +3768,16 @@
           (if found
               value
               (error "~S" key)))))
+
+(setf (py-type-attr *py-dict-type* "__setitem__")
+      (lambda (obj key value)
+        (py-dict-set-entry obj key value)
+        *py-none*))
+
+(setf (py-type-attr *py-dict-type* "__repr__")
+      (lambda (obj)
+        (with-output-to-string (stream)
+          (py-repr obj stream))))
 
 (setf (py-type-attr *py-list-type* "__getitem__")
       (lambda (obj index)
@@ -4861,6 +4901,24 @@
              (princ ")" stream))
         (py-repr-leave value))))
 
+(defun py-dict-repr (value stream)
+  (if (py-repr-enter value)
+      (princ "{...}" stream)
+      (unwind-protect
+           (let ((storage (py-dict-storage value "__repr__"))
+                 (keys (py-dict-object-keys value)))
+             (princ "{" stream)
+             (loop for index from 0 below (fill-pointer keys)
+                   for key = (aref keys index)
+                   do (progn
+                        (when (> index 0)
+                          (princ ", " stream))
+                        (py-repr key stream)
+                        (princ ": " stream)
+                        (py-repr (gethash key storage) stream)))
+             (princ "}" stream))
+        (py-repr-leave value))))
+
 (defun py-string-contains-p (string char)
   (not (null (position char string))))
 
@@ -4901,6 +4959,8 @@
       stream))
     ((py-tuple-object-p value)
      (py-tuple-repr value stream))
+    ((py-dict-object-p value)
+     (py-dict-repr value stream))
     ((py-module-spec-object-p value)
      (py-module-spec-repr value stream))
     ((py-source-file-loader-object-p value)
@@ -4947,6 +5007,7 @@
     ((py-list-object-p value) (py-repr value stream))
     ((py-bytes-object-p value) (py-repr value stream))
     ((py-tuple-object-p value) (py-repr value stream))
+    ((py-dict-object-p value) (py-repr value stream))
     ((py-module-spec-object-p value) (py-repr value stream))
     ((py-source-file-loader-object-p value) (py-repr value stream))
     ((py-module-object-p value) (py-repr value stream))

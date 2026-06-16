@@ -592,6 +592,14 @@ codegen_handlers[ast.Tuple] = lambda node, context: (
     + "".join(f" {codegen(elt, context.child())}" for elt in node.elts)
     + ")"
 )
+codegen_handlers[ast.Dict] = lambda node, context: (
+    "(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-DICT-FROM-PAIRS"
+    + "".join(
+        f" (common-lisp:list {codegen(key, context.child())} {codegen(value, context.child())})"
+        for key, value in zip(node.keys, node.values)
+    )
+    + ")"
+)
 codegen_handlers[ast.Attribute] = lambda node, context: (
     "(|CLAMP.__CLAMP_INTERNALS__|:PY-LOOKUP-ATTR "
     f"{codegen(node.value, context.child())} {codegen(node.attr, context.child())})"
