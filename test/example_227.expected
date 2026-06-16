@@ -1,0 +1,5 @@
+'caf\xe9'
+['caf\xe9', '\u20ac', '\U0001f600']
+{'name': 'caf\xe9', 'symbol': '\u20ac'}
+'plain\nquote'
+None True 12

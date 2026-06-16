@@ -109,6 +109,7 @@
    :py-invert
    :py-not
    :py-str
+   :py-ascii
    :py-repr
    :py-display
    :py-exception
@@ -849,6 +850,25 @@
     (t
      (with-output-to-string (stream)
        (py-display value stream)))))
+
+(defun py-ascii-escape-char (char stream)
+  (let ((code (char-code char)))
+    (cond
+      ((<= code #x7f)
+       (write-char char stream))
+      ((<= code #xff)
+       (format stream "\\x~A" (string-downcase (format nil "~2,'0x" code))))
+      ((<= code #xffff)
+       (format stream "\\u~A" (string-downcase (format nil "~4,'0x" code))))
+      (t
+       (format stream "\\U~A" (string-downcase (format nil "~8,'0x" code)))))))
+
+(defun py-ascii (value)
+  (let ((repr (with-output-to-string (stream)
+                (py-repr value stream))))
+    (with-output-to-string (stream)
+      (loop for char across repr
+            do (py-ascii-escape-char char stream)))))
 
 (defstruct (py-exception-object (:include py-object))
   (args '()))
