@@ -1522,6 +1522,10 @@
       (lambda (path)
         (py-bool (py-path-exists-p path))))
 
+(setf (py-type-attr *py-path-type* "as_posix")
+      (lambda (path)
+        (py-path-string path)))
+
 (setf (py-type-attr *py-path-type* "open")
       (lambda (path &optional (mode "r"))
         (unless (or (string= mode "rb") (string= mode "r"))
