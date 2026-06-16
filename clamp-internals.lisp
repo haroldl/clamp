@@ -2608,6 +2608,13 @@
       (remhash key (py-object-attrs owner))))
   *py-none*)
 
+(defun py-dict-clear (obj)
+  (let ((storage (py-dict-storage obj "clear")))
+    (clrhash storage)
+    (setf (fill-pointer (py-dict-object-keys obj)) 0)
+    (setf (py-object-size obj) 0))
+  *py-none*)
+
 (defun py-dict-copy (obj)
   (let ((copy (make-py-dict-object :type *py-dict-type*
                                    :size 0
@@ -4108,6 +4115,10 @@
 (setf (py-type-attr *py-dict-type* "copy")
       (lambda (obj)
         (py-dict-copy obj)))
+
+(setf (py-type-attr *py-dict-type* "clear")
+      (lambda (obj)
+        (py-dict-clear obj)))
 
 (setf (py-type-attr *py-dict-type* "__repr__")
       (lambda (obj)

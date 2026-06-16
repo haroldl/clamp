@@ -1,0 +1,7 @@
+True 0 {} True {}
+1 {'after': 3}
+True 0 {}
+True module value
+True 0 {}
+False
+restored {'VALUE': 'restored'}
