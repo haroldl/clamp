@@ -2980,7 +2980,7 @@
                         :value storage))
 
 (defun py-read-file-bytes (path)
-  (with-open-file (stream path :direction :input
+  (with-open-file (stream (py-path-string path) :direction :input
                                :element-type (quote (unsigned-byte 8)))
     (let* ((size (file-length stream))
            (storage (make-array size :element-type (quote (unsigned-byte 8)))))
@@ -2988,11 +2988,12 @@
       (make-py-bytes-from-vector storage))))
 
 (defun py-write-file-bytes (path data)
-  (let ((storage (py-bytes-storage data "set_data")))
+  (let ((path-string (py-path-string path))
+        (storage (py-bytes-storage data "set_data")))
     (handler-case
         (progn
-          (ensure-directories-exist path)
-          (with-open-file (stream path :direction :output
+          (ensure-directories-exist path-string)
+          (with-open-file (stream path-string :direction :output
                                        :element-type (quote (unsigned-byte 8))
                                        :if-exists :supersede
                                        :if-does-not-exist :create)
@@ -3042,12 +3043,13 @@
                   (write-char char stream)))))))
 
 (defun py-path-size (path)
-  (with-open-file (stream path :direction :input
+  (with-open-file (stream (py-path-string path) :direction :input
                                :element-type (quote (unsigned-byte 8)))
     (file-length stream)))
 
 (defun py-path-mtime (path)
-  (- (coerce (file-write-date path) 'double-float) 2208988800.0d0))
+  (- (coerce (file-write-date (py-path-string path)) 'double-float)
+     2208988800.0d0))
 
 (defun py-path-stats (path)
   (make-py-dict-from-pairs
