@@ -1,0 +1,10 @@
+['first', 'second', 'third']
+('first', 'second', 'third')
+['first', 'second', 'third']
+['first', 'third', 'second']
+3
+first 2
+third 1
+second 0
+done 0
+[]

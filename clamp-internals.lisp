@@ -284,6 +284,12 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-dict-key-iterator-type*
+  (make-py-type :type *py-type-type*
+                :name "dict_keyiterator"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-module-type*
   (make-py-type :type *py-type-type*
                 :name "module"
@@ -2689,6 +2695,12 @@
   (keys (make-array 0 :adjustable t :fill-pointer 0))
   namespace-owner)
 
+(defstruct (py-dict-key-iterator-object (:include py-object))
+  dict
+  (index 0)
+  (used 0)
+  (remaining 0))
+
 (defparameter *py-dict-type*
   (make-py-type :type *py-type-type*
                 :name "dict"
@@ -4813,6 +4825,7 @@
            (eq (py-object-type obj) *py-filter-type*)
            (eq (py-object-type obj) *py-map-type*)
            (eq (py-object-type obj) *py-range-iterator-type*)
+           (eq (py-object-type obj) *py-dict-key-iterator-type*)
            (eq (py-object-type obj) *py-buffered-reader-type*))))
 
 (defun py-forward-list-iterator-p (obj)
@@ -4846,6 +4859,10 @@
 (defun py-range-iterator-p (obj)
   (and (py-object-p obj)
        (eq (py-object-type obj) *py-range-iterator-type*)))
+
+(defun py-dict-key-iterator-p (obj)
+  (and (py-object-p obj)
+       (eq (py-object-type obj) *py-dict-key-iterator-type*)))
 
 (defun py-enumerate (iterable &optional (start 0))
   (let ((normalized-start (py-normalize-bool-number start)))
@@ -4991,6 +5008,12 @@
      (make-py-range-iterator-object :type *py-range-iterator-type*
                                     :range obj
                                     :index 0))
+    ((eq (py-object-type obj) *py-dict-type*)
+     (make-py-dict-key-iterator-object :type *py-dict-key-iterator-type*
+                                       :dict obj
+                                       :index 0
+                                       :used (or (py-object-size obj) 0)
+                                       :remaining (or (py-object-size obj) 0)))
     (t
      (error "Python object of type ~A is not iterable"
             (if (py-object-p obj)
@@ -5256,6 +5279,26 @@
                (py-range-item range index)
              (setf (py-range-iterator-object-index iterator) (1+ index)))
            (py-raise *py-stop-iteration*))))
+    ((py-dict-key-iterator-p iterator)
+     (let* ((dict (py-dict-key-iterator-object-dict iterator))
+            (used (py-dict-key-iterator-object-used iterator))
+            (current-size (and dict (or (py-object-size dict) 0))))
+       (unless dict
+         (py-raise *py-stop-iteration*))
+       (unless (= used current-size)
+         (setf (py-dict-key-iterator-object-used iterator) -1)
+         (error "dictionary changed size during iteration"))
+       (let* ((keys (py-dict-object-keys dict))
+              (index (py-dict-key-iterator-object-index iterator))
+              (remaining (py-dict-key-iterator-object-remaining iterator)))
+         (if (and (< index (fill-pointer keys)) (> remaining 0))
+             (prog1
+                 (aref keys index)
+               (setf (py-dict-key-iterator-object-index iterator) (1+ index))
+               (setf (py-dict-key-iterator-object-remaining iterator) (1- remaining)))
+             (progn
+               (setf (py-dict-key-iterator-object-dict iterator) nil)
+               (py-raise *py-stop-iteration*))))))
     ((py-buffered-reader-object-p iterator)
      (let ((line (py-buffered-reader-readline iterator)))
        (if (> (or (py-object-size line) 0) 0)
@@ -5335,6 +5378,14 @@
   (let* ((range (py-range-iterator-object-range iterator))
          (index (py-range-iterator-object-index iterator)))
     (max (- (py-range-object-length range) index) 0)))
+
+(defun py-dict-key-iterator-length-hint (iterator)
+  (let ((dict (py-dict-key-iterator-object-dict iterator)))
+    (if (and dict
+             (= (py-dict-key-iterator-object-used iterator)
+                (or (py-object-size dict) 0)))
+        (max (py-dict-key-iterator-object-remaining iterator) 0)
+        0)))
 
 (setf (py-type-attr *py-list-type* "__iter__")
       (lambda (obj)
@@ -5467,6 +5518,22 @@
 (setf (py-type-attr *py-map-type* "__next__")
       (lambda (iterator)
         (py-next iterator)))
+
+(setf (py-type-attr *py-dict-type* "__iter__")
+      (lambda (obj)
+        (py-iter obj)))
+
+(setf (py-type-attr *py-dict-key-iterator-type* "__iter__")
+      (lambda (iterator)
+        (py-iter iterator)))
+
+(setf (py-type-attr *py-dict-key-iterator-type* "__next__")
+      (lambda (iterator)
+        (py-next iterator)))
+
+(setf (py-type-attr *py-dict-key-iterator-type* "__length_hint__")
+      (lambda (iterator)
+        (py-dict-key-iterator-length-hint iterator)))
 
 (setf (py-type-number-bool-fn *py-range-type*)
       (lambda (obj)
@@ -5703,6 +5770,7 @@
     ((py-map-object-p value) (princ "<map>" stream))
     ((py-range-object-p value) (py-repr value stream))
     ((py-range-iterator-p value) (princ "<range_iterator>" stream))
+    ((py-dict-key-iterator-p value) (princ "<dict_keyiterator>" stream))
     ((py-type-p value) (py-repr value stream))
     ((py-list-object-p value) (py-repr value stream))
     ((py-bytes-object-p value) (py-repr value stream))
