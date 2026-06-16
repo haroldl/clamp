@@ -1224,6 +1224,10 @@
       (lambda (reader &optional size)
         (py-buffered-reader-read reader size)))
 
+(setf (py-type-attr *py-buffered-reader-type* "read1")
+      (lambda (reader &optional size)
+        (py-buffered-reader-read reader size)))
+
 (setf (py-type-attr *py-buffered-reader-type* "tell")
       (lambda (reader)
         (py-buffered-reader-tell reader)))
