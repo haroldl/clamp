@@ -1048,6 +1048,34 @@
     (incf (py-buffered-reader-object-position reader) read-size)
     (make-py-bytes-from-vector result-storage)))
 
+(defun py-buffered-reader-tell (reader)
+  (when (py-buffered-reader-object-closed reader)
+    (error "tell of closed file"))
+  (py-buffered-reader-object-position reader))
+
+(defun py-buffered-reader-seek (reader target &optional (whence 0))
+  (when (py-buffered-reader-object-closed reader)
+    (error "seek of closed file"))
+  (let* ((storage (py-object-value (py-buffered-reader-object-data reader)))
+         (storage-size (length storage))
+         (normalized-target (py-normalize-bool-number target))
+         (normalized-whence (py-normalize-bool-number whence)))
+    (unless (integerp normalized-target)
+      (error "an integer is required"))
+    (unless (integerp normalized-whence)
+      (error "an integer is required"))
+    (unless (<= 0 normalized-whence 2)
+      (error "whence value ~A unsupported" normalized-whence))
+    (let ((new-position
+            (case normalized-whence
+              (0 normalized-target)
+              (1 (+ (py-buffered-reader-object-position reader) normalized-target))
+              (2 (+ storage-size normalized-target)))))
+      (when (< new-position 0)
+        (error "negative seek position ~A" new-position))
+      (setf (py-buffered-reader-object-position reader) new-position)
+      new-position)))
+
 (defun py-source-file-loader-check-name (loader fullname)
   (let ((name (or fullname (py-source-file-loader-object-name loader))))
     (unless (string= (py-source-file-loader-object-name loader) name)
@@ -1179,6 +1207,29 @@
 (setf (py-type-attr *py-buffered-reader-type* "read")
       (lambda (reader &optional size)
         (py-buffered-reader-read reader size)))
+
+(setf (py-type-attr *py-buffered-reader-type* "tell")
+      (lambda (reader)
+        (py-buffered-reader-tell reader)))
+
+(setf (py-type-attr *py-buffered-reader-type* "seek")
+      (lambda (reader target &optional (whence 0))
+        (py-buffered-reader-seek reader target whence)))
+
+(setf (py-type-attr *py-buffered-reader-type* "seekable")
+      (lambda (reader)
+        (declare (ignore reader))
+        *py-true*))
+
+(setf (py-type-attr *py-buffered-reader-type* "readable")
+      (lambda (reader)
+        (declare (ignore reader))
+        *py-true*))
+
+(setf (py-type-attr *py-buffered-reader-type* "writable")
+      (lambda (reader)
+        (declare (ignore reader))
+        *py-false*))
 
 (setf (py-type-attr *py-buffered-reader-type* "close")
       (lambda (reader)

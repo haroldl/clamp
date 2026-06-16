@@ -1,0 +1,21 @@
+import import_value
+
+reader = import_value.__loader__.get_resource_reader(import_value.__name__)
+handle = reader.open_resource("import_value.py")
+
+print(handle.tell())
+first = handle.read(5)
+print(len(first))
+print(handle.tell())
+print(handle.seek(0))
+print(handle.tell())
+print(handle.read(1)[0])
+print(handle.seek(0, 2) > 0)
+print(handle.tell() > 0)
+print(len(handle.read()))
+print(handle.seek(-1, 2))
+print(len(handle.read()))
+print(handle.seek(0))
+print(handle.seekable())
+print(handle.readable())
+print(handle.writable())
