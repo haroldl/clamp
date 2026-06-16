@@ -1150,6 +1150,27 @@
       (setf (py-buffered-reader-object-position reader) position)
       (make-py-bytes-from-vector result-storage))))
 
+(defun py-buffered-reader-readlines (reader &optional hint)
+  (let ((normalized-hint (and hint
+                              (not (eq hint *py-none*))
+                              (py-normalize-bool-number hint)))
+        (lines '())
+        (total-size 0))
+    (when (and normalized-hint (not (integerp normalized-hint)))
+      (error "integer argument expected, got ~A" (py-type-name (py-type-of hint))))
+    (loop
+      for line = (py-buffered-reader-readline reader)
+      for line-size = (or (py-object-size line) 0)
+      while (> line-size 0)
+      do (progn
+           (push line lines)
+           (incf total-size line-size)
+           (when (and normalized-hint
+                      (> normalized-hint 0)
+                      (>= total-size normalized-hint))
+             (return))))
+    (apply (function make-py-list) (nreverse lines))))
+
 (defun py-buffered-reader-tell (reader)
   (when (py-buffered-reader-object-closed reader)
     (error "tell of closed file"))
@@ -1331,6 +1352,10 @@
 (setf (py-type-attr *py-buffered-reader-type* "readline")
       (lambda (reader &optional size)
         (py-buffered-reader-readline reader size)))
+
+(setf (py-type-attr *py-buffered-reader-type* "readlines")
+      (lambda (reader &optional hint)
+        (py-buffered-reader-readlines reader hint)))
 
 (setf (py-type-attr *py-buffered-reader-type* "tell")
       (lambda (reader)

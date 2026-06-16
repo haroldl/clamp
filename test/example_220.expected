@@ -1,0 +1,10 @@
+BufferedReader
+list
+bytes
+True
+b'VALUE = "module value"\n'
+True
+[]
+b'VALUE = "module value"\n'
+1 23 23
+True
