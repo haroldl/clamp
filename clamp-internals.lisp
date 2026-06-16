@@ -1030,6 +1030,17 @@
 (defun py-path-name (path)
   (py-directory-entry-name (py-path-string path)))
 
+(defun py-path-suffix (path)
+  (let* ((name (py-path-name path))
+         (start (loop for index from 0 below (length name)
+                      while (char= (char name index) #\.)
+                      finally (return index)))
+         (trimmed (subseq name start))
+         (dot (position #\. trimmed :from-end t)))
+    (if dot
+        (subseq trimmed dot)
+        "")))
+
 (defun py-path-parent-string (path)
   (let* ((path-string (py-path-string path))
          (end (length path-string)))
@@ -2507,6 +2518,8 @@
     (return-from py-lookup-attr (py-file-reader-dict obj)))
   (when (and (py-path-object-p obj) (string= name "parent"))
     (return-from py-lookup-attr (py-path-parent obj)))
+  (when (and (py-path-object-p obj) (string= name "suffix"))
+    (return-from py-lookup-attr (py-path-suffix obj)))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
