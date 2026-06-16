@@ -1125,6 +1125,23 @@
         path
         (make-py-path parent-string))))
 
+(defun py-path-with-name (path name)
+  (unless (stringp name)
+    (error "argument must be a str object, not ~A" (py-type-name (py-type-of name))))
+  (when (or (= (length name) 0)
+            (string= name ".")
+            (position #\/ name))
+    (error "Invalid name ~S" name))
+  (let ((old-name (py-path-name path)))
+    (when (= (length old-name) 0)
+      (error "~A has an empty name" (py-path-string path))))
+  (let ((parent (py-path-parent-string path)))
+    (make-py-path
+     (cond
+       ((string= parent ".") name)
+       ((string= parent "/") (concatenate 'string "/" name))
+       (t (concatenate 'string parent "/" name))))))
+
 (defun make-py-path (path)
   (let* ((path-string (py-path-string path))
          (obj (make-py-path-object :type *py-path-type*
@@ -1536,6 +1553,10 @@
 (setf (py-type-attr *py-path-type* "__truediv__")
       (lambda (path resource)
         (py-path-joinpath path resource)))
+
+(setf (py-type-attr *py-path-type* "with_name")
+      (lambda (path name)
+        (py-path-with-name path name)))
 
 (setf (py-type-attr *py-path-type* "iterdir")
       (lambda (path)
