@@ -1454,6 +1454,10 @@
       (lambda (path)
         (py-read-file-bytes (py-path-string path))))
 
+(setf (py-type-attr *py-path-type* "read_text")
+      (lambda (path &optional (encoding *py-none*))
+        (py-decode-text-bytes (py-read-file-bytes (py-path-string path)) encoding)))
+
 (setf (py-type-attr *py-buffered-reader-type* "read")
       (lambda (reader &optional size)
         (py-buffered-reader-read reader size)))
@@ -2843,6 +2847,29 @@
                   (write-char #\Newline stream))
                  (t
                   (write-char (code-char byte) stream)))))))
+
+(defun py-decode-text-bytes (data &optional (encoding *py-none*))
+  (unless (or (eq encoding *py-none*)
+              (null encoding)
+              (and (stringp encoding)
+                   (or (string-equal encoding "utf-8")
+                       (string-equal encoding "utf8"))))
+    (error "unsupported encoding: ~A" encoding))
+  (let* ((storage (py-bytes-storage data "read_text"))
+         (decoded (sb-ext:octets-to-string storage :external-format :utf-8)))
+    (with-output-to-string (stream)
+      (loop for index from 0 below (length decoded)
+            for char = (char decoded index)
+            do (cond
+                 ((char= char #\Return)
+                  (when (and (< (1+ index) (length decoded))
+                             (char= (char decoded (1+ index)) #\Newline))
+                    (incf index))
+                  (write-char #\Newline stream))
+                 ((char= char #\Newline)
+                  (write-char #\Newline stream))
+                 (t
+                  (write-char char stream)))))))
 
 (defun py-path-size (path)
   (with-open-file (stream path :direction :input
