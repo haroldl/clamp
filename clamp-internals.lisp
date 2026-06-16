@@ -1007,13 +1007,22 @@
     (setf (py-object-attr loader "path") source-path)
     loader))
 
+(defun py-file-reader-loader-directory (loader)
+  (py-package-source-directory
+   (if (py-source-file-loader-object-p loader)
+       (py-source-file-loader-object-path loader)
+       (py-lookup-attr loader "path"))))
+
+(defun py-file-reader-init-from-loader (reader loader)
+  (let ((path (py-file-reader-loader-directory loader)))
+    (setf (py-file-reader-object-path reader) path)
+    (setf (py-object-attr reader "path") path))
+  *py-none*)
+
 (defun make-clamp-file-reader (loader)
-  (let* ((path (py-package-source-directory
-                (py-source-file-loader-object-path loader)))
-         (reader (make-py-file-reader-object
-                  :type *py-file-reader-type*
-                  :path path)))
-    (setf (py-object-attr reader "path") path)
+  (let ((reader (make-py-file-reader-object
+                 :type *py-file-reader-type*)))
+    (py-file-reader-init-from-loader reader loader)
     reader))
 
 (defun py-file-reader-resource-path (reader resource)
@@ -1255,6 +1264,10 @@
 (setf (py-type-attr *py-file-reader-type* "resource_path")
       (lambda (reader resource)
         (py-file-reader-resource-path reader resource)))
+
+(setf (py-type-attr *py-file-reader-type* "__init__")
+      (lambda (reader loader)
+        (py-file-reader-init-from-loader reader loader)))
 
 (setf (py-type-attr *py-file-reader-type* "open_resource")
       (lambda (reader resource)
