@@ -2503,6 +2503,27 @@
       (py-sync-object-attr owner key value)))
   value)
 
+(defun py-dict-delete-entry (obj key)
+  (let ((storage (py-dict-storage obj "__delitem__")))
+    (multiple-value-bind (old-value found)
+        (gethash key storage)
+      (declare (ignore old-value))
+      (unless found
+        (error "~S" key))
+      (remhash key storage)
+      (decf (py-object-size obj))
+      (let* ((keys (py-dict-object-keys obj))
+             (size (fill-pointer keys))
+             (position (position key keys :test #'equal :end size)))
+        (when position
+          (loop for index from position below (1- size)
+                do (setf (aref keys index) (aref keys (1+ index))))
+          (vector-pop keys)))))
+  (let ((owner (py-dict-object-namespace-owner obj)))
+    (when (and owner (stringp key) (not (string= key "__dict__")))
+      (remhash key (py-object-attrs owner))))
+  *py-none*)
+
 (defun make-py-dict-for-storage (storage &optional namespace-owner)
   (let ((dict (make-py-dict-object :type *py-dict-type*
                                    :size 0
@@ -3963,6 +3984,10 @@
       (lambda (obj key value)
         (py-dict-set-entry obj key value)
         *py-none*))
+
+(setf (py-type-attr *py-dict-type* "__delitem__")
+      (lambda (obj key)
+        (py-dict-delete-entry obj key)))
 
 (setf (py-type-attr *py-dict-type* "get")
       (lambda (obj key &optional (default *py-none*))

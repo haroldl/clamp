@@ -1,0 +1,8 @@
+2 {'first': 1, 'third': 3} True
+False missing
+None {'third': 3}
+{'third': 3, 'first': 11}
+{None: 'none-key'} [1, 2, 3]
+0 False {}
+True module value
+False missing
