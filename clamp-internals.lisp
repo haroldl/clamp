@@ -576,6 +576,22 @@
                          (py-eq (aref left-storage index)
                                 (aref right-storage index))))))))
 
+(defun py-dict-eq (left right)
+  (let ((left-size (or (py-object-size left) 0))
+        (right-size (or (py-object-size right) 0)))
+    (and (= left-size right-size)
+         (let ((left-storage (py-dict-storage left "=="))
+               (right-storage (py-dict-storage right "=="))
+               (left-keys (py-dict-object-keys left)))
+           (loop for index from 0 below (fill-pointer left-keys)
+                 for key = (aref left-keys index)
+                 always (multiple-value-bind (right-value found)
+                            (gethash key right-storage)
+                          (and found
+                               (py-truthy-p
+                                (py-eq (gethash key left-storage)
+                                       right-value)))))))))
+
 (defun py-range-eq (left right)
   (let ((left-length (py-range-object-length left))
         (right-length (py-range-object-length right)))
@@ -696,6 +712,8 @@
         (py-list-eq left right))
        ((and (py-tuple-object-p left) (py-tuple-object-p right))
         (py-tuple-eq left right))
+       ((and (py-dict-object-p left) (py-dict-object-p right))
+        (py-dict-eq left right))
        ((and (py-range-object-p left) (py-range-object-p right))
         (py-range-eq left right))
        ((py-module-spec-object-p left)
