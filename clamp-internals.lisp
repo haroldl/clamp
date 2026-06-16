@@ -1041,6 +1041,16 @@
         (subseq trimmed dot)
         "")))
 
+(defun py-path-stem (path)
+  (let* ((name (py-path-name path))
+         (dot (position #\. name :from-end t)))
+    (if dot
+        (let ((stem (subseq name 0 dot)))
+          (if (find-if (lambda (char) (not (char= char #\.))) stem)
+              stem
+              name))
+        name)))
+
 (defun py-path-parent-string (path)
   (let* ((path-string (py-path-string path))
          (end (length path-string)))
@@ -1138,9 +1148,10 @@
   (let ((file-name (file-namestring path)))
     (if (> (length file-name) 0)
         file-name
-        (let ((directory (pathname-directory
-                          (uiop:ensure-directory-pathname path))))
-          (first (last directory))))))
+        (let* ((directory (pathname-directory
+                           (uiop:ensure-directory-pathname path)))
+               (last-part (first (last directory))))
+          (if (stringp last-part) last-part "")))))
 
 (defun py-file-reader-contents (reader)
   (let* ((directory (uiop:ensure-directory-pathname
@@ -2520,6 +2531,8 @@
     (return-from py-lookup-attr (py-path-parent obj)))
   (when (and (py-path-object-p obj) (string= name "suffix"))
     (return-from py-lookup-attr (py-path-suffix obj)))
+  (when (and (py-path-object-p obj) (string= name "stem"))
+    (return-from py-lookup-attr (py-path-stem obj)))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found

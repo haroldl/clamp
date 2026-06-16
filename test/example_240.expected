@@ -1,0 +1,8 @@
+sub
+resource
+__init__
+archive.tar
+.resource
+...
+import_pkg
+True
