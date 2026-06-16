@@ -3841,6 +3841,12 @@
         (py-dict-set-entry obj key value)
         *py-none*))
 
+(setf (py-type-attr *py-dict-type* "get")
+      (lambda (obj key &optional (default *py-none*))
+        (multiple-value-bind (value found)
+            (gethash key (py-dict-storage obj "get"))
+          (if found value default))))
+
 (setf (py-type-attr *py-dict-type* "__repr__")
       (lambda (obj)
         (with-output-to-string (stream)
