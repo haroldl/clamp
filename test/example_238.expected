@@ -1,0 +1,9 @@
+1
+True {'first': 1, 'second': 2, 'third': ['new']}
+{'first': 1, 'second': 2, 'third': ['new', 'changed']}
+None
+{'first': 1, 'second': 2, 'third': ['new', 'changed'], None: None}
+True
+{'first': 1, 'second': 2, 'third': ['new', 'changed'], None: None, 'nonevalue': None}
+module value module value
+setdefault setdefault setdefault

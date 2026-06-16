@@ -2816,6 +2816,14 @@
           do (py-dict-set-entry copy key (gethash key storage)))
     copy))
 
+(defun py-dict-setdefault (obj key default)
+  (let ((storage (py-dict-storage obj "setdefault")))
+    (multiple-value-bind (value found)
+        (gethash key storage)
+      (if found
+          value
+          (py-dict-set-entry obj key default)))))
+
 (defun make-py-dict-for-storage (storage &optional namespace-owner)
   (let ((dict (make-py-dict-object :type *py-dict-type*
                                    :size 0
@@ -4333,6 +4341,10 @@
              default)
             (t
              (error "~S" key))))))
+
+(setf (py-type-attr *py-dict-type* "setdefault")
+      (lambda (obj key &optional (default *py-none*))
+        (py-dict-setdefault obj key default)))
 
 (setf (py-type-attr *py-dict-type* "copy")
       (lambda (obj)
