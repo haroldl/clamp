@@ -1064,6 +1064,41 @@
     (incf (py-buffered-reader-object-position reader) read-size)
     (make-py-bytes-from-vector result-storage)))
 
+(defun py-buffered-reader-readline (reader &optional size)
+  (when (py-buffered-reader-object-closed reader)
+    (error "readline of closed file"))
+  (let* ((storage (py-object-value (py-buffered-reader-object-data reader)))
+         (storage-size (length storage))
+         (position (py-buffered-reader-object-position reader))
+         (normalized-size (and size
+                               (not (eq size *py-none*))
+                               (py-normalize-bool-number size)))
+         (limit (cond
+                  ((null normalized-size)
+                   storage-size)
+                  ((not (integerp normalized-size))
+                   (error "argument should be integer or None, not ~A"
+                          (py-type-name (py-type-of size))))
+                  ((< normalized-size 0)
+                   storage-size)
+                  ((= normalized-size 0)
+                   position)
+                  (t
+                   (min storage-size (+ position normalized-size))))))
+    (loop while (and (< position limit)
+                     (not (= (aref storage position) 10)))
+          do (incf position))
+    (when (< position limit)
+      (incf position))
+    (let* ((start (py-buffered-reader-object-position reader))
+           (read-size (- position start))
+           (result-storage (make-array read-size :element-type (quote (unsigned-byte 8)))))
+      (loop for offset from 0 below read-size
+            do (setf (aref result-storage offset)
+                     (aref storage (+ start offset))))
+      (setf (py-buffered-reader-object-position reader) position)
+      (make-py-bytes-from-vector result-storage))))
+
 (defun py-buffered-reader-tell (reader)
   (when (py-buffered-reader-object-closed reader)
     (error "tell of closed file"))
@@ -1227,6 +1262,10 @@
 (setf (py-type-attr *py-buffered-reader-type* "read1")
       (lambda (reader &optional size)
         (py-buffered-reader-read reader size)))
+
+(setf (py-type-attr *py-buffered-reader-type* "readline")
+      (lambda (reader &optional size)
+        (py-buffered-reader-readline reader size)))
 
 (setf (py-type-attr *py-buffered-reader-type* "tell")
       (lambda (reader)
