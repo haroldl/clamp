@@ -725,6 +725,13 @@
      (unless (stringp item)
        (error "'in <string>' requires string as left operand, got ~S" item))
      (py-bool (search item container)))
+    ((py-iterator-p container)
+     (loop
+       (multiple-value-bind (value found) (py-next-item container)
+         (unless found
+           (return *py-false*))
+         (when (py-truthy-p (py-eq value item))
+           (return *py-true*)))))
     (t
      (error "Python object of type ~A is not a container"
             (if (py-object-p container)
@@ -1043,8 +1050,9 @@
                      (py-file-reader-object-path reader)))
          (entries (append (uiop:directory-files directory)
                           (uiop:subdirectories directory))))
-    (apply (function make-py-list)
-           (mapcar (function py-directory-entry-name) entries))))
+    (py-iter
+     (apply (function make-py-list)
+            (mapcar (function py-directory-entry-name) entries)))))
 
 (defun py-file-reader-resource-p (reader resource)
   (let ((path (probe-file (py-file-reader-resource-path reader resource))))
