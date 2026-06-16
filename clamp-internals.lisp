@@ -1432,6 +1432,10 @@
       (lambda (path &rest resources)
         (apply #'py-path-joinpath path resources)))
 
+(setf (py-type-attr *py-path-type* "__truediv__")
+      (lambda (path resource)
+        (py-path-joinpath path resource)))
+
 (setf (py-type-attr *py-path-type* "iterdir")
       (lambda (path)
         (py-path-iterdir path)))
@@ -4620,9 +4624,13 @@
 (defun py-truediv (left right)
   (let ((normalized-left (py-normalize-bool-number left))
         (normalized-right (py-normalize-bool-number right)))
-    (if (and (numberp normalized-left) (numberp normalized-right))
-        (float (/ normalized-left normalized-right))
-        (error "Unsupported Python / between ~S and ~S" left right))))
+    (cond
+      ((py-path-object-p left)
+       (py-path-joinpath left right))
+      ((and (numberp normalized-left) (numberp normalized-right))
+       (float (/ normalized-left normalized-right)))
+      (t
+       (error "Unsupported Python / between ~S and ~S" left right)))))
 
 (defun py-floordiv (left right)
   (let ((normalized-left (py-normalize-bool-number left))

@@ -1,0 +1,8 @@
+PosixPath
+True
+sub.py
+True
+True
+resource.txt
+__init__.py
+NAME = "package root"
