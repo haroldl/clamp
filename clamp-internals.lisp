@@ -50,6 +50,7 @@
    :py-zip-object
    :py-filter-object
    :py-map-object
+   :py-path-object
    :py-bytes-object
    :py-range-object
    :py-range-iterator-object
@@ -319,6 +320,14 @@
                 :basicsize 1))
 
 (setf (gethash "__module__" (py-object-attrs *py-file-reader-type*)) "importlib.resources.readers")
+
+(defparameter *py-path-type*
+  (make-py-type :type *py-type-type*
+                :name "PosixPath"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-path-type*)) "pathlib")
 
 (defparameter *py-none*
   (make-py-object :type *py-none-type* :value nil))
@@ -1004,6 +1013,24 @@
   path
   namespace-dict)
 
+(defstruct (py-path-object (:include py-object))
+  path)
+
+(defun py-path-string (path)
+  (if (py-path-object-p path)
+      (py-path-object-path path)
+      path))
+
+(defun py-path-name (path)
+  (py-directory-entry-name (py-path-string path)))
+
+(defun make-py-path (path)
+  (let* ((path-string (py-path-string path))
+         (obj (make-py-path-object :type *py-path-type*
+                                   :path path-string)))
+    (setf (py-object-attr obj "name") (py-path-name obj))
+    obj))
+
 (defstruct (py-buffered-reader-object (:include py-object))
   data
   path
@@ -1046,12 +1073,13 @@
 
 (defun py-file-reader-loader-directory (loader)
   (py-package-source-directory
-   (if (py-source-file-loader-object-p loader)
-       (py-source-file-loader-object-path loader)
-       (py-lookup-attr loader "path"))))
+   (py-path-string
+    (if (py-source-file-loader-object-p loader)
+        (py-source-file-loader-object-path loader)
+        (py-lookup-attr loader "path")))))
 
 (defun py-file-reader-init-from-loader (reader loader)
-  (let ((path (py-file-reader-loader-directory loader)))
+  (let ((path (make-py-path (py-file-reader-loader-directory loader))))
     (setf (py-file-reader-object-path reader) path)
     (setf (py-object-attr reader "path") path))
   *py-none*)
@@ -1065,7 +1093,8 @@
 (defun py-file-reader-resource-path (reader resource)
   (namestring (merge-pathnames resource
                                (uiop:ensure-directory-pathname
-                                (py-file-reader-object-path reader)))))
+                                (py-path-string
+                                 (py-file-reader-object-path reader))))))
 
 (defun py-directory-entry-name (path)
   (let ((file-name (file-namestring path)))
@@ -1077,7 +1106,8 @@
 
 (defun py-file-reader-contents (reader)
   (let* ((directory (uiop:ensure-directory-pathname
-                     (py-file-reader-object-path reader)))
+                     (py-path-string
+                      (py-file-reader-object-path reader))))
          (entries (append (uiop:directory-files directory)
                           (uiop:subdirectories directory))))
     (py-iter
@@ -1087,6 +1117,33 @@
 (defun py-file-reader-resource-p (reader resource)
   (let ((path (probe-file (py-file-reader-resource-path reader resource))))
     (py-bool (and path (not (uiop:directory-pathname-p path))))))
+
+(defun py-path-joinpath (path resource)
+  (make-py-path
+   (namestring (merge-pathnames (py-path-string resource)
+                                (uiop:ensure-directory-pathname
+                                 (py-path-string path))))))
+
+(defun py-path-exists-p (path)
+  (not (null (probe-file (py-path-string path)))))
+
+(defun py-path-file-p (path)
+  (let ((probe (probe-file (py-path-string path))))
+    (and probe (not (uiop:directory-pathname-p probe)))))
+
+(defun py-path-directory-p (path)
+  (let ((probe (probe-file (py-path-string path))))
+    (and probe (uiop:directory-pathname-p probe))))
+
+(defun py-path-iterdir (path)
+  (let* ((directory (uiop:ensure-directory-pathname (py-path-string path)))
+         (entries (append (uiop:directory-files directory)
+                          (uiop:subdirectories directory))))
+    (py-iter
+     (apply (function make-py-list)
+            (mapcar (lambda (entry)
+                      (make-py-path (namestring entry)))
+                    entries)))))
 
 (defun make-clamp-buffered-reader (path)
   (let ((reader (make-py-buffered-reader-object
@@ -1366,6 +1423,32 @@
 (setf (py-type-attr *py-file-reader-type* "contents")
       (lambda (reader)
         (py-file-reader-contents reader)))
+
+(setf (py-type-attr *py-path-type* "joinpath")
+      (lambda (path resource)
+        (py-path-joinpath path resource)))
+
+(setf (py-type-attr *py-path-type* "iterdir")
+      (lambda (path)
+        (py-path-iterdir path)))
+
+(setf (py-type-attr *py-path-type* "is_file")
+      (lambda (path)
+        (py-bool (py-path-file-p path))))
+
+(setf (py-type-attr *py-path-type* "is_dir")
+      (lambda (path)
+        (py-bool (py-path-directory-p path))))
+
+(setf (py-type-attr *py-path-type* "exists")
+      (lambda (path)
+        (py-bool (py-path-exists-p path))))
+
+(setf (py-type-attr *py-path-type* "open")
+      (lambda (path &optional (mode "r"))
+        (unless (or (string= mode "rb") (string= mode "r"))
+          (error "unsupported file mode: ~A" mode))
+        (make-clamp-buffered-reader (py-path-string path))))
 
 (setf (py-type-attr *py-buffered-reader-type* "read")
       (lambda (reader &optional size)
@@ -5362,6 +5445,10 @@
      (py-module-spec-repr value stream))
     ((py-source-file-loader-object-p value)
      (princ "<_frozen_importlib_external.SourceFileLoader object>" stream))
+    ((py-path-object-p value)
+     (princ "PosixPath(" stream)
+     (py-string-repr (py-path-string value) stream)
+     (princ ")" stream))
     ((py-module-object-p value)
      (if (py-module-object-source-path value)
          (format stream "<module '~A' from '~A'>"
@@ -5407,6 +5494,7 @@
     ((py-dict-object-p value) (py-repr value stream))
     ((py-module-spec-object-p value) (py-repr value stream))
     ((py-source-file-loader-object-p value) (py-repr value stream))
+    ((py-path-object-p value) (princ (py-path-string value) stream))
     ((py-module-object-p value) (py-repr value stream))
     (t (princ value stream))))
 
