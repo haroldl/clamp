@@ -1030,6 +1030,27 @@
 (defun py-path-name (path)
   (py-directory-entry-name (py-path-string path)))
 
+(defun py-path-parent-string (path)
+  (let* ((path-string (py-path-string path))
+         (end (length path-string)))
+    (loop while (and (> end 1)
+                     (char= (char path-string (1- end)) #\/))
+          do (decf end))
+    (let* ((normalized (subseq path-string 0 end))
+           (slash (position #\/ normalized :from-end t)))
+      (cond
+        ((string= normalized "/") "/")
+        ((null slash) ".")
+        ((= slash 0) "/")
+        (t (subseq normalized 0 slash))))))
+
+(defun py-path-parent (path)
+  (let ((parent-string (py-path-parent-string path)))
+    (if (and (py-path-object-p path)
+             (string= parent-string (py-path-object-path path)))
+        path
+        (make-py-path parent-string))))
+
 (defun make-py-path (path)
   (let* ((path-string (py-path-string path))
          (obj (make-py-path-object :type *py-path-type*
@@ -2484,6 +2505,8 @@
     (return-from py-lookup-attr (py-source-file-loader-dict obj)))
   (when (and (py-file-reader-object-p obj) (string= name "__dict__"))
     (return-from py-lookup-attr (py-file-reader-dict obj)))
+  (when (and (py-path-object-p obj) (string= name "parent"))
+    (return-from py-lookup-attr (py-path-parent obj)))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
