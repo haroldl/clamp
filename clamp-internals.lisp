@@ -71,6 +71,7 @@
    :py-and
    :py-or
    :py-len
+   :py-length-hint
    :py-hash
    :py-reversed
    :py-callable
@@ -407,6 +408,43 @@
                (if (py-object-p value)
                    (py-type-name (py-object-type value))
                    (type-of value))))))
+
+(defun py-length-hint (value &optional (default 0))
+  (let ((normalized-default (py-normalize-bool-number default)))
+    (unless (integerp normalized-default)
+      (error "'~A' object cannot be interpreted as an integer"
+             (py-type-name (py-type-of default))))
+    (let ((length
+            (cond
+              ((py-object-p value)
+               (py-type-slot-length (py-object-type value) value))
+              ((stringp value)
+               (py-type-slot-length *py-str-type* value))
+              (t nil))))
+      (when length
+        (return-from py-length-hint length)))
+    (let ((type (handler-case
+                    (py-type-of value)
+                  (error ()
+                    nil))))
+      (unless type
+        (return-from py-length-hint normalized-default))
+      (multiple-value-bind (hint found) (py-find-type-attr type "__length_hint__")
+        (unless found
+          (return-from py-length-hint normalized-default))
+        (let ((result (handler-case
+                          (py-invoke-callable hint value)
+                        (type-error ()
+                          normalized-default))))
+          (when (eq result *py-not-implemented*)
+            (return-from py-length-hint normalized-default))
+          (let ((normalized-result (py-normalize-bool-number result)))
+            (unless (integerp normalized-result)
+              (error "__length_hint__ must be integer, not ~A"
+                     (py-type-name (py-type-of result))))
+            (when (< normalized-result 0)
+              (error "__length_hint__() should return >= 0"))
+            normalized-result))))))
 
 (defun py-type-of (value)
   (cond
@@ -2579,6 +2617,14 @@
     (setf (py-object-attr module "trunc") #'py-math-trunc)
     (setf (py-object-attr module "ulp") #'py-math-ulp)
     module))
+
+(defun make-clamp-operator-module ()
+  (let ((module (make-clamp-module "operator")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in operator module")
+    (setf (py-object-attr module "length_hint") #'py-length-hint)
+    module))
+
+(py-register-builtin-module "operator" #'make-clamp-operator-module)
 
 (py-register-builtin-module "math" #'make-clamp-math-module)
 
