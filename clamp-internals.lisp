@@ -1085,6 +1085,28 @@
     (incf (py-buffered-reader-object-position reader) read-size)
     (make-py-bytes-from-vector result-storage)))
 
+(defun py-buffered-reader-peek (reader &optional size)
+  (when (py-buffered-reader-object-closed reader)
+    (error "peek of closed file"))
+  (let* ((storage (py-object-value (py-buffered-reader-object-data reader)))
+         (storage-size (length storage))
+         (position (py-buffered-reader-object-position reader))
+         (normalized-size (and size
+                               (not (eq size *py-none*))
+                               (py-normalize-bool-number size))))
+    (unless (or (null normalized-size) (integerp normalized-size))
+      (error "argument should be integer or None, not ~A"
+             (py-type-name (py-type-of size))))
+    (let* ((remaining (- storage-size position))
+           (read-size (if (and normalized-size (= normalized-size 0))
+                          0
+                          remaining))
+           (result-storage (make-array read-size :element-type (quote (unsigned-byte 8)))))
+      (loop for offset from 0 below read-size
+            do (setf (aref result-storage offset)
+                     (aref storage (+ position offset))))
+      (make-py-bytes-from-vector result-storage))))
+
 (defun py-buffered-reader-readline (reader &optional size)
   (when (py-buffered-reader-object-closed reader)
     (error "readline of closed file"))
@@ -1293,6 +1315,10 @@
 (setf (py-type-attr *py-buffered-reader-type* "read1")
       (lambda (reader &optional size)
         (py-buffered-reader-read reader size)))
+
+(setf (py-type-attr *py-buffered-reader-type* "peek")
+      (lambda (reader &optional size)
+        (py-buffered-reader-peek reader size)))
 
 (setf (py-type-attr *py-buffered-reader-type* "readline")
       (lambda (reader &optional size)
