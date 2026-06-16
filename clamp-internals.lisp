@@ -44,6 +44,7 @@
    :py-callable-owner-type
    :py-string-iterator-object
    :py-string-reverse-iterator-object
+   :py-bytes-iterator-object
    :py-tuple-iterator-object
    :py-tuple-reverse-iterator-object
    :py-enumerate-object
@@ -2549,6 +2550,10 @@
   sequence
   (index -1))
 
+(defstruct (py-bytes-iterator-object (:include py-object))
+  sequence
+  (index 0))
+
 (defstruct (py-module-object (:include py-object))
   name
   source-path
@@ -2648,6 +2653,12 @@
 (defparameter *py-string-reverse-iterator-type*
   (make-py-type :type *py-type-type*
                 :name "reversed"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-bytes-iterator-type*
+  (make-py-type :type *py-type-type*
+                :name "bytes_iterator"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -4336,6 +4347,10 @@
         (with-output-to-string (stream)
           (py-repr obj stream))))
 
+(setf (py-type-attr *py-bytes-type* "__iter__")
+      (lambda (obj)
+        (py-iter obj)))
+
 (setf (py-type-attr *py-tuple-type* "__contains__")
       (lambda (obj value)
         (py-contains value obj)))
@@ -4675,6 +4690,7 @@
            (eq (py-object-type obj) *py-list-reverse-iterator-type*)
            (eq (py-object-type obj) *py-string-iterator-type*)
            (eq (py-object-type obj) *py-string-reverse-iterator-type*)
+           (eq (py-object-type obj) *py-bytes-iterator-type*)
            (eq (py-object-type obj) *py-tuple-iterator-type*)
            (eq (py-object-type obj) *py-tuple-reverse-iterator-type*)
            (eq (py-object-type obj) *py-enumerate-type*)
@@ -4699,6 +4715,10 @@
 (defun py-reverse-string-iterator-p (obj)
   (and (py-object-p obj)
        (eq (py-object-type obj) *py-string-reverse-iterator-type*)))
+
+(defun py-bytes-iterator-p (obj)
+  (and (py-object-p obj)
+       (eq (py-object-type obj) *py-bytes-iterator-type*)))
 
 (defun py-tuple-iterator-p (obj)
   (and (py-object-p obj)
@@ -4840,6 +4860,10 @@
      (make-py-string-iterator-object :type *py-string-iterator-type*
                                      :sequence obj
                                      :index 0))
+    ((py-bytes-object-p obj)
+     (make-py-bytes-iterator-object :type *py-bytes-iterator-type*
+                                    :sequence obj
+                                    :index 0))
     ((eq (py-object-type obj) *py-list-type*)
      (make-py-list-iterator-object :type *py-list-iterator-type*
                                    :sequence obj
@@ -5039,6 +5063,17 @@
            (progn
              (setf (py-string-reverse-iterator-object-index iterator) -1)
              (py-raise *py-stop-iteration*)))))
+    ((py-bytes-iterator-p iterator)
+     (let* ((sequence (py-bytes-iterator-object-sequence iterator))
+            (index (py-bytes-iterator-object-index iterator))
+            (size (or (py-object-size sequence) 0)))
+       (if (and (>= index 0) (< index size))
+           (prog1
+               (aref (py-object-value sequence) index)
+             (setf (py-bytes-iterator-object-index iterator) (1+ index)))
+           (progn
+             (setf (py-bytes-iterator-object-index iterator) -1)
+             (py-raise *py-stop-iteration*)))))
     ((py-tuple-iterator-p iterator)
      (let* ((sequence (py-tuple-iterator-object-sequence iterator))
             (index (py-tuple-iterator-object-index iterator))
@@ -5156,6 +5191,14 @@
         0
         length-remaining)))
 
+(defun py-bytes-iterator-length-hint (iterator)
+  (let* ((sequence (py-bytes-iterator-object-sequence iterator))
+         (index (py-bytes-iterator-object-index iterator))
+         (length-remaining (if (>= index 0)
+                               (- (or (py-object-size sequence) 0) index)
+                               0)))
+    (max length-remaining 0)))
+
 (defun py-tuple-iterator-length-hint (iterator)
   (let* ((sequence (py-tuple-iterator-object-sequence iterator))
          (index (py-tuple-iterator-object-index iterator))
@@ -5237,6 +5280,18 @@
 (setf (py-type-attr *py-string-reverse-iterator-type* "__length_hint__")
       (lambda (iterator)
         (py-string-reverse-iterator-length-hint iterator)))
+
+(setf (py-type-attr *py-bytes-iterator-type* "__iter__")
+      (lambda (iterator)
+        (py-iter iterator)))
+
+(setf (py-type-attr *py-bytes-iterator-type* "__next__")
+      (lambda (iterator)
+        (py-next iterator)))
+
+(setf (py-type-attr *py-bytes-iterator-type* "__length_hint__")
+      (lambda (iterator)
+        (py-bytes-iterator-length-hint iterator)))
 
 (setf (py-type-attr *py-tuple-type* "__iter__")
       (lambda (obj)
