@@ -925,7 +925,13 @@
       ((string= name "name")
        (setf (py-source-file-loader-object-name obj) value))
       ((string= name "path")
-       (setf (py-source-file-loader-object-path obj) value))))
+       (setf (py-source-file-loader-object-path obj) value)))
+    (let ((dict (py-source-file-loader-object-namespace-dict obj)))
+      (when (and dict
+                 (not (string= name "__dict__"))
+                 (not (py-dict-has-key-p dict name)))
+        (vector-push-extend name (py-dict-object-keys dict))
+        (setf (py-object-size dict) (hash-table-count (py-object-attrs obj))))))
   (when (and (py-module-object-p obj)
              (not (string= name "__dict__")))
     (py-module-dict-note-key obj name)))
@@ -955,7 +961,8 @@
 
 (defstruct (py-source-file-loader-object (:include py-object))
   name
-  path)
+  path
+  namespace-dict)
 
 (defstruct (py-file-reader-object (:include py-object))
   path)
@@ -2247,6 +2254,8 @@
     (return-from py-lookup-attr (py-module-spec-cached obj)))
   (when (and (py-module-object-p obj) (string= name "__dict__"))
     (return-from py-lookup-attr (py-module-dict obj)))
+  (when (and (py-source-file-loader-object-p obj) (string= name "__dict__"))
+    (return-from py-lookup-attr (py-source-file-loader-dict obj)))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
@@ -2368,7 +2377,8 @@
   (index 0))
 
 (defstruct (py-dict-object (:include py-object))
-  (keys (make-array 0 :adjustable t :fill-pointer 0)))
+  (keys (make-array 0 :adjustable t :fill-pointer 0))
+  namespace-owner)
 
 (defparameter *py-dict-type*
   (make-py-type :type *py-type-type*
@@ -2488,12 +2498,16 @@
         (vector-push-extend key (py-dict-object-keys obj))
         (incf (py-object-size obj)))
       (setf (gethash key storage) value)))
+  (let ((owner (py-dict-object-namespace-owner obj)))
+    (when (and owner (stringp key) (not (string= key "__dict__")))
+      (py-sync-object-attr owner key value)))
   value)
 
-(defun make-py-dict-for-storage (storage)
+(defun make-py-dict-for-storage (storage &optional namespace-owner)
   (let ((dict (make-py-dict-object :type *py-dict-type*
                                    :size 0
-                                   :value storage)))
+                                   :value storage
+                                   :namespace-owner namespace-owner)))
     (maphash (lambda (key value)
                (declare (ignore value))
                (unless (string= key "__dict__")
@@ -2515,7 +2529,12 @@
 (defun py-module-dict (module)
   (or (py-module-object-namespace-dict module)
       (setf (py-module-object-namespace-dict module)
-            (make-py-dict-for-storage (py-object-attrs module)))))
+            (make-py-dict-for-storage (py-object-attrs module) module))))
+
+(defun py-source-file-loader-dict (loader)
+  (or (py-source-file-loader-object-namespace-dict loader)
+      (setf (py-source-file-loader-object-namespace-dict loader)
+            (make-py-dict-for-storage (py-object-attrs loader) loader))))
 
 (defun make-py-dict-from-pairs (&rest pairs)
   (let ((dict (make-py-dict-object :type *py-dict-type*
