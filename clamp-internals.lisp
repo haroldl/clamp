@@ -1380,6 +1380,12 @@
         (declare (ignore reader))
         *py-false*))
 
+(setf (py-type-attr *py-buffered-reader-type* "isatty")
+      (lambda (reader)
+        (when (py-buffered-reader-object-closed reader)
+          (error "I/O operation on closed file"))
+        *py-false*))
+
 (setf (py-type-attr *py-buffered-reader-type* "__enter__")
       (lambda (reader)
         reader))
