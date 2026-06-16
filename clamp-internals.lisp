@@ -1140,6 +1140,12 @@
              name))
     name))
 
+(setf (py-type-attr *py-source-file-loader-type* "__init__")
+      (lambda (loader fullname path)
+        (setf (py-object-attr loader "name") fullname)
+        (setf (py-object-attr loader "path") path)
+        *py-none*))
+
 (setf (py-type-attr *py-source-file-loader-type* "get_filename")
       (lambda (loader &optional fullname)
         (py-source-file-loader-check-name loader fullname)
