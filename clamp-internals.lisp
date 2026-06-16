@@ -1557,6 +1557,10 @@
       (lambda (path)
         (py-path-string path)))
 
+(setf (py-type-attr *py-path-type* "__str__")
+      (lambda (path)
+        (py-path-string path)))
+
 (setf (py-type-attr *py-path-type* "__repr__")
       (lambda (path)
         (with-output-to-string (stream)
