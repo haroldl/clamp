@@ -1532,6 +1532,11 @@
       (lambda (path)
         (py-path-string path)))
 
+(setf (py-type-attr *py-path-type* "__repr__")
+      (lambda (path)
+        (with-output-to-string (stream)
+          (py-repr path stream))))
+
 (setf (py-type-attr *py-path-type* "open")
       (lambda (path &optional (mode "r"))
         (unless (or (string= mode "rb") (string= mode "r"))
