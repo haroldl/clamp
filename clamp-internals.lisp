@@ -1341,6 +1341,14 @@
       (lambda (reader &optional size)
         (py-buffered-reader-read reader size)))
 
+(setf (py-type-attr *py-buffered-reader-type* "__iter__")
+      (lambda (reader)
+        (py-iter reader)))
+
+(setf (py-type-attr *py-buffered-reader-type* "__next__")
+      (lambda (reader)
+        (py-next reader)))
+
 (setf (py-type-attr *py-buffered-reader-type* "read1")
       (lambda (reader &optional size)
         (py-buffered-reader-read reader size)))
@@ -4507,7 +4515,8 @@
            (eq (py-object-type obj) *py-zip-type*)
            (eq (py-object-type obj) *py-filter-type*)
            (eq (py-object-type obj) *py-map-type*)
-           (eq (py-object-type obj) *py-range-iterator-type*))))
+           (eq (py-object-type obj) *py-range-iterator-type*)
+           (eq (py-object-type obj) *py-buffered-reader-type*))))
 
 (defun py-forward-list-iterator-p (obj)
   (and (py-object-p obj)
@@ -4930,6 +4939,11 @@
            (prog1
                (py-range-item range index)
              (setf (py-range-iterator-object-index iterator) (1+ index)))
+           (py-raise *py-stop-iteration*))))
+    ((py-buffered-reader-object-p iterator)
+     (let ((line (py-buffered-reader-readline iterator)))
+       (if (> (or (py-object-size line) 0) 0)
+           line
            (py-raise *py-stop-iteration*))))
     (t
      (error "Expected Python iterator, got ~S" iterator))))

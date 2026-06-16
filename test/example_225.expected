@@ -1,0 +1,13 @@
+True
+bytes
+b'VALUE = "module value"\n'
+23
+b'\n'
+b'def add(a, b):\n'
+39
+4 b'VALUE = "module value"\n' 56
+done
+True
+b'VALUE = "module value"\n'
+b'\n'
+b'def add(a, b):\n'
