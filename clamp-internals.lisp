@@ -2964,15 +2964,19 @@
          (size (or (py-object-size obj) 0)))
     (multiple-value-bind (start step slice-length)
         (py-list-slice-parameters slice size)
-      (if (and (= start 0) (= step 1) (= slice-length size))
-          obj
-          (let ((result-storage (make-array slice-length)))
-            (loop for offset from 0 below slice-length
-                  for index = start then (+ index step)
-                  do (setf (aref result-storage offset) (aref storage index)))
-            (make-py-tuple-object :type *py-tuple-type*
-                                  :size slice-length
-                                  :value result-storage))))))
+      (cond
+        ((= slice-length 0)
+         (make-py-tuple))
+        ((and (= start 0) (= step 1) (= slice-length size))
+         obj)
+        (t
+         (let ((result-storage (make-array slice-length)))
+           (loop for offset from 0 below slice-length
+                 for index = start then (+ index step)
+                 do (setf (aref result-storage offset) (aref storage index)))
+           (make-py-tuple-object :type *py-tuple-type*
+                                 :size slice-length
+                                 :value result-storage)))))))
 
 (defun py-bytes-slice (obj slice)
   (let* ((storage (py-bytes-storage obj "__getitem__"))
@@ -4434,15 +4438,23 @@
                          :value storage
                          :allocated (array-total-size storage))))
 
+(defvar *py-empty-tuple* nil)
+
 (defun make-py-tuple (&rest values)
-  (let* ((size (length values))
-         (storage (make-array size)))
-    (loop for value in values
-          for index from 0
-          do (setf (aref storage index) value))
-    (make-py-tuple-object :type *py-tuple-type*
-                          :size size
-                          :value storage)))
+  (if (null values)
+      (or *py-empty-tuple*
+          (setf *py-empty-tuple*
+                (make-py-tuple-object :type *py-tuple-type*
+                                      :size 0
+                                      :value (make-array 0))))
+      (let* ((size (length values))
+             (storage (make-array size)))
+        (loop for value in values
+              for index from 0
+              do (setf (aref storage index) value))
+        (make-py-tuple-object :type *py-tuple-type*
+                              :size size
+                              :value storage))))
 
 (defun py-add (left right)
   (let ((normalized-left (py-normalize-bool-number left))
