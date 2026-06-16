@@ -939,6 +939,15 @@
                  (not (py-dict-has-key-p dict name)))
         (vector-push-extend name (py-dict-object-keys dict))
         (setf (py-object-size dict) (hash-table-count (py-object-attrs obj))))))
+  (when (py-file-reader-object-p obj)
+    (when (string= name "path")
+      (setf (py-file-reader-object-path obj) value))
+    (let ((dict (py-file-reader-object-namespace-dict obj)))
+      (when (and dict
+                 (not (string= name "__dict__"))
+                 (not (py-dict-has-key-p dict name)))
+        (vector-push-extend name (py-dict-object-keys dict))
+        (setf (py-object-size dict) (hash-table-count (py-object-attrs obj))))))
   (when (and (py-module-object-p obj)
              (not (string= name "__dict__")))
     (py-module-dict-note-key obj name)))
@@ -972,7 +981,8 @@
   namespace-dict)
 
 (defstruct (py-file-reader-object (:include py-object))
-  path)
+  path
+  namespace-dict)
 
 (defstruct (py-buffered-reader-object (:include py-object))
   data
@@ -2348,6 +2358,8 @@
     (return-from py-lookup-attr (py-module-dict obj)))
   (when (and (py-source-file-loader-object-p obj) (string= name "__dict__"))
     (return-from py-lookup-attr (py-source-file-loader-dict obj)))
+  (when (and (py-file-reader-object-p obj) (string= name "__dict__"))
+    (return-from py-lookup-attr (py-file-reader-dict obj)))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
@@ -2666,6 +2678,11 @@
   (or (py-source-file-loader-object-namespace-dict loader)
       (setf (py-source-file-loader-object-namespace-dict loader)
             (make-py-dict-for-storage (py-object-attrs loader) loader))))
+
+(defun py-file-reader-dict (reader)
+  (or (py-file-reader-object-namespace-dict reader)
+      (setf (py-file-reader-object-namespace-dict reader)
+            (make-py-dict-for-storage (py-object-attrs reader) reader))))
 
 (defun make-py-dict-from-pairs (&rest pairs)
   (let ((dict (make-py-dict-object :type *py-dict-type*
