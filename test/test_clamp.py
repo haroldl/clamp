@@ -2210,6 +2210,21 @@ def test_import_path_read_text_matches_local_cpython_when_available():
     assert clamp_result.stdout == cpython_result.stdout
 
 
+def test_import_path_joinpath_segments_match_local_cpython_when_available():
+    sample = TEST_DIR / "example_231.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
 def test_ascii_builtin_example_matches_local_cpython_when_available():
     sample = TEST_DIR / "example_227.py"
     if not CPYTHON_314.exists():

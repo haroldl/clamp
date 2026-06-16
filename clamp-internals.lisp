@@ -1118,11 +1118,14 @@
   (let ((path (probe-file (py-file-reader-resource-path reader resource))))
     (py-bool (and path (not (uiop:directory-pathname-p path))))))
 
-(defun py-path-joinpath (path resource)
-  (make-py-path
-   (namestring (merge-pathnames (py-path-string resource)
-                                (uiop:ensure-directory-pathname
-                                 (py-path-string path))))))
+(defun py-path-joinpath (path &rest resources)
+  (let ((joined (py-path-string path)))
+    (dolist (resource resources)
+      (setf joined
+            (namestring (merge-pathnames (py-path-string resource)
+                                         (uiop:ensure-directory-pathname
+                                          joined)))))
+    (make-py-path joined)))
 
 (defun py-path-exists-p (path)
   (not (null (probe-file (py-path-string path)))))
@@ -1425,8 +1428,8 @@
         (py-file-reader-contents reader)))
 
 (setf (py-type-attr *py-path-type* "joinpath")
-      (lambda (path resource)
-        (py-path-joinpath path resource)))
+      (lambda (path &rest resources)
+        (apply #'py-path-joinpath path resources)))
 
 (setf (py-type-attr *py-path-type* "iterdir")
       (lambda (path)
