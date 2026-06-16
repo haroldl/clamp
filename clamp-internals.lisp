@@ -4078,6 +4078,21 @@
             (gethash key (py-dict-storage obj "get"))
           (if found value default))))
 
+(defparameter +py-dict-pop-missing-default+ (gensym "PY-DICT-POP-MISSING-DEFAULT"))
+
+(setf (py-type-attr *py-dict-type* "pop")
+      (lambda (obj key &optional (default +py-dict-pop-missing-default+))
+        (multiple-value-bind (value found)
+            (gethash key (py-dict-storage obj "pop"))
+          (cond
+            (found
+             (py-dict-delete-entry obj key)
+             value)
+            ((not (eq default +py-dict-pop-missing-default+))
+             default)
+            (t
+             (error "~S" key))))))
+
 (setf (py-type-attr *py-dict-type* "copy")
       (lambda (obj)
         (py-dict-copy obj)))
