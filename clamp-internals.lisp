@@ -1295,6 +1295,15 @@
         (declare (ignore reader))
         *py-false*))
 
+(setf (py-type-attr *py-buffered-reader-type* "__enter__")
+      (lambda (reader)
+        reader))
+
+(setf (py-type-attr *py-buffered-reader-type* "__exit__")
+      (lambda (reader exc-type exc-value traceback)
+        (declare (ignore exc-type exc-value traceback))
+        (funcall (py-type-attr (py-object-type reader) "close") reader)))
+
 (setf (py-type-attr *py-buffered-reader-type* "close")
       (lambda (reader)
         (setf (py-buffered-reader-object-closed reader) t)
