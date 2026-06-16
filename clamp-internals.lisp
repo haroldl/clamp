@@ -2524,6 +2524,17 @@
       (remhash key (py-object-attrs owner))))
   *py-none*)
 
+(defun py-dict-copy (obj)
+  (let ((copy (make-py-dict-object :type *py-dict-type*
+                                   :size 0
+                                   :value (make-hash-table :test #'equal)))
+        (storage (py-dict-storage obj "copy"))
+        (keys (py-dict-object-keys obj)))
+    (loop for index from 0 below (fill-pointer keys)
+          for key = (aref keys index)
+          do (py-dict-set-entry copy key (gethash key storage)))
+    copy))
+
 (defun make-py-dict-for-storage (storage &optional namespace-owner)
   (let ((dict (make-py-dict-object :type *py-dict-type*
                                    :size 0
@@ -3994,6 +4005,10 @@
         (multiple-value-bind (value found)
             (gethash key (py-dict-storage obj "get"))
           (if found value default))))
+
+(setf (py-type-attr *py-dict-type* "copy")
+      (lambda (obj)
+        (py-dict-copy obj)))
 
 (setf (py-type-attr *py-dict-type* "__repr__")
       (lambda (obj)
