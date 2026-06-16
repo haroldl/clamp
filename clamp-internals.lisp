@@ -967,7 +967,13 @@
        (setf (py-module-spec-object-set-fileattr obj) value)
        (setf (py-module-spec-object-has-location obj) value)
        (setf (gethash "has_location" (py-object-attrs obj)) value)
-       (setf (gethash "_set_fileattr" (py-object-attrs obj)) value))))
+       (setf (gethash "_set_fileattr" (py-object-attrs obj)) value)))
+    (let ((dict (py-module-spec-object-namespace-dict obj)))
+      (when (and dict
+                 (not (string= name "__dict__"))
+                 (not (py-dict-has-key-p dict name)))
+        (vector-push-extend name (py-dict-object-keys dict))
+        (setf (py-object-size dict) (hash-table-count (py-object-attrs obj))))))
   (when (py-source-file-loader-object-p obj)
     (cond
       ((string= name "name")
@@ -1014,7 +1020,8 @@
   submodule-search-locations
   (has-location nil)
   (initializing nil)
-  (uninitialized-submodules '()))
+  (uninitialized-submodules '())
+  namespace-dict)
 
 (defstruct (py-source-file-loader-object (:include py-object))
   name
@@ -2560,6 +2567,8 @@
     (return-from py-lookup-attr (py-module-spec-cached obj)))
   (when (and (py-module-object-p obj) (string= name "__dict__"))
     (return-from py-lookup-attr (py-module-dict obj)))
+  (when (and (py-module-spec-object-p obj) (string= name "__dict__"))
+    (return-from py-lookup-attr (py-module-spec-dict obj)))
   (when (and (py-source-file-loader-object-p obj) (string= name "__dict__"))
     (return-from py-lookup-attr (py-source-file-loader-dict obj)))
   (when (and (py-file-reader-object-p obj) (string= name "__dict__"))
@@ -2918,6 +2927,11 @@
   (or (py-module-object-namespace-dict module)
       (setf (py-module-object-namespace-dict module)
             (make-py-dict-for-storage (py-object-attrs module) module))))
+
+(defun py-module-spec-dict (spec)
+  (or (py-module-spec-object-namespace-dict spec)
+      (setf (py-module-spec-object-namespace-dict spec)
+            (make-py-dict-for-storage (py-object-attrs spec) spec))))
 
 (defun py-source-file-loader-dict (loader)
   (or (py-source-file-loader-object-namespace-dict loader)
