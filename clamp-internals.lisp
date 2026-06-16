@@ -1450,6 +1450,10 @@
           (error "unsupported file mode: ~A" mode))
         (make-clamp-buffered-reader (py-path-string path))))
 
+(setf (py-type-attr *py-path-type* "read_bytes")
+      (lambda (path)
+        (py-read-file-bytes (py-path-string path))))
+
 (setf (py-type-attr *py-buffered-reader-type* "read")
       (lambda (reader &optional size)
         (py-buffered-reader-read reader size)))
