@@ -1955,6 +1955,21 @@ def test_import_file_reader_open_resource_readline_matches_local_cpython_when_av
     assert clamp_result.stdout == cpython_result.stdout
 
 
+def test_import_module_dict_namespace_matches_local_cpython_when_available():
+    sample = TEST_DIR / "example_210.py"
+    if not CPYTHON_314.exists():
+        pytest.skip("local CPython 3.14.5 interpreter is not built")
+    cpython_result = subprocess.run(
+        [str(CPYTHON_314), str(sample)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == cpython_result.stdout
+
+
 def test_id_builtin_example_matches_local_cpython_when_available():
     if not CPYTHON_314.exists():
         pytest.skip("local CPython 3.14.5 interpreter is not built")

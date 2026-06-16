@@ -925,7 +925,10 @@
       ((string= name "name")
        (setf (py-source-file-loader-object-name obj) value))
       ((string= name "path")
-       (setf (py-source-file-loader-object-path obj) value)))))
+       (setf (py-source-file-loader-object-path obj) value))))
+  (when (and (py-module-object-p obj)
+             (not (string= name "__dict__")))
+    (py-module-dict-note-key obj name)))
 
 (defun (setf py-object-attr) (value obj name)
   (setf (gethash name (py-object-attrs obj)) value)
@@ -2214,6 +2217,8 @@
     (return-from py-lookup-attr (py-module-spec-parent obj)))
   (when (and (py-module-spec-object-p obj) (string= name "cached"))
     (return-from py-lookup-attr (py-module-spec-cached obj)))
+  (when (and (py-module-object-p obj) (string= name "__dict__"))
+    (return-from py-lookup-attr (py-module-dict obj)))
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
@@ -2293,6 +2298,7 @@
   name
   source-path
   package-name
+  namespace-dict
   (initializing nil))
 
 (defstruct (py-bytes-object (:include py-object)))
@@ -2455,6 +2461,33 @@
         (incf (py-object-size obj)))
       (setf (gethash key storage) value)))
   value)
+
+(defun make-py-dict-for-storage (storage)
+  (let ((dict (make-py-dict-object :type *py-dict-type*
+                                   :size 0
+                                   :value storage)))
+    (maphash (lambda (key value)
+               (declare (ignore value))
+               (unless (string= key "__dict__")
+                 (vector-push-extend key (py-dict-object-keys dict))
+                 (incf (py-object-size dict))))
+             storage)
+    dict))
+
+(defun py-dict-has-key-p (dict key)
+  (loop for index from 0 below (fill-pointer (py-dict-object-keys dict))
+        thereis (equal (aref (py-dict-object-keys dict) index) key)))
+
+(defun py-module-dict-note-key (module name)
+  (let ((dict (py-module-object-namespace-dict module)))
+    (when (and dict (not (py-dict-has-key-p dict name)))
+      (vector-push-extend name (py-dict-object-keys dict))
+      (setf (py-object-size dict) (hash-table-count (py-object-attrs module))))))
+
+(defun py-module-dict (module)
+  (or (py-module-object-namespace-dict module)
+      (setf (py-module-object-namespace-dict module)
+            (make-py-dict-for-storage (py-object-attrs module)))))
 
 (defun make-py-dict-from-pairs (&rest pairs)
   (let ((dict (make-py-dict-object :type *py-dict-type*
