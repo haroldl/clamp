@@ -34,6 +34,7 @@
    :py-import-from
    :py-import-star
    :py-type-of
+   :py-id
    :py-callable
    :py-isinstance
    :make-py-callable
@@ -399,6 +400,18 @@
     ((stringp value) *py-str-type*)
     (t
      (error "Python object type for ~S is not modeled by Clamp yet" value))))
+
+(defvar *py-identity-next-id* 1)
+(defvar *py-identities* (make-hash-table :test #'eq))
+
+(defun py-id (value)
+  (multiple-value-bind (id found) (gethash value *py-identities*)
+    (if found
+        id
+        (let ((new-id *py-identity-next-id*))
+          (incf *py-identity-next-id*)
+          (setf (gethash value *py-identities*) new-id)
+          new-id))))
 
 (defparameter +py-uhash-width+ 64)
 (defparameter +py-uhash-modulus+ (ash 1 +py-uhash-width+))
