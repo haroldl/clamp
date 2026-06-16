@@ -1,0 +1,12 @@
+True
+{'first': 1, 'second': 'two', 'third': 3}
+True {'first': 1, 'second': 'two', 'third': 3}
+{'first': 1, 'second': 'two', 'third': 3}
+True {}
+True {'first': 1, 'second': 'two', 'third': 3}
+True {'first': 1, 'second': 'two', 'third': 3}
+{'first': 1, 'second': 'two', 'third': 3, 'nested': ['value']}
+{'first': 1, 'second': 'two', 'third': 3, 'nested': ['value', 'mutated']}
+module value
+True
+updated added added

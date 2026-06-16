@@ -2824,6 +2824,15 @@
           value
           (py-dict-set-entry obj key default)))))
 
+(defun py-dict-update (obj &optional (other *py-none*))
+  (unless (eq other *py-none*)
+    (let ((other-storage (py-dict-storage other "update"))
+          (other-keys (py-dict-object-keys other)))
+      (loop for index from 0 below (fill-pointer other-keys)
+            for key = (aref other-keys index)
+            do (py-dict-set-entry obj key (gethash key other-storage)))))
+  *py-none*)
+
 (defun make-py-dict-for-storage (storage &optional namespace-owner)
   (let ((dict (make-py-dict-object :type *py-dict-type*
                                    :size 0
@@ -4345,6 +4354,10 @@
 (setf (py-type-attr *py-dict-type* "setdefault")
       (lambda (obj key &optional (default *py-none*))
         (py-dict-setdefault obj key default)))
+
+(setf (py-type-attr *py-dict-type* "update")
+      (lambda (obj &optional (other *py-none*))
+        (py-dict-update obj other)))
 
 (setf (py-type-attr *py-dict-type* "copy")
       (lambda (obj)
