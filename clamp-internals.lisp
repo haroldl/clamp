@@ -959,6 +959,7 @@
 
 (defstruct (py-buffered-reader-object (:include py-object))
   data
+  path
   (position 0)
   (closed nil))
 
@@ -1031,8 +1032,10 @@
 (defun make-clamp-buffered-reader (path)
   (let ((reader (make-py-buffered-reader-object
                  :type *py-buffered-reader-type*
+                 :path path
                  :data (py-read-file-bytes path))))
     (setf (py-object-attr reader "closed") *py-false*)
+    (setf (py-object-attr reader "name") path)
     reader))
 
 (defun py-buffered-reader-read (reader &optional size)
