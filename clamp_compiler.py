@@ -63,6 +63,7 @@ class Context():
     loop_block_name: str | None = None
     loop_continue_name: str | None = None
     loop_broke_name: str | None = None
+    in_async_function: bool = False
 
     def child(self):
         return replace(self, top_level_stmt = False)
@@ -200,6 +201,46 @@ def codegen_function(node, context : Context):
     return hed + bod + ")))" + (")" if default_bindings else "") + "\n"
 
 
+
+def codegen_async_function(node, context: Context):
+    child_context = context.child()
+
+    default_symbols = [
+        f"__clamp_default_{id(node)}_{index}"
+        for index, _ in enumerate(node.args.defaults)
+    ]
+    params = codegen_args(node.args, child_context, default_symbols)
+
+    default_bindings = ""
+    if node.args.defaults:
+        default_bindings = (
+            "(common-lisp:let ("
+            + " ".join(
+                f"({symbol} {codegen(default, child_context)})"
+                for symbol, default in zip(default_symbols, node.args.defaults)
+            )
+            + ") "
+        )
+    setter = (
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {codegen(node.name, child_context)} {node.name} "
+        if context.top_level_stmt
+        else f"(common-lisp:setf {node.name} "
+    )
+    hed = (
+        setter
+        + f"{default_bindings}"
+        + f"(common-lisp:lambda ({params}) "
+        + f"(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-COROUTINE {lisp_string(node.name)} "
+        + f"(common-lisp:lambda () (common-lisp:block {node.name} "
+    )
+
+    body_context = replace(child_context, block_name=node.name, in_async_function=True)
+    bod = codegen_block(node.body, body_context)
+    body = f"(common-lisp:progn {bod} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)" if bod else "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
+
+    return hed + body + ")))))" + (")" if default_bindings else "") + "\n"
+
+
 def codegen_funcall(node, context : Context):
     child_context = context.child()
     args = [codegen(a, child_context) for a in node.args]
@@ -221,6 +262,14 @@ def codegen_funcall(node, context : Context):
     if isinstance(node.func, ast.Name) and node.func.id.lower() in {"__import__", "print", "len", "bool", "callable", "isinstance", "repr", "ascii", "str", "type", "id", "iter", "next", "reversed", "min", "max", "sum", "sorted", "list", "tuple", "abs", "round", "hash", "pow", "divmod", "all", "any", "enumerate", "zip", "filter", "map", "range", "slice", "bin", "oct", "hex", "chr", "ord"}:
         target = f"|CLAMP.__builtins__|:{node.func.id.upper()}"
     return f"(common-lisp:funcall {target} {args_str})"
+
+
+
+def codegen_await(node, context: Context):
+    if not context.in_async_function:
+        raise Exception("'await' outside async function")
+    awaited = codegen(node.value, context.child())
+    return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-AWAIT {awaited})"
 
 
 def lisp_string(value: str) -> str:
@@ -581,7 +630,9 @@ codegen_handlers[ast.Import] = codegen_import
 codegen_handlers[ast.ImportFrom] = codegen_import_from
 codegen_handlers[ast.Pass] = lambda node, _: "COMMON-LISP::nil"
 codegen_handlers[ast.FunctionDef] = codegen_function
+codegen_handlers[ast.AsyncFunctionDef] = codegen_async_function
 codegen_handlers[ast.Call] = codegen_funcall
+codegen_handlers[ast.Await] = codegen_await
 codegen_handlers[ast.List] = lambda node, context: (
     "(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-LIST"
     + "".join(f" {codegen(elt, context.child())}" for elt in node.elts)

@@ -121,6 +121,9 @@
    :py-raise
    :*py-stop-iteration*
    :py-stop-iteration-p
+   :make-py-coroutine
+   :py-await
+   :py-coroutine-run
    :py-enumerate
    :py-zip
    :py-filter
@@ -267,6 +270,60 @@
                 :bases (list *py-exception-type*)
                 :basicsize 1))
 
+(defparameter *py-runtime-error-type*
+  (make-py-type :type *py-type-type*
+                :name "RuntimeError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-type-error-type*
+  (make-py-type :type *py-type-type*
+                :name "TypeError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-cancelled-error-type*
+  (make-py-type :type *py-type-type*
+                :name "CancelledError"
+                :bases (list *py-base-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-invalid-state-error-type*
+  (make-py-type :type *py-type-type*
+                :name "InvalidStateError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-coroutine-type*
+  (make-py-type :type *py-type-type*
+                :name "coroutine"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-future-type*
+  (make-py-type :type *py-type-type*
+                :name "Future"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-task-type*
+  (make-py-type :type *py-type-type*
+                :name "Task"
+                :bases (list *py-asyncio-future-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-event-loop-type*
+  (make-py-type :type *py-type-type*
+                :name "_ClampEventLoop"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-sleep-type*
+  (make-py-type :type *py-type-type*
+                :name "sleep"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-slice-type*
   (make-py-type :type *py-type-type*
                 :name "slice"
@@ -350,6 +407,33 @@
 
 (defparameter *py-true*
   (make-py-object :type *py-bool-type* :value t))
+
+
+(defstruct (py-coroutine-object (:include py-object))
+  name
+  thunk
+  (state :created)
+  result
+  exception)
+
+(defstruct (py-asyncio-future-object (:include py-object))
+  loop
+  (state :pending)
+  result
+  exception
+  (callbacks '()))
+
+(defstruct (py-asyncio-task-object (:include py-asyncio-future-object))
+  coroutine
+  name)
+
+(defstruct (py-asyncio-event-loop-object (:include py-object))
+  (closed nil)
+  (running nil))
+
+(defstruct (py-asyncio-sleep-object (:include py-object))
+  delay
+  result)
 
 (defstruct (py-slice-object (:include py-object))
   start
@@ -2642,6 +2726,248 @@
 (py-register-builtin-module "operator" #'make-clamp-operator-module)
 
 (py-register-builtin-module "math" #'make-clamp-math-module)
+
+(defvar *py-asyncio-running-loop* nil)
+
+(defun make-py-coroutine (name thunk)
+  (make-py-coroutine-object :type *py-coroutine-type*
+                            :name name
+                            :thunk thunk
+                            :state :created))
+
+(defun py-asyncio-invalid-state ()
+  (py-raise (make-py-exception *py-asyncio-invalid-state-error-type* "invalid state")))
+
+(defun py-future-done-p (future)
+  (not (eq (py-asyncio-future-object-state future) :pending)))
+
+(defun py-future-set-result (future result)
+  (when (py-future-done-p future)
+    (py-asyncio-invalid-state))
+  (setf (py-asyncio-future-object-result future) result)
+  (setf (py-asyncio-future-object-state future) :finished)
+  result)
+
+(defun py-future-set-exception (future exception)
+  (when (py-future-done-p future)
+    (py-asyncio-invalid-state))
+  (setf (py-asyncio-future-object-exception future) exception)
+  (setf (py-asyncio-future-object-state future) :finished)
+  *py-none*)
+
+(defun py-future-result (future)
+  (unless (py-future-done-p future)
+    (py-asyncio-invalid-state))
+  (let ((exception (py-asyncio-future-object-exception future)))
+    (when exception
+      (if (py-exception-object-p exception)
+          (py-raise exception)
+          (error exception))))
+  (py-asyncio-future-object-result future))
+
+(defun py-future-cancel (future &optional (msg *py-none*))
+  (declare (ignore msg))
+  (if (py-future-done-p future)
+      *py-false*
+      (progn
+        (setf (py-asyncio-future-object-exception future)
+              (make-py-exception *py-asyncio-cancelled-error-type*))
+        (setf (py-asyncio-future-object-state future) :cancelled)
+        *py-true*)))
+
+(defun py-future-cancelled (future)
+  (py-bool (eq (py-asyncio-future-object-state future) :cancelled)))
+
+(defun py-future-done (future)
+  (py-bool (py-future-done-p future)))
+
+(defun py-coroutine-run (coroutine)
+  (case (py-coroutine-object-state coroutine)
+    (:created
+     (setf (py-coroutine-object-state coroutine) :running)
+     (handler-case
+         (let ((result (funcall (py-coroutine-object-thunk coroutine))))
+           (setf (py-coroutine-object-result coroutine) result)
+           (setf (py-coroutine-object-state coroutine) :closed)
+           result)
+       (py-exception (condition)
+         (setf (py-coroutine-object-exception coroutine) (py-exception-value condition))
+         (setf (py-coroutine-object-state coroutine) :closed)
+         (error condition))
+       (error (condition)
+         (setf (py-coroutine-object-exception coroutine) condition)
+         (setf (py-coroutine-object-state coroutine) :closed)
+         (error condition))))
+    (:closed
+     (py-raise (make-py-exception *py-runtime-error-type* "cannot reuse already awaited coroutine")))
+    (otherwise
+     (py-raise (make-py-exception *py-runtime-error-type* "coroutine is already running")))))
+
+(defun py-asyncio-run-task (task)
+  (when (eq (py-asyncio-future-object-state task) :pending)
+    (handler-case
+        (py-future-set-result task (py-coroutine-run (py-asyncio-task-object-coroutine task)))
+      (py-exception (condition)
+        (setf (py-asyncio-future-object-exception task) (py-exception-value condition))
+        (setf (py-asyncio-future-object-state task) :finished)
+        (error condition))
+      (error (condition)
+        (setf (py-asyncio-future-object-exception task) condition)
+        (setf (py-asyncio-future-object-state task) :finished)
+        (error condition))))
+  task)
+
+(defun py-await (awaitable)
+  (cond
+    ((py-coroutine-object-p awaitable)
+     (py-coroutine-run awaitable))
+    ((py-asyncio-task-object-p awaitable)
+     (py-asyncio-run-task awaitable)
+     (py-future-result awaitable))
+    ((py-asyncio-future-object-p awaitable)
+     (py-future-result awaitable))
+    ((py-asyncio-sleep-object-p awaitable)
+     (py-asyncio-sleep-object-result awaitable))
+    ((py-object-p awaitable)
+     (multiple-value-bind (method found) (py-find-type-attr (py-object-type awaitable) "__await__")
+       (if found
+           (let ((iterator (py-invoke-callable method awaitable)))
+             (loop with result = *py-none*
+                   do (multiple-value-bind (item found-item) (py-next-item iterator)
+                        (unless found-item (return result))
+                        (setf result item))))
+           (py-raise (make-py-exception *py-type-error-type* "object is not awaitable")))))
+    (t
+     (py-raise (make-py-exception *py-type-error-type* "object is not awaitable")))))
+
+(defun py-asyncio-new-event-loop ()
+  (make-py-asyncio-event-loop-object :type *py-asyncio-event-loop-type*))
+
+(defun py-asyncio-create-future (loop)
+  (make-py-asyncio-future-object :type *py-asyncio-future-type* :loop loop))
+
+(defun py-asyncio-create-task (loop coroutine &optional (name *py-none*))
+  (unless (py-coroutine-object-p coroutine)
+    (py-raise (make-py-exception *py-type-error-type* "a coroutine was expected")))
+  (make-py-asyncio-task-object :type *py-asyncio-task-type*
+                               :loop loop
+                               :coroutine coroutine
+                               :name name))
+
+(defun py-asyncio-run-until-complete (loop awaitable)
+  (when (py-asyncio-event-loop-object-running loop)
+    (py-raise (make-py-exception *py-runtime-error-type* "This event loop is already running")))
+  (let ((*py-asyncio-running-loop* loop))
+    (setf (py-asyncio-event-loop-object-running loop) t)
+    (unwind-protect
+         (py-await (if (py-coroutine-object-p awaitable)
+                       (py-asyncio-create-task loop awaitable)
+                       awaitable))
+      (setf (py-asyncio-event-loop-object-running loop) nil))))
+
+(defun py-asyncio-run (awaitable)
+  (when *py-asyncio-running-loop*
+    (py-raise (make-py-exception *py-runtime-error-type* "asyncio.run() cannot be called from a running event loop")))
+  (let ((loop (py-asyncio-new-event-loop)))
+    (unwind-protect
+         (py-asyncio-run-until-complete loop awaitable)
+      (setf (py-asyncio-event-loop-object-closed loop) t))))
+
+(defun py-asyncio-get-running-loop ()
+  (or *py-asyncio-running-loop*
+      (py-raise (make-py-exception *py-runtime-error-type* "no running event loop"))))
+
+(defun py-asyncio-module-create-task (coroutine)
+  (py-asyncio-create-task (py-asyncio-get-running-loop) coroutine))
+
+(defun py-asyncio-sleep (delay &optional (result *py-none*))
+  (make-py-asyncio-sleep-object :type *py-asyncio-sleep-type*
+                                :delay delay
+                                :result result))
+
+(defun py-asyncio-gather (&rest awaitables)
+  (let ((future (py-asyncio-create-future (or *py-asyncio-running-loop*
+                                             (py-asyncio-new-event-loop))))
+        (result (make-py-list)))
+    (dolist (awaitable awaitables)
+      (py-append result (py-await awaitable)))
+    (py-future-set-result future result)
+    future))
+
+(defun py-asyncio-loop-time (loop)
+  (declare (ignore loop))
+  (/ (get-internal-real-time) internal-time-units-per-second))
+
+(defun py-asyncio-loop-call-soon (loop callback &rest args)
+  (declare (ignore loop))
+  (apply #'py-invoke-callable callback args)
+  *py-none*)
+
+(defun py-asyncio-loop-call-later (loop delay callback &rest args)
+  (declare (ignore delay))
+  (apply #'py-asyncio-loop-call-soon loop callback args))
+
+(setf (py-type-attr *py-coroutine-type* "__await__")
+      (lambda (coroutine) coroutine))
+
+(setf (py-type-attr *py-asyncio-future-type* "result") #'py-future-result)
+(setf (py-type-attr *py-asyncio-future-type* "set_result") #'py-future-set-result)
+(setf (py-type-attr *py-asyncio-future-type* "set_exception") #'py-future-set-exception)
+(setf (py-type-attr *py-asyncio-future-type* "done") #'py-future-done)
+(setf (py-type-attr *py-asyncio-future-type* "cancel") #'py-future-cancel)
+(setf (py-type-attr *py-asyncio-future-type* "cancelled") #'py-future-cancelled)
+(setf (py-type-attr *py-asyncio-future-type* "__await__")
+      (lambda (future) future))
+
+(setf (py-type-attr *py-asyncio-task-type* "result") #'py-future-result)
+(setf (py-type-attr *py-asyncio-task-type* "done") #'py-future-done)
+(setf (py-type-attr *py-asyncio-task-type* "cancel") #'py-future-cancel)
+(setf (py-type-attr *py-asyncio-task-type* "cancelled") #'py-future-cancelled)
+(setf (py-type-attr *py-asyncio-task-type* "get_coro")
+      (lambda (task) (py-asyncio-task-object-coroutine task)))
+(setf (py-type-attr *py-asyncio-task-type* "__await__")
+      (lambda (task) task))
+
+(setf (py-type-attr *py-asyncio-event-loop-type* "time") #'py-asyncio-loop-time)
+(setf (py-type-attr *py-asyncio-event-loop-type* "create_future") #'py-asyncio-create-future)
+(setf (py-type-attr *py-asyncio-event-loop-type* "create_task") #'py-asyncio-create-task)
+(setf (py-type-attr *py-asyncio-event-loop-type* "run_until_complete") #'py-asyncio-run-until-complete)
+(setf (py-type-attr *py-asyncio-event-loop-type* "call_soon") #'py-asyncio-loop-call-soon)
+(setf (py-type-attr *py-asyncio-event-loop-type* "call_later") #'py-asyncio-loop-call-later)
+(setf (py-type-attr *py-asyncio-event-loop-type* "is_running")
+      (lambda (loop) (py-bool (py-asyncio-event-loop-object-running loop))))
+(setf (py-type-attr *py-asyncio-event-loop-type* "is_closed")
+      (lambda (loop) (py-bool (py-asyncio-event-loop-object-closed loop))))
+(setf (py-type-attr *py-asyncio-event-loop-type* "close")
+      (lambda (loop) (setf (py-asyncio-event-loop-object-closed loop) t) *py-none*))
+
+(defun make-clamp-asyncio-module ()
+  (let ((module (make-clamp-module "asyncio")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio core module")
+    (setf (py-object-attr module "run") #'py-asyncio-run)
+    (setf (py-object-attr module "sleep") #'py-asyncio-sleep)
+    (setf (py-object-attr module "gather") #'py-asyncio-gather)
+    (setf (py-object-attr module "get_running_loop") #'py-asyncio-get-running-loop)
+    (setf (py-object-attr module "create_task") #'py-asyncio-module-create-task)
+    (setf (py-object-attr module "new_event_loop") #'py-asyncio-new-event-loop)
+    (setf (py-object-attr module "Future")
+          (lambda (&optional (loop *py-none*))
+            (py-asyncio-create-future (if (eq loop *py-none*)
+                                          (or *py-asyncio-running-loop*
+                                              (py-asyncio-new-event-loop))
+                                          loop))))
+    (setf (py-object-attr module "Task")
+          (lambda (coroutine &optional (loop *py-none*))
+            (py-asyncio-create-task (if (eq loop *py-none*)
+                                        (or *py-asyncio-running-loop*
+                                            (py-asyncio-new-event-loop))
+                                        loop)
+                                    coroutine)))
+    (setf (py-object-attr module "CancelledError") *py-asyncio-cancelled-error-type*)
+    (setf (py-object-attr module "InvalidStateError") *py-asyncio-invalid-state-error-type*)
+    module))
+
+(py-register-builtin-module "asyncio" #'make-clamp-asyncio-module)
 
 (defun py-find-type-attr (type name)
   (multiple-value-bind (attr found) (gethash name (py-type-attrs type))
