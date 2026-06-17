@@ -422,6 +422,84 @@ def codegen_unary_operator(node, context: Context):
     return f"({op} {operand})"
 
 
+
+def codegen_async_for(node, context: Context):
+    if not context.in_async_function:
+        raise Exception("'async for' outside async function")
+    if not isinstance(node.target, ast.Name):
+        raise Exception("TODO: unsupported async for loop target")
+
+    child_context = context.child()
+    loop_id = id(node)
+    iterator_symbol = f"__clamp_async_for_iterator_{loop_id}"
+    item_symbol = f"__clamp_async_for_item_{loop_id}"
+    found_symbol = f"__clamp_async_for_found_{loop_id}"
+    loop_block_name = f"__clamp_async_loop_{loop_id}"
+    loop_continue_name = f"__clamp_async_loop_continue_{loop_id}"
+    loop_broke_name = f"__clamp_async_loop_broke_{loop_id}"
+    target = codegen(node.target, child_context)
+    iterable = codegen(node.iter, child_context)
+    body_context = replace(
+        child_context,
+        mutation_context=True,
+        loop_block_name=loop_block_name,
+        loop_continue_name=loop_continue_name,
+        loop_broke_name=loop_broke_name,
+    )
+    body = codegen_block(node.body, body_context) or "COMMON-LISP::nil"
+    loop_code = (
+        f"(common-lisp:let (({loop_broke_name} COMMON-LISP::nil) "
+        f"({target} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)) "
+        f"(common-lisp:let (({iterator_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-AITER {iterable}))) "
+        f"(common-lisp:block {loop_block_name} "
+        f"(common-lisp:loop "
+        f"(common-lisp:multiple-value-bind ({item_symbol} {found_symbol}) "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-ANEXT-ITEM {iterator_symbol}) "
+        f"(common-lisp:unless {found_symbol} (common-lisp:return)) "
+        f"(common-lisp:setf {target} {item_symbol}) "
+        f"(common-lisp:block {loop_continue_name} "
+        f"(common-lisp:progn {body}))))))"
+    )
+    if node.orelse:
+        else_code = codegen_block(node.orelse, child_context)
+        loop_code += (
+            f" (common-lisp:unless {loop_broke_name} "
+            f"(common-lisp:progn {else_code} ))"
+        )
+    return loop_code + ")"
+
+
+def codegen_async_with(node, context: Context):
+    if not context.in_async_function:
+        raise Exception("'async with' outside async function")
+    if len(node.items) != 1:
+        raise Exception("TODO: multiple async with items are not supported yet")
+    item = node.items[0]
+    if item.optional_vars and not isinstance(item.optional_vars, ast.Name):
+        raise Exception("TODO: unsupported async with target")
+
+    child_context = context.child()
+    manager_symbol = f"__clamp_async_with_manager_{id(node)}"
+    exit_symbol = f"__clamp_async_with_exit_{id(node)}"
+    value_symbol = f"__clamp_async_with_value_{id(node)}"
+    manager = codegen(item.context_expr, child_context)
+    body = codegen_block(node.body, child_context) or "COMMON-LISP::nil"
+    if item.optional_vars:
+        target = codegen(item.optional_vars, child_context)
+        body = f"(common-lisp:let (({target} {value_symbol})) {body})"
+    return (
+        f"(common-lisp:let* (({manager_symbol} {manager}) "
+        f"({exit_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-LOOKUP-ATTR {manager_symbol} \"__aexit__\")) "
+        f"({value_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-AWAIT "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-CALL-ATTR {manager_symbol} \"__aenter__\")))) "
+        f"(common-lisp:unwind-protect "
+        f"(common-lisp:progn {body}) "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-AWAIT "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-INVOKE-CALLABLE {exit_symbol} {manager_symbol} "
+        f"|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE* |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE* |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*))))"
+    )
+
+
 def codegen_for(node, context: Context):
     if not isinstance(node.target, ast.Name):
         raise Exception("TODO: unsupported for loop target")
@@ -666,6 +744,8 @@ codegen_handlers[ast.If] = codegen_if
 codegen_handlers[ast.IfExp] = codegen_if
 codegen_handlers[ast.While] = codegen_while
 codegen_handlers[ast.For] = codegen_for
+codegen_handlers[ast.AsyncFor] = codegen_async_for
+codegen_handlers[ast.AsyncWith] = codegen_async_with
 codegen_handlers[ast.Break] = codegen_break
 codegen_handlers[ast.Continue] = codegen_continue
 codegen_handlers[ast.Add] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-ADD"

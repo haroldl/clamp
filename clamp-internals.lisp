@@ -20,6 +20,7 @@
    :py-object-attr
    :py-lookup-attr
    :py-call-attr
+   :py-invoke-callable
    :py-module-object
    :py-module-object-name
    :py-module-object-source-path
@@ -124,6 +125,8 @@
    :make-py-coroutine
    :py-await
    :py-coroutine-run
+   :py-aiter
+   :py-anext-item
    :py-enumerate
    :py-zip
    :py-filter
@@ -270,6 +273,12 @@
                 :bases (list *py-exception-type*)
                 :basicsize 1))
 
+(defparameter *py-stop-async-iteration-type*
+  (make-py-type :type *py-type-type*
+                :name "StopAsyncIteration"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
 (defparameter *py-runtime-error-type*
   (make-py-type :type *py-type-type*
                 :name "RuntimeError"
@@ -321,6 +330,18 @@
 (defparameter *py-asyncio-sleep-type*
   (make-py-type :type *py-type-type*
                 :name "sleep"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-lock-type*
+  (make-py-type :type *py-type-type*
+                :name "Lock"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-as-completed-type*
+  (make-py-type :type *py-type-type*
+                :name "_AsCompleted"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -434,6 +455,14 @@
 (defstruct (py-asyncio-sleep-object (:include py-object))
   delay
   result)
+
+(defstruct (py-asyncio-lock-object (:include py-object))
+  loop
+  (locked nil))
+
+(defstruct (py-asyncio-as-completed-object (:include py-object))
+  items
+  (index 0))
 
 (defstruct (py-slice-object (:include py-object))
   start
@@ -2907,6 +2936,88 @@
   (declare (ignore delay))
   (apply #'py-asyncio-loop-call-soon loop callback args))
 
+
+(defun py-stop-async-iteration-p (value)
+  (cond
+    ((typep value 'py-exception)
+     (py-stop-async-iteration-p (py-exception-value value)))
+    ((py-exception-object-p value)
+     (eq (py-object-type value) *py-stop-async-iteration-type*))
+    (t nil)))
+
+(defun py-aiter (obj)
+  (let ((iterator (py-call-attr obj "__aiter__")))
+    iterator))
+
+(defun py-anext (async-iterator)
+  (py-call-attr async-iterator "__anext__"))
+
+(defun py-anext-item (async-iterator)
+  (handler-case
+      (values (py-await (py-anext async-iterator)) t)
+    (py-exception (condition)
+      (if (py-stop-async-iteration-p condition)
+          (values nil nil)
+          (error condition)))))
+
+(defun py-asyncio-lock ()
+  (make-py-asyncio-lock-object :type *py-asyncio-lock-type*
+                               :loop (or *py-asyncio-running-loop*
+                                         (py-asyncio-new-event-loop))))
+
+(defun py-asyncio-lock-acquire (lock)
+  (make-py-coroutine "Lock.acquire"
+                     (lambda ()
+                       (setf (py-asyncio-lock-object-locked lock) t)
+                       *py-true*)))
+
+(defun py-asyncio-lock-release (lock)
+  (unless (py-asyncio-lock-object-locked lock)
+    (py-raise (make-py-exception *py-runtime-error-type* "Lock is not acquired.")))
+  (setf (py-asyncio-lock-object-locked lock) nil)
+  *py-none*)
+
+(defun py-asyncio-lock-aenter (lock)
+  (make-py-coroutine "Lock.__aenter__"
+                     (lambda ()
+                       (py-await (py-asyncio-lock-acquire lock))
+                       *py-none*)))
+
+(defun py-asyncio-lock-aexit (lock exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "Lock.__aexit__"
+                     (lambda ()
+                       (py-asyncio-lock-release lock)
+                       *py-false*)))
+
+(defun py-asyncio-as-completed (awaitables)
+  (let ((items (make-py-list)))
+    (let ((iterator (py-iter awaitables)))
+      (loop
+        (multiple-value-bind (item found) (py-next-item iterator)
+          (unless found (return))
+          (py-append items
+                     (if (py-coroutine-object-p item)
+                         (py-asyncio-create-task (or *py-asyncio-running-loop*
+                                                     (py-asyncio-new-event-loop))
+                                                 item)
+                         item)))))
+    (make-py-asyncio-as-completed-object :type *py-asyncio-as-completed-type*
+                                         :items items
+                                         :index 0)))
+
+(defun py-asyncio-as-completed-anext (iterator)
+  (make-py-coroutine "as_completed.__anext__"
+                     (lambda ()
+                       (let* ((items (py-asyncio-as-completed-object-items iterator))
+                              (index (py-asyncio-as-completed-object-index iterator))
+                              (size (or (py-object-size items) 0)))
+                         (if (< index size)
+                             (prog1
+                                 (aref (py-object-value items) index)
+                               (setf (py-asyncio-as-completed-object-index iterator) (1+ index)))
+                             (py-raise (make-py-exception *py-stop-async-iteration-type*)))))))
+
 (setf (py-type-attr *py-coroutine-type* "__await__")
       (lambda (coroutine) coroutine))
 
@@ -2941,6 +3052,18 @@
 (setf (py-type-attr *py-asyncio-event-loop-type* "close")
       (lambda (loop) (setf (py-asyncio-event-loop-object-closed loop) t) *py-none*))
 
+
+(setf (py-type-attr *py-asyncio-lock-type* "acquire") #'py-asyncio-lock-acquire)
+(setf (py-type-attr *py-asyncio-lock-type* "release") #'py-asyncio-lock-release)
+(setf (py-type-attr *py-asyncio-lock-type* "locked")
+      (lambda (lock) (py-bool (py-asyncio-lock-object-locked lock))))
+(setf (py-type-attr *py-asyncio-lock-type* "__aenter__") #'py-asyncio-lock-aenter)
+(setf (py-type-attr *py-asyncio-lock-type* "__aexit__") #'py-asyncio-lock-aexit)
+
+(setf (py-type-attr *py-asyncio-as-completed-type* "__aiter__")
+      (lambda (iterator) iterator))
+(setf (py-type-attr *py-asyncio-as-completed-type* "__anext__") #'py-asyncio-as-completed-anext)
+
 (defun make-clamp-asyncio-module ()
   (let ((module (make-clamp-module "asyncio")))
     (setf (py-object-attr module "__doc__") "Clamp built-in asyncio core module")
@@ -2950,6 +3073,8 @@
     (setf (py-object-attr module "get_running_loop") #'py-asyncio-get-running-loop)
     (setf (py-object-attr module "create_task") #'py-asyncio-module-create-task)
     (setf (py-object-attr module "new_event_loop") #'py-asyncio-new-event-loop)
+    (setf (py-object-attr module "Lock") #'py-asyncio-lock)
+    (setf (py-object-attr module "as_completed") #'py-asyncio-as-completed)
     (setf (py-object-attr module "Future")
           (lambda (&optional (loop *py-none*))
             (py-asyncio-create-future (if (eq loop *py-none*)
