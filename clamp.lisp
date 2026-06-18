@@ -121,6 +121,21 @@
   (write-line "Locals:")
   (write-line (python-to-lisp-string py-locals)))
 
+(defun print-python-exception-line (exception)
+  (let ((type-name (|CLAMP.__CLAMP_INTERNALS__|:PY-TYPE-NAME
+                    (|CLAMP.__CLAMP_INTERNALS__|:PY-TYPE-OF exception)))
+        (message (with-output-to-string (stream)
+                   (|CLAMP.__CLAMP_INTERNALS__|:PY-DISPLAY exception stream))))
+    (princ type-name)
+    (unless (string= message "")
+      (princ ": ")
+      (princ message))
+    (terpri)))
+
+(defun handle-interactive-condition (condition)
+  (print-python-exception-line
+   (|CLAMP.__CLAMP_INTERNALS__|:PY-LISP-ERROR-TO-EXCEPTION condition)))
+
 (defun clamp-compile-source (python-code py-globals py-locals module-name package-name source-path)
   ;; Set local variables to hold the compile request for embedded Python.
   (py-dict-set-item py-locals (py-unicode-from-string "python_source_to_compile") (py-unicode-from-string python-code))
@@ -137,28 +152,38 @@
                  py-locals))
 
 (defun eval-generated-lisp (generated-lisp-code interactive)
-  (let ((*package* *package*)
-        (result nil)
-        (eof (gensym "EOF")))
-    (with-input-from-string (stream generated-lisp-code)
-      (loop for form = (read stream nil eof)
-            until (eq form eof)
-            do (progn
-                 (when *verbose*
-                   (write-line "code-to-run:")
-                   (print form)
-                   (write-line "")
-                   (write-line "")
-                   (write-line "running:"))
-                 (setf result (eval form)))))
-    (when (and interactive (not (eq result |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)))
-      (|CLAMP.__CLAMP_INTERNALS__|:PY-DISPLAY result)
-      (terpri))
-    (when *verbose*
-      (write-line "")
-      (write-line "Result:")
-      (print result)
-      (write-line ""))))
+  (handler-case
+      (let ((*package* *package*)
+            (result nil)
+            (eof (gensym "EOF")))
+        (with-input-from-string (stream generated-lisp-code)
+          (loop for form = (read stream nil eof)
+                until (eq form eof)
+                do (progn
+                     (when *verbose*
+                       (write-line "code-to-run:")
+                       (print form)
+                       (write-line "")
+                       (write-line "")
+                       (write-line "running:"))
+                     (setf result (eval form)))))
+        (when (and interactive (not (eq result |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)))
+          (|CLAMP.__CLAMP_INTERNALS__|:PY-DISPLAY result)
+          (terpri))
+        (when *verbose*
+          (write-line "")
+          (write-line "Result:")
+          (print result)
+          (write-line "")))
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION (condition)
+      (if interactive
+          (print-python-exception-line
+           (|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION-VALUE condition))
+          (error condition)))
+    (error (condition)
+      (if interactive
+          (handle-interactive-condition condition)
+          (error condition)))))
 
 (defun clamp-compile-and-run (python-code py-globals py-locals interactive &optional source-path)
   ;; Invoke the Python code to compile the input Python code to Common Lisp:

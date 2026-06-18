@@ -1589,7 +1589,11 @@
   (:report (lambda (condition stream)
              (let ((value (py-exception-value condition)))
                (if (py-exception-object-p value)
-                   (princ (py-type-name (py-object-type value)) stream)
+                   (let ((message (py-exception-message value)))
+                     (princ (py-type-name (py-object-type value)) stream)
+                     (unless (string= message "")
+                       (princ ": " stream)
+                       (princ message stream)))
                    (princ value stream))))))
 
 (defun py-exception-message (exception)

@@ -183,6 +183,18 @@ def test_compile_only_prints_generated_lisp_without_running_program():
     assert "hello, clamp\n\n" not in result.stdout
 
 
+def test_interactive_name_error_prints_python_error_and_keeps_running():
+    result = subprocess.run(
+        [str(CLAMP)],
+        cwd=ROOT,
+        input="sys\n1 + 2\nquit\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout == ">>> NameError: name 'sys' is not defined\n>>> 3\n>>> "
+
+
 EXAMPLES = sorted(TEST_DIR.glob("example_*.py"))
 
 
@@ -1143,8 +1155,9 @@ def test_next_raises_stop_iteration_after_exhaustion():
         capture_output=True,
         text=True,
     )
-    assert result.returncode != 0
-    assert "StopIteration" in result.stderr
+    assert result.returncode == 0
+    assert "StopIteration: StopIteration" in result.stdout
+    assert result.stdout.endswith(">>> ")
 
 def test_next_raises_stop_iteration_for_empty_tuple_iterator():
     command = [str(CLAMP)]
@@ -1155,8 +1168,9 @@ def test_next_raises_stop_iteration_for_empty_tuple_iterator():
         capture_output=True,
         text=True,
     )
-    assert result.returncode != 0
-    assert "StopIteration" in result.stderr
+    assert result.returncode == 0
+    assert "StopIteration: StopIteration" in result.stdout
+    assert result.stdout.endswith(">>> ")
 
 def test_zip_raises_stop_iteration_at_shortest_iterable():
     command = [str(CLAMP)]
@@ -1167,8 +1181,9 @@ def test_zip_raises_stop_iteration_at_shortest_iterable():
         capture_output=True,
         text=True,
     )
-    assert result.returncode != 0
-    assert "StopIteration" in result.stderr
+    assert result.returncode == 0
+    assert "StopIteration: StopIteration" in result.stdout
+    assert result.stdout.endswith(">>> ")
 
 
 def test_str_index_raises_when_substring_is_missing():
@@ -1180,8 +1195,9 @@ def test_str_index_raises_when_substring_is_missing():
         capture_output=True,
         text=True,
     )
-    assert result.returncode != 0
-    assert "substring not found" in result.stderr
+    assert result.returncode == 0
+    assert "RuntimeError: substring not found" in result.stdout
+    assert result.stdout.endswith(">>> ")
 
 
 def test_str_rindex_raises_when_substring_is_missing():
@@ -1193,8 +1209,9 @@ def test_str_rindex_raises_when_substring_is_missing():
         capture_output=True,
         text=True,
     )
-    assert result.returncode != 0
-    assert "substring not found" in result.stderr
+    assert result.returncode == 0
+    assert "RuntimeError: substring not found" in result.stdout
+    assert result.stdout.endswith(">>> ")
 
 
 def test_isinstance_example_matches_local_cpython_when_available():
