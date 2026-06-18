@@ -150,3 +150,8 @@ None or 42    # returns 42
 
 As new Python object types are added, they should plug into this same runtime truth path rather than falling back to raw Lisp truthiness. For example, a future dict, tuple, or user-defined object implementation should make `PY-TRUTHY-P` consult the appropriate length or `__bool__` behavior, matching the CPython source in `~/local/Python-3.14.5`.
 
+Python Runtime Internals
+------------------------
+
+One tricky aspect of this project is that Python exposes many internals as public, documented interfaces. For example, importlib exposes many details in ways we would need to implement or mimic because code can and will make use of every tricky detail.
+
