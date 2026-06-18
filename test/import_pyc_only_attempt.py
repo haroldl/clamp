@@ -1,0 +1,1 @@
+import pyc_only

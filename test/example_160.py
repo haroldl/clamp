@@ -9,5 +9,5 @@ for spec in (
 ):
     print(spec._set_fileattr is True)
     print(spec.has_location is True)
-    print(spec._cached == spec.cached)
-    print(spec._cached.endswith(".cpython-314.pyc"))
+    print(spec._cached is None)
+    print(spec.cached is None)

@@ -1803,19 +1803,10 @@ def test_str_add_mul_dunder_example_matches_local_cpython_when_available():
     assert clamp_result.stdout == cpython_result.stdout
 
 
-def test_import_cached_metadata_example_matches_local_cpython_when_available():
+def test_import_cached_metadata_example_uses_source_only_none_cache():
     sample = TEST_DIR / "example_156.py"
-    if not CPYTHON_314.exists():
-        pytest.skip("local CPython 3.14.5 interpreter is not built")
-    cpython_result = subprocess.run(
-        [str(CPYTHON_314), str(sample)],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
     clamp_result = run_clamp(sample)
-    assert clamp_result.stdout == cpython_result.stdout
+    assert clamp_result.stdout == sample.with_suffix(".expected").read_text()
 
 
 def test_import_spec_metadata_example_matches_local_cpython_when_available():
@@ -1863,19 +1854,10 @@ def test_import_spec_loader_state_example_matches_local_cpython_when_available()
     assert clamp_result.stdout == cpython_result.stdout
 
 
-def test_import_spec_fileattr_cache_internals_example_matches_local_cpython_when_available():
+def test_import_spec_fileattr_cache_internals_are_none_for_source_only_imports():
     sample = TEST_DIR / "example_160.py"
-    if not CPYTHON_314.exists():
-        pytest.skip("local CPython 3.14.5 interpreter is not built")
-    cpython_result = subprocess.run(
-        [str(CPYTHON_314), str(sample)],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
     clamp_result = run_clamp(sample)
-    assert clamp_result.stdout == cpython_result.stdout
+    assert clamp_result.stdout == sample.with_suffix(".expected").read_text()
 
 
 def test_import_source_file_loader_example_matches_local_cpython_when_available():
@@ -2275,19 +2257,10 @@ def test_import_direct_ne_methods_example_matches_local_cpython_when_available()
     assert clamp_result.stdout == cpython_result.stdout
 
 
-def test_import_module_spec_cached_lazy_recompute_example_matches_local_cpython_when_available():
+def test_import_module_spec_cached_stays_none_for_source_only_modules():
     sample = TEST_DIR / "example_181.py"
-    if not CPYTHON_314.exists():
-        pytest.skip("local CPython 3.14.5 interpreter is not built")
-    cpython_result = subprocess.run(
-        [str(CPYTHON_314), str(sample)],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
     clamp_result = run_clamp(sample)
-    assert clamp_result.stdout == cpython_result.stdout
+    assert clamp_result.stdout == sample.with_suffix(".expected").read_text()
 
 
 def test_import_module_spec_direct_comparison_notimplemented_matches_local_cpython_when_available():
@@ -2458,23 +2431,13 @@ def test_import_source_file_loader_path_stats_example_matches_local_cpython_when
     assert clamp_result.stdout == cpython_result.stdout
 
 
-def test_import_source_file_loader_cache_bytecode_example_matches_local_cpython_when_available():
+def test_import_source_file_loader_cache_bytecode_is_noop_for_source_only_imports():
     sample = TEST_DIR / "example_191.py"
     output_path = Path("/tmp/clamp_import_loader_cache_bytecode.tmp")
-    if not CPYTHON_314.exists():
-        pytest.skip("local CPython 3.14.5 interpreter is not built")
-    output_path.unlink(missing_ok=True)
-    cpython_result = subprocess.run(
-        [str(CPYTHON_314), str(sample)],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
     output_path.unlink(missing_ok=True)
     clamp_result = run_clamp(sample)
     output_path.unlink(missing_ok=True)
-    assert clamp_result.stdout == cpython_result.stdout
+    assert clamp_result.stdout == sample.with_suffix(".expected").read_text()
 
 
 def test_import_source_file_loader_path_stats_mtime_matches_local_cpython_when_available():
@@ -2718,19 +2681,39 @@ def test_import_module_dict_namespace_matches_local_cpython_when_available():
     assert clamp_result.stdout == cpython_result.stdout
 
 
-def test_import_module_spec_cached_suffixes_match_local_cpython_when_available():
+def test_import_module_spec_cached_suffixes_are_disabled_for_source_only_imports():
     sample = TEST_DIR / "example_211.py"
-    if not CPYTHON_314.exists():
-        pytest.skip("local CPython 3.14.5 interpreter is not built")
-    cpython_result = subprocess.run(
-        [str(CPYTHON_314), str(sample)],
+    clamp_result = run_clamp(sample)
+    assert clamp_result.stdout == sample.with_suffix(".expected").read_text()
+
+
+def test_relative_import_beyond_top_level_fails():
+    sample = TEST_DIR / "import_relative_beyond_top_attempt.py"
+    result = subprocess.run(
+        [str(CLAMP), str(sample)],
         cwd=ROOT,
-        check=True,
         capture_output=True,
         text=True,
     )
-    clamp_result = run_clamp(sample)
-    assert clamp_result.stdout == cpython_result.stdout
+    assert result.returncode != 0
+    assert "attempted relative import beyond top-level package" in result.stderr
+
+
+def test_pyc_only_module_is_ignored_by_source_importer():
+    sample = TEST_DIR / "import_pyc_only_attempt.py"
+    pyc_path = TEST_DIR / "pyc_only.pyc"
+    pyc_path.write_bytes(b"not real bytecode")
+    try:
+        result = subprocess.run(
+            [str(CLAMP), str(sample)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        pyc_path.unlink(missing_ok=True)
+    assert result.returncode != 0
+    assert "No module named 'pyc_only'" in result.stderr
 
 
 def test_import_file_reader_open_resource_context_methods_match_local_cpython_when_available():

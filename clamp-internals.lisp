@@ -1782,17 +1782,7 @@
         name)))
 
 (defun py-module-spec-cached (spec)
-  (let ((cached (py-module-spec-object-cached spec)))
-    (when (and (eq cached *py-none*)
-               (py-module-spec-object-origin spec)
-               (py-truthy-p (py-module-spec-object-set-fileattr spec)))
-      (setf cached (or (py-source-cache-path
-                        (py-module-spec-object-origin spec))
-                       *py-none*))
-      (setf (py-module-spec-object-cached spec) cached)
-      (setf (gethash "cached" (py-object-attrs spec)) cached)
-      (setf (gethash "_cached" (py-object-attrs spec)) cached))
-    cached))
+  (py-module-spec-object-cached spec))
 
 (defun py-module-package-name (name)
   (concatenate 'string "CLAMP.__module__." name))
@@ -2071,11 +2061,8 @@
 
 (setf (py-type-attr *py-source-file-loader-type* "_cache_bytecode")
       (lambda (loader source-path bytecode-path data)
-        (declare (ignore source-path))
-        (funcall (py-type-attr (py-object-type loader) "set_data")
-                 loader
-                 bytecode-path
-                 data)))
+        (declare (ignore loader source-path bytecode-path data))
+        *py-none*))
 
 (setf (py-type-attr *py-source-file-loader-type* "get_source")
       (lambda (loader fullname)
@@ -2305,7 +2292,7 @@
         *py-none*))
 
 (defun make-clamp-module-spec (name source-path package-p loader)
-  (let* ((cached (and source-path (py-source-cache-path source-path)))
+  (let* ((cached *py-none*)
          (submodule-search-locations
            (if package-p
                (make-py-list (py-package-source-directory source-path))
@@ -2469,27 +2456,19 @@
          (string= value suffix :start1 (- value-size suffix-size)))))
 
 (defun py-source-cache-path (source-path)
-  (cond
-    ((py-string-suffix-p source-path ".py")
-     (let* ((source (pathname source-path))
-            (source-directory (uiop:pathname-directory-pathname source))
-            (cache-directory (merge-pathnames "__pycache__/" source-directory))
-            (cache-filename (format nil "~A.cpython-314.pyc" (pathname-name source))))
-       (namestring (merge-pathnames cache-filename cache-directory))))
-    ((py-string-suffix-p source-path ".pyc")
-     source-path)
-    (t nil)))
+  (declare (ignore source-path))
+  *py-none*)
 
 (defun py-set-module-source-path (module source-path)
   (setf (py-module-object-source-path module) source-path)
   (setf (py-object-attr module "__file__") source-path)
-  (setf (py-object-attr module "__cached__") (py-source-cache-path source-path)))
+  (setf (py-object-attr module "__cached__") *py-none*))
 
-(defun py-find-module-source (name)
-  (let* ((components (py-module-path-components name))
+(defun py-find-module-source-in-roots (relative-name roots)
+  (let* ((components (py-module-path-components relative-name))
          (relative-file (format nil "~{~A~^/~}.py" components))
          (relative-init (format nil "~{~A~^/~}/__init__.py" components)))
-    (loop for root in (or *py-module-search-paths* (list (namestring (uiop:getcwd))))
+    (loop for root in roots
           for file-path = (merge-pathnames relative-file (uiop:ensure-directory-pathname root))
           for init-path = (merge-pathnames relative-init (uiop:ensure-directory-pathname root))
           for file = (py-probe-file file-path)
@@ -2497,6 +2476,23 @@
           when file do (return (values file nil))
           when init do (return (values init t))
           finally (return (values nil nil)))))
+
+(defun py-list-values (value)
+  (cond
+    ((py-list-object-p value)
+     (let ((storage (py-object-value value))
+           (size (or (py-object-size value) 0)))
+       (loop for index from 0 below size collect (aref storage index))))
+    (t '())))
+
+(defun py-find-module-source (name &optional parent-module)
+  (if parent-module
+      (py-find-module-source-in-roots
+       (py-module-child-name name)
+       (py-list-values (py-object-attr parent-module "__path__")))
+      (py-find-module-source-in-roots
+       name
+       (or *py-module-search-paths* (list (namestring (uiop:getcwd)))))))
 
 (defun py-ensure-module-package (module)
   (let* ((package-name (py-module-object-package-name module))
@@ -2561,7 +2557,10 @@
           (error "No module named '~A'; '~A' is not a package"
                  name
                  parent-name)))))
-  (multiple-value-bind (source-path package-p) (py-find-module-source name)
+  (multiple-value-bind (source-path package-p)
+      (py-find-module-source name (and (py-module-parent-name name)
+                                       (gethash (py-module-parent-name name)
+                                                *py-sys-modules*)))
     (unless source-path
       (error "No module named '~A'" name))
     (let ((module (make-clamp-module name :source-path source-path :package-p package-p)))
@@ -2599,11 +2598,36 @@
 (defun py-import-module (name)
   (py-load-module name))
 
-(defun py-import-name (name &optional fromlist)
-  (let ((module (py-import-module name)))
-    (if (and fromlist (> (length fromlist) 0))
+(defun py-current-package-name ()
+  (unless *py-current-module*
+    (error "attempted relative import with no known parent package"))
+  (let ((package (py-object-attr *py-current-module* "__package__")))
+    (unless (and (stringp package) (> (length package) 0))
+      (error "attempted relative import with no known parent package"))
+    package))
+
+(defun py-resolve-relative-import-name (name level &optional package)
+  (let ((base (or package (py-current-package-name))))
+    (unless (and (stringp base) (> (length base) 0))
+      (error "attempted relative import with no known parent package"))
+    (loop repeat (1- level)
+          do (let ((pos (position #\. base :from-end t)))
+               (unless pos
+                 (error "attempted relative import beyond top-level package"))
+               (setf base (subseq base 0 pos))))
+    (if (> (length name) 0)
+        (concatenate 'string base "." name)
+        base)))
+
+(defun py-import-name (name &optional (fromlist *py-none*) (level 0))
+  (let* ((normalized-level (py-normalize-bool-number level))
+         (full-name (if (> normalized-level 0)
+                        (py-resolve-relative-import-name name normalized-level)
+                        name))
+         (module (py-import-module full-name)))
+    (if (py-truthy-p fromlist)
         module
-        (py-import-module (py-module-root-name name)))))
+        (py-import-module (py-module-root-name full-name)))))
 
 (defun py-import-fromlist-names (fromlist)
   (cond
@@ -2655,7 +2679,8 @@
                (declare (ignore builder))
                (if builtin-found
                    (py-import-module full-name)
-                   (multiple-value-bind (source-path package-p) (py-find-module-source full-name)
+                   (multiple-value-bind (source-path package-p)
+                       (py-find-module-source full-name module)
                      (declare (ignore package-p))
                      (when source-path
                        (py-import-module full-name)))))))))))
@@ -2684,8 +2709,8 @@
                    (py-object-attrs module))
           names))))
 
-(defun py-import-star (name)
-  (let ((module (py-import-name name (list "*"))))
+(defun py-import-star (name &optional (level 0))
+  (let ((module (py-import-name name (list "*") level)))
     (dolist (import-name (py-import-star-names module))
       (unless (stringp import-name)
         (error "Item in ~A.__all__ must be str, not ~A"
@@ -2702,21 +2727,22 @@
   (declare (ignore globals locals))
   (unless (stringp name)
     (error "module name must be a string"))
-  (let ((normalized-level (py-normalize-bool-number level)))
+  (let* ((normalized-level (py-normalize-bool-number level)))
     (unless (integerp normalized-level)
       (error "level must be an integer"))
     (when (< normalized-level 0)
       (error "level must be >= 0"))
-    (when (> normalized-level 0)
-      (error "relative imports are not supported yet"))
-    (when (= (length name) 0)
-      (error "Empty module name")))
-  (let ((module (py-import-module name)))
-    (if (py-truthy-p fromlist)
-        (if (nth-value 1 (gethash "__path__" (py-object-attrs module)))
-            (py-import-handle-fromlist module (py-import-fromlist-names fromlist))
-            module)
-        (py-import-module (py-module-root-name name)))))
+    (when (and (= normalized-level 0) (= (length name) 0))
+      (error "Empty module name"))
+    (let* ((full-name (if (> normalized-level 0)
+                          (py-resolve-relative-import-name name normalized-level)
+                          name))
+           (module (py-import-module full-name)))
+      (if (py-truthy-p fromlist)
+          (if (nth-value 1 (gethash "__path__" (py-object-attrs module)))
+              (py-import-handle-fromlist module (py-import-fromlist-names fromlist))
+              module)
+          (py-import-module (py-module-root-name full-name))))))
 
 (defun py-import-from (module name)
   (multiple-value-bind (attr found) (gethash name (py-object-attrs module))
@@ -2733,6 +2759,128 @@
 
 (defun py-register-builtin-module (name builder)
   (setf (gethash name *py-builtin-module-builders*) builder))
+
+
+(defun make-clamp-sys-module ()
+  (let ((module (make-clamp-module "sys")))
+    (setf (py-object-attr module "modules")
+          (make-py-dict-for-storage *py-sys-modules*))
+    module))
+
+(defun py-importlib-resolve-name (name package)
+  (if (and (> (length name) 0) (char= (char name 0) #\.))
+      (let ((level 0)
+            (start 0))
+        (loop while (and (< start (length name))
+                         (char= (char name start) #\.))
+              do (incf level)
+                 (incf start))
+        (py-resolve-relative-import-name (subseq name start) level package))
+      name))
+
+(defun py-importlib-import-module (name &optional (package *py-none*))
+  (unless (stringp name)
+    (error "module name must be a string"))
+  (let ((full-name (py-importlib-resolve-name
+                    name
+                    (unless (eq package *py-none*) package))))
+    (py-import-module full-name)))
+
+(defun py-importlib-reload (module)
+  (unless (py-module-object-p module)
+    (error "reload() argument must be a module"))
+  (let ((name (py-module-object-name module)))
+    (remhash name *py-sys-modules*)
+    (py-import-module name)))
+
+(defun py-importlib-invalidate-caches ()
+  *py-none*)
+
+(defun py-importlib-find-spec (name &optional (package *py-none*))
+  (let* ((full-name (if (and (stringp name)
+                             (> (length name) 0)
+                             (char= (char name 0) #\.))
+                        (py-importlib-resolve-name
+                         name
+                         (unless (eq package *py-none*) package))
+                        name)))
+    (multiple-value-bind (cached found) (gethash full-name *py-sys-modules*)
+      (when found
+        (return-from py-importlib-find-spec (py-object-attr cached "__spec__"))))
+    (let* ((parent-name (py-module-parent-name full-name))
+           (parent (and parent-name (py-import-module parent-name))))
+      (when (and parent-name
+                 (not (nth-value 1 (gethash "__path__" (py-object-attrs parent)))))
+        (return-from py-importlib-find-spec *py-none*))
+      (multiple-value-bind (source-path package-p)
+          (py-find-module-source full-name parent)
+        (if source-path
+            (make-clamp-module-spec
+             full-name
+             source-path
+             package-p
+             (make-clamp-source-file-loader full-name source-path))
+            *py-none*)))))
+
+(defun py-importlib-module-from-spec (spec)
+  (unless (py-module-spec-object-p spec)
+    (error "spec must be a ModuleSpec object"))
+  (let* ((name (py-module-spec-object-name spec))
+         (source-path (py-module-spec-object-origin spec))
+         (package-p (not (eq (py-module-spec-object-submodule-search-locations spec)
+                             *py-none*)))
+         (module (make-clamp-module name
+                                    :source-path source-path
+                                    :package-p package-p)))
+    (setf (py-object-attr module "__loader__")
+          (py-module-spec-object-loader spec))
+    (setf (py-object-attr module "__spec__") spec)
+    (when package-p
+      (setf (py-object-attr module "__path__")
+            (py-module-spec-object-submodule-search-locations spec)))
+    module))
+
+(defun py-importlib-spec-from-file-location (name location)
+  (let* ((path (py-path-string location))
+         (package-p (string= (pathname-name path) "__init__"))
+         (loader (make-clamp-source-file-loader name path)))
+    (make-clamp-module-spec name path package-p loader)))
+
+(defun make-clamp-importlib-module ()
+  (let ((module (make-clamp-module "importlib")))
+    (setf (py-object-attr module "import_module") #'py-importlib-import-module)
+    (setf (py-object-attr module "reload") #'py-importlib-reload)
+    (setf (py-object-attr module "invalidate_caches") #'py-importlib-invalidate-caches)
+    module))
+
+(defun make-clamp-importlib-util-module ()
+  (let ((module (make-clamp-module "importlib.util")))
+    (setf (py-object-attr module "find_spec") #'py-importlib-find-spec)
+    (setf (py-object-attr module "module_from_spec") #'py-importlib-module-from-spec)
+    (setf (py-object-attr module "spec_from_file_location") #'py-importlib-spec-from-file-location)
+    module))
+
+(defun make-clamp-importlib-machinery-module ()
+  (let ((module (make-clamp-module "importlib.machinery")))
+    (setf (py-object-attr module "ModuleSpec") *py-module-spec-type*)
+    (setf (py-object-attr module "SourceFileLoader") *py-source-file-loader-type*)
+    module))
+
+(defun make-clamp-importlib-resources-module ()
+  (let ((module (make-clamp-module "importlib.resources")))
+    module))
+
+(defun make-clamp-importlib-resources-readers-module ()
+  (let ((module (make-clamp-module "importlib.resources.readers")))
+    (setf (py-object-attr module "FileReader") *py-file-reader-type*)
+    module))
+
+(py-register-builtin-module "sys" #'make-clamp-sys-module)
+(py-register-builtin-module "importlib" #'make-clamp-importlib-module)
+(py-register-builtin-module "importlib.util" #'make-clamp-importlib-util-module)
+(py-register-builtin-module "importlib.machinery" #'make-clamp-importlib-machinery-module)
+(py-register-builtin-module "importlib.resources" #'make-clamp-importlib-resources-module)
+(py-register-builtin-module "importlib.resources.readers" #'make-clamp-importlib-resources-readers-module)
 
 (defun py-math-number (value function-name)
   (let ((normalized-value (py-normalize-bool-number value)))
@@ -7642,6 +7790,15 @@
 (defun py-instantiate-type (type &rest args)
   (when (py-type-subtype-p type *py-base-exception-type*)
     (return-from py-instantiate-type (apply #'make-py-exception type args)))
+  (when (eq type *py-source-file-loader-type*)
+    (destructuring-bind (fullname path) args
+      (return-from py-instantiate-type
+        (make-clamp-source-file-loader fullname path))))
+  (when (eq type *py-file-reader-type*)
+    (let ((reader (make-py-file-reader-object :type *py-file-reader-type*)))
+      (when args
+        (apply (py-type-attr *py-file-reader-type* "__init__") reader args))
+      (return-from py-instantiate-type reader)))
   (let ((instance (make-py-instance type)))
     (multiple-value-bind (initializer found) (py-find-type-attr type "__init__")
       (when found

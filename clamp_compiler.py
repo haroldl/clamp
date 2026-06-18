@@ -1092,14 +1092,14 @@ def codegen_import(node, context: Context):
 
 
 def codegen_import_from(node, context: Context):
-    if node.level:
-        raise Exception("TODO: relative imports are not supported yet")
-    if node.module is None:
-        raise Exception("TODO: relative imports are not supported yet")
+    module_name = node.module or ""
     if any(alias.name == "*" for alias in node.names):
         if not context.top_level_stmt:
             raise Exception("import * only allowed at module level")
-        return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-STAR {lisp_string(node.module)})"
+        return (
+            f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-STAR "
+            f"{lisp_string(module_name)} {node.level})"
+        )
     fromlist = "'(" + " ".join(lisp_string(alias.name) for alias in node.names) + ")"
     module_symbol = f"__clamp_import_module_{id(node)}"
     bindings = []
@@ -1109,7 +1109,8 @@ def codegen_import_from(node, context: Context):
         bindings.append(codegen_import_binding(context, bind_name, value))
     return (
         f"(common-lisp:let (({module_symbol} "
-        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(node.module)} {fromlist}))) "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME "
+        f"{lisp_string(module_name)} {fromlist} {node.level}))) "
         + " ".join(bindings)
         + ")"
     )
@@ -1130,15 +1131,15 @@ def codegen_import_block(node, rest, context: Context) -> str:
                 value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(alias.name)})"
             bindings.append((bind_name, value))
     elif isinstance(node, ast.ImportFrom):
-        if node.level:
-            raise Exception("TODO: relative imports are not supported yet")
-        if node.module is None:
-            raise Exception("TODO: relative imports are not supported yet")
+        module_name = node.module or ""
         if any(alias.name == "*" for alias in node.names):
             raise Exception("import * only allowed at module level")
         fromlist = "'(" + " ".join(lisp_string(alias.name) for alias in node.names) + ")"
         module_symbol = f"__clamp_import_module_{id(node)}"
-        module_value = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME {lisp_string(node.module)} {fromlist})"
+        module_value = (
+            f"(|CLAMP.__CLAMP_INTERNALS__|:PY-IMPORT-NAME "
+            f"{lisp_string(module_name)} {fromlist} {node.level})"
+        )
         body = rest_code
         for alias in reversed(node.names):
             bind_name = alias.asname or alias.name
