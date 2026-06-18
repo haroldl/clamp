@@ -21,6 +21,7 @@
    :py-lookup-attr
    :py-call-attr
    :py-invoke-callable
+   :py-bind-args
    :py-module-object
    :py-module-object-name
    :py-module-object-source-path
@@ -67,6 +68,13 @@
    :*py-false*
    :*py-true*
    :*py-not-implemented*
+   :*py-base-exception-type*
+   :*py-exception-type*
+   :*py-runtime-error-type*
+   :*py-type-error-type*
+   :*py-value-error-type*
+   :*py-lookup-error-type*
+   :*py-timeout-error-type*
    :py-bool
    :py-truthy-p
    :py-and
@@ -121,8 +129,12 @@
    :py-exception-object
    :py-raise
    :*py-stop-iteration*
+   :*py-stop-iteration-type*
+   :*py-stop-async-iteration-type*
    :py-stop-iteration-p
    :make-py-coroutine
+   :make-py-async-generator
+   :py-async-generator-yield
    :py-await
    :py-coroutine-run
    :py-aiter
@@ -137,9 +149,11 @@
    :py-iter
    :py-next
    :py-next-item
+   :py-unpack-sequence
    :make-py-list
    :make-py-dict-from-pairs
    :make-py-tuple
+   :make-py-bytes-from-vector
    :py-append
    :py-insert
    :py-pop
@@ -149,6 +163,8 @@
 
 (in-package "CLAMP.__CLAMP_INTERNALS__")
 
+
+(require :sb-bsd-sockets)
 
 (sb-alien:load-shared-object "libm.so.6")
 (sb-alien:define-alien-routine ("cbrt" c-cbrt) sb-alien:double (x sb-alien:double))
@@ -291,6 +307,24 @@
                 :bases (list *py-exception-type*)
                 :basicsize 1))
 
+(defparameter *py-value-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ValueError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-lookup-error-type*
+  (make-py-type :type *py-type-type*
+                :name "LookupError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-timeout-error-type*
+  (make-py-type :type *py-type-type*
+                :name "TimeoutError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
 (defparameter *py-asyncio-cancelled-error-type*
   (make-py-type :type *py-type-type*
                 :name "CancelledError"
@@ -303,9 +337,45 @@
                 :bases (list *py-exception-type*)
                 :basicsize 1))
 
+(defparameter *py-asyncio-incomplete-read-error-type*
+  (make-py-type :type *py-type-type*
+                :name "IncompleteReadError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-limit-overrun-error-type*
+  (make-py-type :type *py-type-type*
+                :name "LimitOverrunError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-broken-barrier-error-type*
+  (make-py-type :type *py-type-type*
+                :name "BrokenBarrierError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-queue-full-type*
+  (make-py-type :type *py-type-type*
+                :name "QueueFull"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-queue-empty-type*
+  (make-py-type :type *py-type-type*
+                :name "QueueEmpty"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
 (defparameter *py-coroutine-type*
   (make-py-type :type *py-type-type*
                 :name "coroutine"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-async-generator-type*
+  (make-py-type :type *py-type-type*
+                :name "async_generator"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -321,10 +391,52 @@
                 :bases (list *py-asyncio-future-type*)
                 :basicsize 1))
 
+(defparameter *py-asyncio-task-group-type*
+  (make-py-type :type *py-type-type*
+                :name "TaskGroup"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-runner-type*
+  (make-py-type :type *py-type-type*
+                :name "Runner"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-process-type*
+  (make-py-type :type *py-type-type*
+                :name "Process"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-timeout-type*
+  (make-py-type :type *py-type-type*
+                :name "Timeout"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-event-loop-policy-type*
+  (make-py-type :type *py-type-type*
+                :name "_ClampEventLoopPolicy"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-asyncio-event-loop-type*
   (make-py-type :type *py-type-type*
                 :name "_ClampEventLoop"
                 :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-handle-type*
+  (make-py-type :type *py-type-type*
+                :name "Handle"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-timer-handle-type*
+  (make-py-type :type *py-type-type*
+                :name "TimerHandle"
+                :bases (list *py-asyncio-handle-type*)
                 :basicsize 1))
 
 (defparameter *py-asyncio-sleep-type*
@@ -339,10 +451,244 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-asyncio-condition-type*
+  (make-py-type :type *py-type-type*
+                :name "Condition"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-semaphore-type*
+  (make-py-type :type *py-type-type*
+                :name "Semaphore"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-bounded-semaphore-type*
+  (make-py-type :type *py-type-type*
+                :name "BoundedSemaphore"
+                :bases (list *py-asyncio-semaphore-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-barrier-type*
+  (make-py-type :type *py-type-type*
+                :name "Barrier"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-event-type*
+  (make-py-type :type *py-type-type*
+                :name "Event"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-queue-type*
+  (make-py-type :type *py-type-type*
+                :name "Queue"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-priority-queue-type*
+  (make-py-type :type *py-type-type*
+                :name "PriorityQueue"
+                :bases (list *py-asyncio-queue-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-lifo-queue-type*
+  (make-py-type :type *py-type-type*
+                :name "LifoQueue"
+                :bases (list *py-asyncio-queue-type*)
+                :basicsize 1))
+
 (defparameter *py-asyncio-as-completed-type*
   (make-py-type :type *py-type-type*
                 :name "_AsCompleted"
                 :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-stream-reader-type*
+  (make-py-type :type *py-type-type*
+                :name "StreamReader"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-stream-writer-type*
+  (make-py-type :type *py-type-type*
+                :name "StreamWriter"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-asyncio-server-type*
+  (make-py-type :type *py-type-type*
+                :name "Server"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-contextvars-context-var-type*
+  (make-py-type :type *py-type-type*
+                :name "ContextVar"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-contextvars-token-type*
+  (make-py-type :type *py-type-type*
+                :name "Token"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-contextvars-context-type*
+  (make-py-type :type *py-type-type*
+                :name "Context"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-contextlib-async-generator-context-manager-type*
+  (make-py-type :type *py-type-type*
+                :name "_AsyncGeneratorContextManager"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-contextlib-aclosing-type*
+  (make-py-type :type *py-type-type*
+                :name "aclosing"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-contextlib-nullcontext-type*
+  (make-py-type :type *py-type-type*
+                :name "nullcontext"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-contextlib-async-exit-stack-type*
+  (make-py-type :type *py-type-type*
+                :name "AsyncExitStack"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-client-session-type*
+  (make-py-type :type *py-type-type*
+                :name "ClientSession"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-client-timeout-type*
+  (make-py-type :type *py-type-type*
+                :name "ClientTimeout"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-tcp-connector-type*
+  (make-py-type :type *py-type-type*
+                :name "TCPConnector"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-basic-auth-type*
+  (make-py-type :type *py-type-type*
+                :name "BasicAuth"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-form-data-type*
+  (make-py-type :type *py-type-type*
+                :name "FormData"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-cookie-jar-type*
+  (make-py-type :type *py-type-type*
+                :name "CookieJar"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-request-context-type*
+  (make-py-type :type *py-type-type*
+                :name "_RequestContextManager"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-client-response-type*
+  (make-py-type :type *py-type-type*
+                :name "ClientResponse"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-stream-reader-type*
+  (make-py-type :type *py-type-type*
+                :name "StreamReader"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-chunk-iterator-type*
+  (make-py-type :type *py-type-type*
+                :name "AsyncStreamIterator"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-client-websocket-response-type*
+  (make-py-type :type *py-type-type*
+                :name "ClientWebSocketResponse"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-ws-message-type*
+  (make-py-type :type *py-type-type*
+                :name "WSMessage"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-client-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ClientError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-client-response-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ClientResponseError"
+                :bases (list *py-aiohttp-client-error-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-content-type-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ContentTypeError"
+                :bases (list *py-aiohttp-client-response-error-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-client-connection-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ClientConnectionError"
+                :bases (list *py-aiohttp-client-error-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-client-connector-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ClientConnectorError"
+                :bases (list *py-aiohttp-client-connection-error-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-client-payload-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ClientPayloadError"
+                :bases (list *py-aiohttp-client-error-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-invalid-url-type*
+  (make-py-type :type *py-type-type*
+                :name "InvalidURL"
+                :bases (list *py-aiohttp-client-error-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-too-many-redirects-type*
+  (make-py-type :type *py-type-type*
+                :name "TooManyRedirects"
+                :bases (list *py-aiohttp-client-response-error-type*)
+                :basicsize 1))
+
+(defparameter *py-aiohttp-server-timeout-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ServerTimeoutError"
+                :bases (list *py-aiohttp-client-connection-error-type* *py-timeout-error-type*)
                 :basicsize 1))
 
 (defparameter *py-slice-type*
@@ -437,6 +783,16 @@
   result
   exception)
 
+(defstruct (py-async-generator-object (:include py-object))
+  name
+  thunk
+  (realized nil)
+  (items '())
+  (index 0)
+  (closed nil))
+
+(defvar *py-async-generator-yields* nil)
+
 (defstruct (py-asyncio-future-object (:include py-object))
   loop
   (state :pending)
@@ -448,9 +804,55 @@
   coroutine
   name)
 
+(defstruct (py-asyncio-task-group-object (:include py-object))
+  loop
+  (entered nil)
+  (exiting nil)
+  (tasks '()))
+
+(defstruct (py-asyncio-runner-object (:include py-object))
+  loop
+  debug
+  loop-factory
+  (entered nil)
+  (closed nil))
+
+(defstruct (py-asyncio-process-object (:include py-object))
+  args
+  returncode
+  stdout
+  stderr)
+
+(defstruct (py-asyncio-timeout-object (:include py-object))
+  loop
+  deadline
+  (expired nil))
+
+(defstruct (py-asyncio-event-loop-policy-object (:include py-object))
+  loop)
+
+(defvar *py-asyncio-event-loop-policy* nil)
+(defvar *py-asyncio-default-event-loop* nil)
+(defparameter *py-asyncio-subprocess-pipe* -1)
+(defparameter *py-asyncio-subprocess-stdout* -2)
+(defparameter *py-asyncio-subprocess-devnull* -3)
+
 (defstruct (py-asyncio-event-loop-object (:include py-object))
   (closed nil)
-  (running nil))
+  (running nil)
+  (stopping nil)
+  (debug nil)
+  (ready-callbacks '())
+  (tasks '())
+  current-task)
+
+(defstruct (py-asyncio-handle-object (:include py-object))
+  callback
+  args
+  (cancelled nil))
+
+(defstruct (py-asyncio-timer-handle-object (:include py-asyncio-handle-object))
+  when)
 
 (defstruct (py-asyncio-sleep-object (:include py-object))
   delay
@@ -460,9 +862,55 @@
   loop
   (locked nil))
 
+(defstruct (py-asyncio-condition-object (:include py-object))
+  loop
+  lock)
+
+(defstruct (py-asyncio-semaphore-object (:include py-object))
+  loop
+  (counter 1))
+
+(defstruct (py-asyncio-bounded-semaphore-object (:include py-asyncio-semaphore-object))
+  (bound 1))
+
+(defstruct (py-asyncio-barrier-object (:include py-object))
+  loop
+  parties
+  (waiting 0)
+  (broken nil))
+
+(defstruct (py-asyncio-event-object (:include py-object))
+  loop
+  (flag nil))
+
+(defstruct (py-asyncio-queue-object (:include py-object))
+  loop
+  (maxsize 0)
+  (items '())
+  (unfinished-tasks 0))
+
 (defstruct (py-asyncio-as-completed-object (:include py-object))
   items
   (index 0))
+
+(defstruct (py-asyncio-stream-reader-object (:include py-object))
+  socket
+  stream
+  (eof nil))
+
+(defstruct (py-asyncio-stream-writer-object (:include py-object))
+  socket
+  stream
+  peername
+  (closing nil))
+
+(defstruct (py-asyncio-server-object (:include py-object))
+  socket
+  thread
+  sockets
+  callback
+  (closed nil)
+  (serving t))
 
 (defstruct (py-slice-object (:include py-object))
   start
@@ -1059,7 +1507,12 @@
   (args '()))
 
 (defun make-py-exception (type &rest args)
-  (make-py-exception-object :type type :value args :args args))
+  (let ((exception (make-py-exception-object :type type :value args :args args)))
+    (setf (gethash "args" (py-object-attrs exception))
+          (if (fboundp 'make-py-tuple)
+              (apply #'make-py-tuple args)
+              args))
+    exception))
 
 (defparameter *py-stop-iteration*
   (make-py-exception *py-stop-iteration-type*))
@@ -1095,7 +1548,9 @@
   name
   fn
   (binding-kind :function)
-  owner-type)
+  owner-type
+  (coroutine-function nil)
+  (async-generator-function nil))
 
 (defun py-type-attr (type name)
   (gethash name (py-type-attrs type)))
@@ -2083,8 +2538,16 @@
       (return-from py-load-module cached)))
   (multiple-value-bind (builder found) (gethash name *py-builtin-module-builders*)
     (when found
+      (let ((parent-name (py-module-parent-name name)))
+        (when parent-name
+          (py-load-module parent-name)))
       (let ((module (funcall builder)))
         (setf (gethash name *py-sys-modules*) module)
+        (let ((parent-name (py-module-parent-name name)))
+          (when parent-name
+            (let ((parent (gethash parent-name *py-sys-modules*)))
+              (when parent
+                (setf (py-object-attr parent (py-module-child-name name)) module)))))
         (return-from py-load-module module))))
   (let ((parent-name (py-module-parent-name name)))
     (when parent-name
@@ -2188,12 +2651,15 @@
                                          (py-module-object-name module)
                                          "."
                                          name)))
-             (multiple-value-bind (source-path package-p) (py-find-module-source full-name)
-               (declare (ignore package-p))
-               (when source-path
-                 (py-import-module full-name)))))))))
+             (multiple-value-bind (builder builtin-found) (gethash full-name *py-builtin-module-builders*)
+               (declare (ignore builder))
+               (if builtin-found
+                   (py-import-module full-name)
+                   (multiple-value-bind (source-path package-p) (py-find-module-source full-name)
+                     (declare (ignore package-p))
+                     (when source-path
+                       (py-import-module full-name)))))))))))
   module)
-
 (defun py-import-star-bind (module name value)
   (when *py-current-module*
     (setf (py-object-attr *py-current-module* name) value)
@@ -2756,6 +3222,18 @@
 
 (py-register-builtin-module "math" #'make-clamp-math-module)
 
+(defun make-clamp-inspect-module ()
+  (let ((module (make-clamp-module "inspect")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in inspect compatibility module")
+    (setf (py-object-attr module "iscoroutine") #'py-inspect-iscoroutine)
+    (setf (py-object-attr module "iscoroutinefunction") #'py-inspect-iscoroutinefunction)
+    (setf (py-object-attr module "isawaitable") #'py-inspect-isawaitable)
+    (setf (py-object-attr module "isasyncgen") #'py-inspect-isasyncgen)
+    (setf (py-object-attr module "isasyncgenfunction") #'py-inspect-isasyncgenfunction)
+    module))
+
+(py-register-builtin-module "inspect" #'make-clamp-inspect-module)
+
 (defvar *py-asyncio-running-loop* nil)
 
 (defun make-py-coroutine (name thunk)
@@ -2764,24 +3242,160 @@
                             :thunk thunk
                             :state :created))
 
+(defun make-py-async-generator (name thunk)
+  (make-py-async-generator-object :type *py-async-generator-type*
+                                  :name name
+                                  :thunk thunk))
+
+(defun py-async-generator-yield (value)
+  (unless (consp *py-async-generator-yields*)
+    (error "yield outside async generator"))
+  (push value (car *py-async-generator-yields*))
+  *py-none*)
+
+(defun py-async-generator-realize (generator)
+  (unless (py-async-generator-object-realized generator)
+    (let ((*py-async-generator-yields* (list '())))
+      (funcall (py-async-generator-object-thunk generator))
+      (setf (py-async-generator-object-items generator)
+            (nreverse (car *py-async-generator-yields*)))
+      (setf (py-async-generator-object-realized generator) t)))
+  generator)
+
+(defun py-async-generator-anext (generator)
+  (make-py-coroutine "async_generator.__anext__"
+                     (lambda ()
+                       (when (py-async-generator-object-closed generator)
+                         (py-raise (make-py-exception *py-stop-async-iteration-type*)))
+                       (py-async-generator-realize generator)
+                       (let ((index (py-async-generator-object-index generator))
+                             (items (py-async-generator-object-items generator)))
+                         (if (< index (length items))
+                             (prog1 (nth index items)
+                               (setf (py-async-generator-object-index generator) (1+ index)))
+                             (py-raise (make-py-exception *py-stop-async-iteration-type*)))))))
+
+(defun py-async-generator-asend (generator value)
+  (if (eq value *py-none*)
+      (py-async-generator-anext generator)
+      (make-py-coroutine "async_generator.asend"
+                         (lambda ()
+                           (py-raise
+                            (make-py-exception *py-type-error-type*
+                                               "can't send non-None value to a just-started async generator"))))))
+
+(defun py-async-generator-aclose (generator)
+  (make-py-coroutine "async_generator.aclose"
+                     (lambda ()
+                       (setf (py-async-generator-object-closed generator) t)
+                       (setf (py-async-generator-object-index generator)
+                             (length (py-async-generator-object-items generator)))
+                       *py-none*)))
+
+(defun py-async-generator-athrow (generator exception &rest args)
+  (declare (ignore args))
+  (make-py-coroutine "async_generator.athrow"
+                     (lambda ()
+                       (setf (py-async-generator-object-closed generator) t)
+                       (cond
+                         ((py-exception-object-p exception)
+                          (py-raise exception))
+                         ((py-type-p exception)
+                          (py-raise (make-py-exception exception)))
+                         (t
+                          (py-raise (make-py-exception *py-type-error-type*
+                                                       "exceptions must be classes or instances deriving from BaseException")))))))
+
 (defun py-asyncio-invalid-state ()
   (py-raise (make-py-exception *py-asyncio-invalid-state-error-type* "invalid state")))
 
 (defun py-future-done-p (future)
   (not (eq (py-asyncio-future-object-state future) :pending)))
 
+(defun py-asyncio-schedule-callback (loop callback &rest args)
+  (let ((handle (make-py-asyncio-handle-object
+                 :type *py-asyncio-handle-type*
+                 :callback callback
+                 :args args)))
+    (if (py-asyncio-event-loop-object-p loop)
+        (push handle (py-asyncio-event-loop-object-ready-callbacks loop))
+        (apply #'py-invoke-callable callback args))
+    handle))
+
+(defun py-asyncio-schedule-timer-callback (loop when callback &rest args)
+  (let ((handle (make-py-asyncio-timer-handle-object
+                 :type *py-asyncio-timer-handle-type*
+                 :callback callback
+                 :args args
+                 :when when)))
+    (if (py-asyncio-event-loop-object-p loop)
+        (push handle (py-asyncio-event-loop-object-ready-callbacks loop))
+        (apply #'py-invoke-callable callback args))
+    handle))
+
+(defun py-asyncio-handle-cancel (handle)
+  (setf (py-asyncio-handle-object-cancelled handle) t)
+  *py-none*)
+
+(defun py-asyncio-handle-cancelled (handle)
+  (py-bool (py-asyncio-handle-object-cancelled handle)))
+
+(defun py-asyncio-timer-handle-when (handle)
+  (py-asyncio-timer-handle-object-when handle))
+
+(defun py-asyncio-run-ready (loop)
+  (when (py-asyncio-event-loop-object-p loop)
+    (loop while (py-asyncio-event-loop-object-ready-callbacks loop)
+          do (let ((callbacks (nreverse (py-asyncio-event-loop-object-ready-callbacks loop))))
+               (setf (py-asyncio-event-loop-object-ready-callbacks loop) '())
+               (dolist (handle callbacks)
+                 (unless (py-asyncio-handle-object-cancelled handle)
+                   (apply #'py-invoke-callable
+                          (py-asyncio-handle-object-callback handle)
+                          (py-asyncio-handle-object-args handle)))))))
+  *py-none*)
+
+(defun py-future-run-callbacks (future)
+  (let ((callbacks (nreverse (py-asyncio-future-object-callbacks future)))
+        (loop (or (py-asyncio-future-object-loop future) *py-asyncio-running-loop*)))
+    (setf (py-asyncio-future-object-callbacks future) '())
+    (dolist (callback callbacks)
+      (py-asyncio-schedule-callback loop callback future)))
+  *py-none*)
+
+(defun py-future-add-done-callback (future callback &rest args)
+  (declare (ignore args))
+  (if (py-future-done-p future)
+      (py-asyncio-schedule-callback (or (py-asyncio-future-object-loop future) *py-asyncio-running-loop*) callback future)
+      (push callback (py-asyncio-future-object-callbacks future)))
+  *py-none*)
+
+(defun py-future-remove-done-callback (future callback)
+  (let ((removed 0)
+        (kept '()))
+    (dolist (registered (py-asyncio-future-object-callbacks future))
+      (if (eq registered callback)
+          (incf removed)
+          (push registered kept)))
+    (setf (py-asyncio-future-object-callbacks future) (nreverse kept))
+    removed))
+
+(defun py-future-mark-finished (future state result exception)
+  (setf (py-asyncio-future-object-result future) result)
+  (setf (py-asyncio-future-object-exception future) exception)
+  (setf (py-asyncio-future-object-state future) state)
+  (py-future-run-callbacks future)
+  result)
+
 (defun py-future-set-result (future result)
   (when (py-future-done-p future)
     (py-asyncio-invalid-state))
-  (setf (py-asyncio-future-object-result future) result)
-  (setf (py-asyncio-future-object-state future) :finished)
-  result)
+  (py-future-mark-finished future :finished result nil))
 
 (defun py-future-set-exception (future exception)
   (when (py-future-done-p future)
     (py-asyncio-invalid-state))
-  (setf (py-asyncio-future-object-exception future) exception)
-  (setf (py-asyncio-future-object-state future) :finished)
+  (py-future-mark-finished future :finished nil exception)
   *py-none*)
 
 (defun py-future-result (future)
@@ -2794,14 +3408,20 @@
           (error exception))))
   (py-asyncio-future-object-result future))
 
+(defun py-future-exception (future)
+  (unless (py-future-done-p future)
+    (py-asyncio-invalid-state))
+  (when (eq (py-asyncio-future-object-state future) :cancelled)
+    (py-raise (make-py-exception *py-asyncio-cancelled-error-type*)))
+  (or (py-asyncio-future-object-exception future) *py-none*))
+
 (defun py-future-cancel (future &optional (msg *py-none*))
   (declare (ignore msg))
   (if (py-future-done-p future)
       *py-false*
       (progn
-        (setf (py-asyncio-future-object-exception future)
-              (make-py-exception *py-asyncio-cancelled-error-type*))
-        (setf (py-asyncio-future-object-state future) :cancelled)
+        (py-future-mark-finished future :cancelled nil
+                                 (make-py-exception *py-asyncio-cancelled-error-type*))
         *py-true*)))
 
 (defun py-future-cancelled (future)
@@ -2809,6 +3429,17 @@
 
 (defun py-future-done (future)
   (py-bool (py-future-done-p future)))
+
+(defun py-future-get-loop (future)
+  (py-asyncio-future-object-loop future))
+
+(defun py-task-get-name (task)
+  (py-asyncio-task-object-name task))
+
+(defun py-task-set-name (task name)
+  (setf (py-asyncio-task-object-name task) name)
+  *py-none*)
+
 
 (defun py-coroutine-run (coroutine)
   (case (py-coroutine-object-state coroutine)
@@ -2834,16 +3465,22 @@
 
 (defun py-asyncio-run-task (task)
   (when (eq (py-asyncio-future-object-state task) :pending)
-    (handler-case
-        (py-future-set-result task (py-coroutine-run (py-asyncio-task-object-coroutine task)))
-      (py-exception (condition)
-        (setf (py-asyncio-future-object-exception task) (py-exception-value condition))
-        (setf (py-asyncio-future-object-state task) :finished)
-        (error condition))
-      (error (condition)
-        (setf (py-asyncio-future-object-exception task) condition)
-        (setf (py-asyncio-future-object-state task) :finished)
-        (error condition))))
+    (let* ((loop (py-asyncio-task-object-loop task))
+           (previous-task (and (py-asyncio-event-loop-object-p loop)
+                               (py-asyncio-event-loop-object-current-task loop))))
+      (when (py-asyncio-event-loop-object-p loop)
+        (setf (py-asyncio-event-loop-object-current-task loop) task))
+      (unwind-protect
+           (handler-case
+               (py-future-set-result task (py-coroutine-run (py-asyncio-task-object-coroutine task)))
+             (py-exception (condition)
+               (py-future-mark-finished task :finished nil (py-exception-value condition))
+               (error condition))
+             (error (condition)
+               (py-future-mark-finished task :finished nil condition)
+               (error condition)))
+        (when (py-asyncio-event-loop-object-p loop)
+          (setf (py-asyncio-event-loop-object-current-task loop) previous-task)))))
   task)
 
 (defun py-await (awaitable)
@@ -2851,11 +3488,15 @@
     ((py-coroutine-object-p awaitable)
      (py-coroutine-run awaitable))
     ((py-asyncio-task-object-p awaitable)
+     (py-asyncio-run-ready (py-asyncio-task-object-loop awaitable))
      (py-asyncio-run-task awaitable)
+     (py-asyncio-run-ready (py-asyncio-task-object-loop awaitable))
      (py-future-result awaitable))
     ((py-asyncio-future-object-p awaitable)
+     (py-asyncio-run-ready (py-asyncio-future-object-loop awaitable))
      (py-future-result awaitable))
     ((py-asyncio-sleep-object-p awaitable)
+     (py-asyncio-run-ready *py-asyncio-running-loop*)
      (py-asyncio-sleep-object-result awaitable))
     ((py-object-p awaitable)
      (multiple-value-bind (method found) (py-find-type-attr (py-object-type awaitable) "__await__")
@@ -2869,19 +3510,108 @@
     (t
      (py-raise (make-py-exception *py-type-error-type* "object is not awaitable")))))
 
+(defun py-asyncio-make-event-loop-policy ()
+  (make-py-asyncio-event-loop-policy-object
+   :type *py-asyncio-event-loop-policy-type*))
+
+(defun py-asyncio-get-event-loop-policy ()
+  (or *py-asyncio-event-loop-policy*
+      (setf *py-asyncio-event-loop-policy*
+            (py-asyncio-make-event-loop-policy))))
+
+(defun py-asyncio-set-event-loop-policy (policy)
+  (setf *py-asyncio-event-loop-policy*
+        (if (eq policy *py-none*)
+            (py-asyncio-make-event-loop-policy)
+            policy))
+  *py-none*)
+
+(defun py-asyncio-policy-new-event-loop (policy)
+  (declare (ignore policy))
+  (py-asyncio-new-event-loop))
+
+(defun py-asyncio-policy-get-event-loop (policy)
+  (or *py-asyncio-running-loop*
+      (py-asyncio-event-loop-policy-object-loop policy)
+      *py-asyncio-default-event-loop*
+      (let ((loop (py-asyncio-new-event-loop)))
+        (setf (py-asyncio-event-loop-policy-object-loop policy) loop)
+        (setf *py-asyncio-default-event-loop* loop)
+        loop)))
+
+(defun py-asyncio-policy-set-event-loop (policy loop)
+  (setf (py-asyncio-event-loop-policy-object-loop policy) loop)
+  (setf *py-asyncio-default-event-loop* loop)
+  *py-none*)
+
 (defun py-asyncio-new-event-loop ()
   (make-py-asyncio-event-loop-object :type *py-asyncio-event-loop-type*))
 
 (defun py-asyncio-create-future (loop)
   (make-py-asyncio-future-object :type *py-asyncio-future-type* :loop loop))
 
-(defun py-asyncio-create-task (loop coroutine &optional (name *py-none*))
-  (unless (py-coroutine-object-p coroutine)
-    (py-raise (make-py-exception *py-type-error-type* "a coroutine was expected")))
-  (make-py-asyncio-task-object :type *py-asyncio-task-type*
-                               :loop loop
-                               :coroutine coroutine
-                               :name name))
+(defun py-asyncio-keyword-value (args keyword default)
+  (let ((remaining args)
+        (value default)
+        (found nil)
+        (positional '()))
+    (loop while remaining
+          do (let ((item (pop remaining)))
+               (if (keywordp item)
+                   (progn
+                     (unless remaining
+                       (error "keyword argument ~A has no value" item))
+                     (let ((argument-value (pop remaining)))
+                       (when (eq item keyword)
+                         (setf value argument-value)
+                         (setf found t))))
+                   (push item positional))))
+    (values value found (nreverse positional))))
+
+(defun py-asyncio-create-task (loop coroutine &rest args)
+  (multiple-value-bind (keyword-name keyword-name-supplied-p positional)
+      (py-asyncio-keyword-value args :name *py-none*)
+    (let ((name (cond
+                  (keyword-name-supplied-p keyword-name)
+                  (positional (first positional))
+                  (t *py-none*))))
+      (unless (py-coroutine-object-p coroutine)
+        (py-raise (make-py-exception *py-type-error-type* "a coroutine was expected")))
+      (let ((task (make-py-asyncio-task-object :type *py-asyncio-task-type*
+                                               :loop loop
+                                               :coroutine coroutine
+                                               :name name)))
+        (when (py-asyncio-event-loop-object-p loop)
+          (pushnew task (py-asyncio-event-loop-object-tasks loop) :test #'eq))
+        task))))
+
+(defun py-asyncio-default-loop (loop)
+  (if (eq loop *py-none*)
+      (or *py-asyncio-running-loop*
+          (py-asyncio-new-event-loop))
+      loop))
+
+(defun py-asyncio-future-constructor (&rest args)
+  (multiple-value-bind (keyword-loop keyword-loop-supplied-p positional)
+      (py-asyncio-keyword-value args :loop *py-none*)
+    (let ((loop (cond
+                  (keyword-loop-supplied-p keyword-loop)
+                  (positional (first positional))
+                  (t *py-none*))))
+      (py-asyncio-create-future (py-asyncio-default-loop loop)))))
+
+(defun py-asyncio-task-constructor (coroutine &rest args)
+  (multiple-value-bind (keyword-loop keyword-loop-supplied-p positional)
+      (py-asyncio-keyword-value args :loop *py-none*)
+    (multiple-value-bind (keyword-name keyword-name-supplied-p ignored-positional)
+        (py-asyncio-keyword-value args :name *py-none*)
+      (declare (ignore ignored-positional))
+      (let ((loop (cond
+                    (keyword-loop-supplied-p keyword-loop)
+                    (positional (first positional))
+                    (t *py-none*)))
+            (name (if keyword-name-supplied-p keyword-name *py-none*)))
+        (py-asyncio-create-task (py-asyncio-default-loop loop) coroutine :name name)))))
 
 (defun py-asyncio-run-until-complete (loop awaitable)
   (when (py-asyncio-event-loop-object-running loop)
@@ -2894,7 +3624,26 @@
                        awaitable))
       (setf (py-asyncio-event-loop-object-running loop) nil))))
 
-(defun py-asyncio-run (awaitable)
+(defun py-asyncio-run-forever (loop)
+  (when (py-asyncio-event-loop-object-running loop)
+    (py-raise (make-py-exception *py-runtime-error-type* "This event loop is already running")))
+  (let ((*py-asyncio-running-loop* loop))
+    (setf (py-asyncio-event-loop-object-running loop) t)
+    (setf (py-asyncio-event-loop-object-stopping loop) nil)
+    (unwind-protect
+         (loop while (and (not (py-asyncio-event-loop-object-stopping loop))
+                          (py-asyncio-event-loop-object-ready-callbacks loop))
+               do (py-asyncio-run-ready loop))
+      (setf (py-asyncio-event-loop-object-running loop) nil)
+      (setf (py-asyncio-event-loop-object-stopping loop) nil)))
+  *py-none*)
+
+(defun py-asyncio-loop-stop (loop)
+  (setf (py-asyncio-event-loop-object-stopping loop) t)
+  *py-none*)
+
+(defun py-asyncio-run (awaitable &key (debug *py-none*) (loop_factory *py-none*))
+  (declare (ignore debug loop_factory))
   (when *py-asyncio-running-loop*
     (py-raise (make-py-exception *py-runtime-error-type* "asyncio.run() cannot be called from a running event loop")))
   (let ((loop (py-asyncio-new-event-loop)))
@@ -2902,40 +3651,986 @@
          (py-asyncio-run-until-complete loop awaitable)
       (setf (py-asyncio-event-loop-object-closed loop) t))))
 
+(defun py-asyncio-runner (&rest args)
+  (multiple-value-bind (keyword-debug keyword-debug-supplied-p positional)
+      (py-asyncio-keyword-value args :debug *py-none*)
+    (declare (ignore positional))
+    (multiple-value-bind (keyword-loop-factory keyword-loop-factory-supplied-p ignored-positional)
+        (py-asyncio-keyword-value args :loop_factory *py-none*)
+      (declare (ignore ignored-positional))
+      (let ((runner (make-py-asyncio-runner-object
+                     :type *py-asyncio-runner-type*
+                     :debug (if keyword-debug-supplied-p keyword-debug *py-none*)
+                     :loop-factory (if keyword-loop-factory-supplied-p keyword-loop-factory *py-none*))))
+        (setf (py-object-attr runner "closed") *py-false*)
+        runner))))
+
+(defun py-asyncio-runner-get-or-create-loop (runner)
+  (when (py-asyncio-runner-object-closed runner)
+    (py-raise (make-py-exception *py-runtime-error-type* "Runner is closed")))
+  (or (py-asyncio-runner-object-loop runner)
+      (let* ((factory (py-asyncio-runner-object-loop-factory runner))
+             (loop (if (and factory (not (eq factory *py-none*)))
+                       (py-invoke-callable factory)
+                       (py-asyncio-new-event-loop))))
+        (setf (py-asyncio-runner-object-loop runner) loop)
+        loop)))
+
+(defun py-asyncio-runner-enter (runner)
+  (py-asyncio-runner-get-or-create-loop runner)
+  (setf (py-asyncio-runner-object-entered runner) t)
+  runner)
+
+(defun py-asyncio-runner-exit (runner exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (py-asyncio-runner-close runner)
+  *py-false*)
+
+(defun py-asyncio-runner-close (runner)
+  (unless (py-asyncio-runner-object-closed runner)
+    (let ((loop (py-asyncio-runner-object-loop runner)))
+      (when (py-asyncio-event-loop-object-p loop)
+        (setf (py-asyncio-event-loop-object-closed loop) t)))
+    (setf (py-asyncio-runner-object-closed runner) t)
+    (setf (py-object-attr runner "closed") *py-true*))
+  *py-none*)
+
+(defun py-asyncio-runner-get-loop (runner)
+  (py-asyncio-runner-get-or-create-loop runner))
+
+(defun py-asyncio-runner-run (runner awaitable &rest args)
+  (declare (ignore args))
+  (when *py-asyncio-running-loop*
+    (py-raise (make-py-exception *py-runtime-error-type* "Runner.run() cannot be called from a running event loop")))
+  (py-asyncio-run-until-complete (py-asyncio-runner-get-or-create-loop runner) awaitable))
+
+(setf (py-type-attr *py-asyncio-runner-type* "__enter__") #'py-asyncio-runner-enter)
+(setf (py-type-attr *py-asyncio-runner-type* "__exit__") #'py-asyncio-runner-exit)
+(setf (py-type-attr *py-asyncio-runner-type* "close") #'py-asyncio-runner-close)
+(setf (py-type-attr *py-asyncio-runner-type* "get_loop") #'py-asyncio-runner-get-loop)
+
+(setf (py-type-attr *py-asyncio-runner-type* "run") #'py-asyncio-runner-run)
+
+(defun py-asyncio-stream-text (stream)
+  (if stream
+      (with-output-to-string (out)
+        (loop for char = (read-char stream nil nil)
+              while char
+              do (write-char char out)))
+      ""))
+
+(defun py-asyncio-subprocess-bytes (text)
+  (make-py-bytes-from-vector
+   (sb-ext:string-to-octets (or text "") :external-format :utf-8)))
+
+(defun py-asyncio-run-program-capture (program arguments stdout-mode stderr-mode shell-p)
+  (let* ((output-stream-p (eq stdout-mode *py-asyncio-subprocess-pipe*))
+         (error-stream-p (eq stderr-mode *py-asyncio-subprocess-pipe*))
+         (error-to-output-p (eq stderr-mode *py-asyncio-subprocess-stdout*))
+         (process (if shell-p
+                      (sb-ext:run-program "/bin/sh"
+                                          (list "-c" program)
+                                          :search nil
+                                          :wait t
+                                          :output (if output-stream-p :stream nil)
+                                          :error (cond
+                                                   (error-stream-p :stream)
+                                                   (error-to-output-p :output)
+                                                   (t nil)))
+                      (sb-ext:run-program program
+                                          arguments
+                                          :search t
+                                          :wait t
+                                          :output (if output-stream-p :stream nil)
+                                          :error (cond
+                                                   (error-stream-p :stream)
+                                                   (error-to-output-p :output)
+                                                   (t nil))))))
+    (let ((stdout-text (if output-stream-p
+                           (py-asyncio-stream-text (sb-ext:process-output process))
+                           ""))
+          (stderr-text (if error-stream-p
+                           (py-asyncio-stream-text (sb-ext:process-error process))
+                           ""))
+          (returncode (or (ignore-errors (sb-ext:process-exit-code process)) 0)))
+      (values returncode stdout-text stderr-text))))
+
+(defun py-asyncio-make-process (args returncode stdout-text stderr-text stdout-mode stderr-mode)
+  (let ((process (make-py-asyncio-process-object
+                  :type *py-asyncio-process-type*
+                  :args args
+                  :returncode returncode
+                  :stdout (if (eq stdout-mode *py-asyncio-subprocess-pipe*)
+                              (py-asyncio-subprocess-bytes stdout-text)
+                              *py-none*)
+                  :stderr (if (eq stderr-mode *py-asyncio-subprocess-pipe*)
+                              (py-asyncio-subprocess-bytes stderr-text)
+                              *py-none*))))
+    (setf (py-object-attr process "args") args)
+    (setf (py-object-attr process "returncode") returncode)
+    (setf (py-object-attr process "stdout") (py-asyncio-process-object-stdout process))
+    (setf (py-object-attr process "stderr") (py-asyncio-process-object-stderr process))
+    process))
+
+(defun py-asyncio-subprocess-keyword (args keyword default)
+  (multiple-value-bind (value supplied-p positional)
+      (py-asyncio-keyword-value args keyword default)
+    (values (if supplied-p value default) positional)))
+
+(defun py-asyncio-create-subprocess-exec (program &rest args)
+  (multiple-value-bind (stdout-mode positional-after-stdout)
+      (py-asyncio-subprocess-keyword args :stdout *py-none*)
+    (declare (ignore positional-after-stdout))
+    (multiple-value-bind (stderr-mode positional)
+        (py-asyncio-subprocess-keyword args :stderr *py-none*)
+      (make-py-coroutine "create_subprocess_exec"
+                         (lambda ()
+                           (let ((arguments (mapcar #'py-str positional)))
+                             (multiple-value-bind (returncode stdout-text stderr-text)
+                                 (py-asyncio-run-program-capture (py-str program) arguments stdout-mode stderr-mode nil)
+                               (py-asyncio-make-process
+                                (apply #'make-py-tuple program positional)
+                                returncode
+                                stdout-text
+                                stderr-text
+                                stdout-mode
+                                stderr-mode))))))))
+
+(defun py-asyncio-create-subprocess-shell (cmd &rest args)
+  (multiple-value-bind (stdout-mode positional-after-stdout)
+      (py-asyncio-subprocess-keyword args :stdout *py-none*)
+    (declare (ignore positional-after-stdout))
+    (multiple-value-bind (stderr-mode positional)
+        (py-asyncio-subprocess-keyword args :stderr *py-none*)
+      (declare (ignore positional))
+      (make-py-coroutine "create_subprocess_shell"
+                         (lambda ()
+                           (multiple-value-bind (returncode stdout-text stderr-text)
+                               (py-asyncio-run-program-capture (py-str cmd) '() stdout-mode stderr-mode t)
+                             (py-asyncio-make-process
+                              (make-py-tuple cmd)
+                              returncode
+                              stdout-text
+                              stderr-text
+                              stdout-mode
+                              stderr-mode)))))))
+
+(defun py-asyncio-process-communicate (process &optional (input *py-none*))
+  (declare (ignore input))
+  (make-py-coroutine "Process.communicate"
+                     (lambda ()
+                       (make-py-tuple
+                        (py-asyncio-process-object-stdout process)
+                        (py-asyncio-process-object-stderr process)))))
+
+(defun py-asyncio-process-wait (process)
+  (make-py-coroutine "Process.wait"
+                     (lambda ()
+                       (py-asyncio-process-object-returncode process))))
+
+(defun py-asyncio-process-send-signal (process signal)
+  (declare (ignore process signal))
+  *py-none*)
+
+(defun py-asyncio-process-terminate (process)
+  (declare (ignore process))
+  *py-none*)
+
+(defun py-asyncio-process-kill (process)
+  (declare (ignore process))
+  *py-none*)
+
+(setf (py-type-attr *py-asyncio-process-type* "communicate") #'py-asyncio-process-communicate)
+(setf (py-type-attr *py-asyncio-process-type* "wait") #'py-asyncio-process-wait)
+(setf (py-type-attr *py-asyncio-process-type* "send_signal") #'py-asyncio-process-send-signal)
+(setf (py-type-attr *py-asyncio-process-type* "terminate") #'py-asyncio-process-terminate)
+(setf (py-type-attr *py-asyncio-process-type* "kill") #'py-asyncio-process-kill)
+
 (defun py-asyncio-get-running-loop ()
   (or *py-asyncio-running-loop*
       (py-raise (make-py-exception *py-runtime-error-type* "no running event loop"))))
 
-(defun py-asyncio-module-create-task (coroutine)
-  (py-asyncio-create-task (py-asyncio-get-running-loop) coroutine))
+(defun py-asyncio-get-event-loop ()
+  (py-asyncio-policy-get-event-loop (py-asyncio-get-event-loop-policy)))
 
-(defun py-asyncio-sleep (delay &optional (result *py-none*))
-  (make-py-asyncio-sleep-object :type *py-asyncio-sleep-type*
-                                :delay delay
-                                :result result))
+(defun py-asyncio-set-event-loop (loop)
+    (py-asyncio-policy-set-event-loop (py-asyncio-get-event-loop-policy) loop))
+
+(defun py-asyncio-ensure-future (awaitable &rest args)
+  (multiple-value-bind (keyword-loop keyword-loop-supplied-p positional)
+      (py-asyncio-keyword-value args :loop *py-none*)
+    (declare (ignore positional))
+    (let ((loop (if keyword-loop-supplied-p
+                    keyword-loop
+                    (or *py-asyncio-running-loop* (py-asyncio-new-event-loop)))))
+      (cond
+        ((or (py-asyncio-future-object-p awaitable)
+             (py-asyncio-task-object-p awaitable))
+         awaitable)
+        ((py-coroutine-object-p awaitable)
+         (py-asyncio-create-task loop awaitable))
+        (t
+         (py-raise (make-py-exception *py-type-error-type* "An asyncio.Future, a coroutine or an awaitable is required")))))))
+
+(defun py-asyncio-shield (awaitable &rest args)
+  (apply #'py-asyncio-ensure-future awaitable args))
+
+(defun py-asyncio-timeout-expired-p (timeout)
+  (and (not (eq timeout *py-none*))
+       (numberp timeout)
+       (<= timeout 0)))
+
+(defun py-asyncio-wait-for (awaitable &rest args)
+  (multiple-value-bind (keyword-timeout keyword-timeout-supplied-p positional)
+      (py-asyncio-keyword-value args :timeout *py-none*)
+    (let ((timeout (cond
+                     (keyword-timeout-supplied-p keyword-timeout)
+                     (positional (first positional))
+                     (t *py-none*))))
+      (make-py-coroutine "wait_for"
+                         (lambda ()
+                           (let ((future (py-asyncio-ensure-future awaitable)))
+                             (when (and (py-asyncio-timeout-expired-p timeout)
+                                        (not (py-future-done-p future)))
+                               (py-future-cancel future)
+                               (py-raise (make-py-exception *py-timeout-error-type*)))
+                             (py-await future)))))))
+
+(defun py-asyncio-current-time ()
+  (/ (get-internal-real-time) internal-time-units-per-second))
+
+(defun py-asyncio-timeout-deadline-expired-p (timeout)
+  (let ((deadline (py-asyncio-timeout-object-deadline timeout)))
+    (and (not (eq deadline *py-none*))
+         (numberp deadline)
+         (<= deadline (py-asyncio-current-time)))))
+
+(defun py-asyncio-make-timeout (deadline)
+  (make-py-asyncio-timeout-object
+   :type *py-asyncio-timeout-type*
+   :loop (or *py-asyncio-running-loop*
+             (py-asyncio-new-event-loop))
+   :deadline deadline))
+
+(defun py-asyncio-timeout (&rest args)
+  (multiple-value-bind (keyword-delay keyword-delay-supplied-p positional)
+      (py-asyncio-keyword-value args :delay *py-none*)
+    (let* ((delay (cond
+                    (keyword-delay-supplied-p keyword-delay)
+                    (positional (first positional))
+                    (t *py-none*)))
+           (deadline (if (eq delay *py-none*)
+                         *py-none*
+                         (+ (py-asyncio-current-time) delay))))
+      (py-asyncio-make-timeout deadline))))
+
+(defun py-asyncio-timeout-at (&rest args)
+  (multiple-value-bind (keyword-when keyword-when-supplied-p positional)
+      (py-asyncio-keyword-value args :when *py-none*)
+    (let ((deadline (cond
+                      (keyword-when-supplied-p keyword-when)
+                      (positional (first positional))
+                      (t *py-none*))))
+      (py-asyncio-make-timeout deadline))))
+
+(defun py-asyncio-timeout-when (timeout)
+  (py-asyncio-timeout-object-deadline timeout))
+
+(defun py-asyncio-timeout-reschedule (timeout deadline)
+  (setf (py-asyncio-timeout-object-deadline timeout) deadline)
+  (setf (py-asyncio-timeout-object-expired timeout) nil)
+  *py-none*)
+
+(defun py-asyncio-timeout-expired (timeout)
+  (when (py-asyncio-timeout-deadline-expired-p timeout)
+    (setf (py-asyncio-timeout-object-expired timeout) t))
+  (py-bool (py-asyncio-timeout-object-expired timeout)))
+
+(defun py-asyncio-timeout-aenter (timeout)
+  (make-py-coroutine "Timeout.__aenter__"
+                     (lambda ()
+                       (when (py-asyncio-timeout-deadline-expired-p timeout)
+                         (setf (py-asyncio-timeout-object-expired timeout) t)
+                         (py-raise (make-py-exception *py-timeout-error-type*)))
+                       timeout)))
+
+(defun py-asyncio-timeout-aexit (timeout exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "Timeout.__aexit__"
+                     (lambda ()
+                       (when (py-asyncio-timeout-deadline-expired-p timeout)
+                         (setf (py-asyncio-timeout-object-expired timeout) t)
+                         (py-raise (make-py-exception *py-timeout-error-type*)))
+                       *py-false*)))
+
+(setf (py-type-attr *py-asyncio-timeout-type* "when") #'py-asyncio-timeout-when)
+(setf (py-type-attr *py-asyncio-timeout-type* "reschedule") #'py-asyncio-timeout-reschedule)
+(setf (py-type-attr *py-asyncio-timeout-type* "expired") #'py-asyncio-timeout-expired)
+(setf (py-type-attr *py-asyncio-timeout-type* "__aenter__") #'py-asyncio-timeout-aenter)
+(setf (py-type-attr *py-asyncio-timeout-type* "__aexit__") #'py-asyncio-timeout-aexit)
+
+(defun py-asyncio-current-task (&optional (loop *py-none*))
+  (let ((selected-loop (if (eq loop *py-none*) *py-asyncio-running-loop* loop)))
+    (if (py-asyncio-event-loop-object-p selected-loop)
+        (or (py-asyncio-event-loop-object-current-task selected-loop) *py-none*)
+        *py-none*)))
+
+(defun py-asyncio-all-tasks (&optional (loop *py-none*))
+  (let ((selected-loop (if (eq loop *py-none*) *py-asyncio-running-loop* loop)))
+    (if (py-asyncio-event-loop-object-p selected-loop)
+        (apply #'make-py-list
+               (remove-if #'py-future-done-p
+                          (py-asyncio-event-loop-object-tasks selected-loop)))
+        (make-py-list))))
+
+(defun py-asyncio-module-create-task (coroutine &rest args)
+  (apply #'py-asyncio-create-task (py-asyncio-get-running-loop) coroutine args))
+
+(defun py-asyncio-isfuture (obj)
+  (py-bool (py-asyncio-future-object-p obj)))
+
+(defun py-asyncio-iscoroutine (obj)
+  (py-bool (or (py-coroutine-object-p obj)
+               (py-async-generator-object-p obj))))
+
+(defun py-asyncio-iscoroutinefunction (obj)
+  (py-bool
+   (and (py-callable-p obj)
+        (py-callable-coroutine-function obj)
+        (not (py-callable-async-generator-function obj)))))
+
+(defun py-inspect-iscoroutine (obj)
+  (py-bool (py-coroutine-object-p obj)))
+
+(defun py-inspect-iscoroutinefunction (obj)
+  (py-asyncio-iscoroutinefunction obj))
+
+(defun py-inspect-isasyncgen (obj)
+  (py-bool (py-async-generator-object-p obj)))
+
+(defun py-inspect-isasyncgenfunction (obj)
+  (py-bool
+   (and (py-callable-p obj)
+        (py-callable-async-generator-function obj))))
+
+(defun py-inspect-isawaitable (obj)
+  (py-bool
+   (or (py-coroutine-object-p obj)
+       (py-asyncio-future-object-p obj)
+       (and (py-object-p obj)
+            (multiple-value-bind (attr found) (gethash "__await__" (py-object-attrs obj))
+              (declare (ignore attr))
+              found))
+       (and (or (py-object-p obj)
+                (integerp obj)
+                (floatp obj)
+                (stringp obj))
+            (multiple-value-bind (attr found) (py-find-type-attr (py-type-of obj) "__await__")
+              (declare (ignore attr))
+              found)))))
+
+(defun py-asyncio-run-coroutine-threadsafe (coroutine loop)
+  (unless (py-coroutine-object-p coroutine)
+    (py-raise (make-py-exception *py-type-error-type* "A coroutine object is required")))
+  (unless (py-asyncio-event-loop-object-p loop)
+    (py-raise (make-py-exception *py-type-error-type* "loop must be an event loop")))
+  (let ((task (py-asyncio-create-task loop coroutine)))
+    (py-asyncio-run-ready loop)
+    (py-asyncio-run-task task)
+    (py-asyncio-run-ready loop)
+    task))
+
+(defun py-asyncio-to-thread (callable &rest args)
+  (make-py-coroutine "to_thread"
+                     (lambda ()
+                       (apply #'py-invoke-callable callable args))))
+
+(defun py-asyncio-task-group ()
+  (make-py-asyncio-task-group-object
+   :type *py-asyncio-task-group-type*
+   :loop (or *py-asyncio-running-loop*
+             (py-asyncio-new-event-loop))))
+
+(defun py-asyncio-task-group-aenter (group)
+  (make-py-coroutine "TaskGroup.__aenter__"
+                     (lambda ()
+                       (setf (py-asyncio-task-group-object-entered group) t)
+                       (setf (py-asyncio-task-group-object-exiting group) nil)
+                       group)))
+
+(defun py-asyncio-task-group-create-task (group coroutine &rest args)
+  (unless (py-asyncio-task-group-object-entered group)
+    (py-raise (make-py-exception *py-runtime-error-type*
+                                 "TaskGroup has not been entered")))
+  (when (py-asyncio-task-group-object-exiting group)
+    (py-raise (make-py-exception *py-runtime-error-type*
+                                 "TaskGroup is finished")))
+  (let* ((loop (or *py-asyncio-running-loop*
+                   (py-asyncio-task-group-object-loop group)
+                   (py-asyncio-new-event-loop)))
+         (task (apply #'py-asyncio-create-task loop coroutine args)))
+    (push task (py-asyncio-task-group-object-tasks group))
+    task))
+
+(defun py-asyncio-task-group-aexit (group exc-type exc-value traceback)
+  (declare (ignore exc-type traceback))
+  (make-py-coroutine "TaskGroup.__aexit__"
+                     (lambda ()
+                       (setf (py-asyncio-task-group-object-exiting group) t)
+                       (when (not (eq exc-value *py-none*))
+                         (dolist (task (py-asyncio-task-group-object-tasks group))
+                           (unless (py-future-done-p task)
+                             (py-future-cancel task))))
+                       (unwind-protect
+                            (dolist (task (nreverse (py-asyncio-task-group-object-tasks group)))
+                              (py-await task))
+                         (setf (py-asyncio-task-group-object-entered group) nil)
+                         (setf (py-asyncio-task-group-object-exiting group) t))
+                       *py-false*)))
+
+(setf (py-type-attr *py-asyncio-task-group-type* "__aenter__") #'py-asyncio-task-group-aenter)
+(setf (py-type-attr *py-asyncio-task-group-type* "__aexit__") #'py-asyncio-task-group-aexit)
+(setf (py-type-attr *py-asyncio-task-group-type* "create_task") #'py-asyncio-task-group-create-task)
+
+(defun py-asyncio-sleep (delay &rest args)
+  (multiple-value-bind (keyword-result keyword-result-supplied-p positional)
+      (py-asyncio-keyword-value args :result *py-none*)
+    (let ((result (cond
+                    (keyword-result-supplied-p keyword-result)
+                    (positional (first positional))
+                    (t *py-none*))))
+      (make-py-asyncio-sleep-object :type *py-asyncio-sleep-type*
+                                    :delay delay
+                                    :result result))))
 
 (defun py-asyncio-gather (&rest awaitables)
-  (let ((future (py-asyncio-create-future (or *py-asyncio-running-loop*
-                                             (py-asyncio-new-event-loop))))
-        (result (make-py-list)))
-    (dolist (awaitable awaitables)
-      (py-append result (py-await awaitable)))
-    (py-future-set-result future result)
-    future))
+  (let ((filtered-awaitables '())
+        (return-exceptions *py-false*)
+        (rest awaitables))
+    (loop while rest
+          do (let ((item (pop rest)))
+               (if (eq item :return_exceptions)
+                   (setf return-exceptions (if rest (pop rest) *py-false*))
+                   (push item filtered-awaitables))))
+    (setf awaitables (nreverse filtered-awaitables))
+    (let ((future (py-asyncio-create-future (or *py-asyncio-running-loop*
+                                               (py-asyncio-new-event-loop))))
+          (result (make-py-list)))
+      (dolist (awaitable awaitables)
+        (handler-case
+            (py-append result (py-await awaitable))
+          (py-exception (condition)
+            (if (py-truthy-p return-exceptions)
+                (py-append result (py-exception-value condition))
+                (error condition)))
+          (error (condition)
+            (if (py-truthy-p return-exceptions)
+                (py-append result condition)
+                (error condition)))))
+      (py-future-set-result future result)
+      future)))
+
+(defparameter *py-asyncio-first-completed* "FIRST_COMPLETED")
+(defparameter *py-asyncio-first-exception* "FIRST_EXCEPTION")
+(defparameter *py-asyncio-all-completed* "ALL_COMPLETED")
+
+(defun py-asyncio-wait-normalize-awaitables (awaitables loop)
+  (let ((items '())
+        (iterator (py-iter awaitables)))
+    (loop
+      (multiple-value-bind (item found) (py-next-item iterator)
+        (unless found (return))
+        (push (if (or (py-asyncio-future-object-p item)
+                      (py-asyncio-task-object-p item))
+                  item
+                  (py-asyncio-create-task loop item))
+              items)))
+    (nreverse items)))
+
+(defun py-asyncio-wait (awaitables &rest args)
+  (multiple-value-bind (keyword-timeout keyword-timeout-supplied-p positional-after-timeout)
+      (py-asyncio-keyword-value args :timeout *py-none*)
+    (let ((timeout (cond
+                     (keyword-timeout-supplied-p keyword-timeout)
+                     (positional-after-timeout (first positional-after-timeout))
+                     (t *py-none*))))
+      (multiple-value-bind (keyword-return-when keyword-return-when-supplied-p positional)
+          (py-asyncio-keyword-value args :return_when *py-asyncio-all-completed*)
+        (declare (ignore positional))
+        (let ((return-when (if keyword-return-when-supplied-p
+                               keyword-return-when
+                               *py-asyncio-all-completed*)))
+          (make-py-coroutine "wait"
+                             (lambda ()
+                               (let* ((loop (or *py-asyncio-running-loop*
+                                                (py-asyncio-new-event-loop)))
+                                      (items (py-asyncio-wait-normalize-awaitables awaitables loop))
+                                      (done (make-py-list))
+                                      (pending (make-py-list)))
+                                 (if (py-asyncio-timeout-expired-p timeout)
+                                     (dolist (item items)
+                                       (if (py-future-done-p item)
+                                           (py-append done item)
+                                           (py-append pending item)))
+                                     (progn
+                                       (dolist (item items)
+                                         (let ((had-exception nil))
+                                           (unless (py-future-done-p item)
+                                             (handler-case
+                                                 (py-await item)
+                                               (py-exception (condition)
+                                                 (declare (ignore condition))
+                                                 (setf had-exception t))
+                                               (error (condition)
+                                                 (declare (ignore condition))
+                                                 (setf had-exception t))))
+                                           (when (py-future-done-p item)
+                                             (py-append done item))
+                                           (when (or (and (string= return-when *py-asyncio-first-completed*)
+                                                          (> (or (py-object-size done) 0) 0))
+                                                     (and (string= return-when *py-asyncio-first-exception*)
+                                                          had-exception))
+                                             (return))))
+                                       (dolist (item items)
+                                         (unless (py-future-done-p item)
+                                           (py-append pending item)))))
+                                 (make-py-tuple done pending)))))))))
 
 (defun py-asyncio-loop-time (loop)
   (declare (ignore loop))
-  (/ (get-internal-real-time) internal-time-units-per-second))
+  (py-asyncio-current-time))
 
 (defun py-asyncio-loop-call-soon (loop callback &rest args)
-  (declare (ignore loop))
-  (apply #'py-invoke-callable callback args)
-  *py-none*)
+  (apply #'py-asyncio-schedule-callback loop callback args))
 
 (defun py-asyncio-loop-call-later (loop delay callback &rest args)
-  (declare (ignore delay))
+  (apply #'py-asyncio-schedule-timer-callback
+         loop
+         (+ (py-asyncio-loop-time loop) delay)
+         callback
+         args))
+
+(defun py-asyncio-loop-call-at (loop when callback &rest args)
+  (apply #'py-asyncio-schedule-timer-callback loop when callback args))
+
+(defun py-asyncio-loop-call-soon-threadsafe (loop callback &rest args)
   (apply #'py-asyncio-loop-call-soon loop callback args))
 
+(defun py-asyncio-loop-get-debug (loop)
+  (py-bool (py-asyncio-event-loop-object-debug loop)))
+
+(defun py-asyncio-loop-set-debug (loop enabled)
+  (setf (py-asyncio-event-loop-object-debug loop) (py-truthy-p enabled))
+  *py-none*)
+
+(defun py-asyncio-loop-shutdown-asyncgens (loop)
+  (declare (ignore loop))
+  (make-py-coroutine "shutdown_asyncgens"
+                     (lambda () *py-none*)))
+
+(defun py-asyncio-loop-shutdown-default-executor (loop &rest args)
+  (declare (ignore loop args))
+  (make-py-coroutine "shutdown_default_executor"
+                     (lambda () *py-none*)))
+
+(defun py-asyncio-loop-run-in-executor (loop executor callable &rest args)
+  (declare (ignore executor))
+  (let ((future (py-asyncio-create-future loop)))
+    (handler-case
+        (py-future-set-result future (apply #'py-invoke-callable callable args))
+      (py-exception (condition)
+        (py-future-set-exception future (py-exception-value condition)))
+      (error (condition)
+        (py-future-set-exception future condition)))
+    future))
+
+
+(defun py-asyncio-stream-string-bytes (text)
+  (make-py-bytes-from-vector
+   (sb-ext:string-to-octets text :external-format :utf-8)))
+
+(defun py-asyncio-stream-bytes-string (data)
+  (cond
+    ((stringp data) data)
+    ((py-bytes-object-p data)
+     (sb-ext:octets-to-string (py-bytes-storage data "StreamWriter.write") :external-format :utf-8))
+    (t (py-str data))))
+
+(defun py-asyncio-stream-reader-read (reader &optional (n -1))
+  (make-py-coroutine "StreamReader.read"
+                     (lambda ()
+                       (let ((stream (py-asyncio-stream-reader-object-stream reader)))
+                         (cond
+                           ((and (integerp n) (= n 0))
+                            (py-asyncio-stream-string-bytes ""))
+                           ((and (integerp n) (> n 0))
+                            (let ((buffer (make-string n)))
+                              (let ((count (read-sequence buffer stream)))
+                                (when (< count n)
+                                  (setf (py-asyncio-stream-reader-object-eof reader) t))
+                                (py-asyncio-stream-string-bytes (subseq buffer 0 count)))))
+                           (t
+                            (let ((text (with-output-to-string (out)
+                                          (loop for char = (read-char stream nil nil)
+                                                while char
+                                                do (write-char char out)))))
+                              (setf (py-asyncio-stream-reader-object-eof reader) t)
+                              (py-asyncio-stream-string-bytes text))))))))
+
+(defun py-asyncio-stream-reader-readline (reader)
+  (make-py-coroutine "StreamReader.readline"
+                     (lambda ()
+                       (multiple-value-bind (line missing-newline-p)
+                           (read-line (py-asyncio-stream-reader-object-stream reader) nil nil)
+                         (if line
+                             (progn
+                               (when missing-newline-p
+                                 (setf (py-asyncio-stream-reader-object-eof reader) t))
+                               (py-asyncio-stream-string-bytes
+                                (if missing-newline-p
+                                    line
+                                    (concatenate 'string line (string #\Newline)))))
+                             (progn
+                               (setf (py-asyncio-stream-reader-object-eof reader) t)
+                               (py-asyncio-stream-string-bytes "")))))))
+
+(defun py-asyncio-stream-incomplete-read-error (partial expected)
+  (let ((exception (make-py-exception *py-asyncio-incomplete-read-error-type* partial expected)))
+    (setf (py-object-attr exception "partial") partial)
+    (setf (py-object-attr exception "expected") expected)
+    exception))
+
+(defun py-asyncio-stream-limit-overrun-error (message consumed)
+  (let ((exception (make-py-exception *py-asyncio-limit-overrun-error-type* message)))
+    (setf (py-object-attr exception "consumed") consumed)
+    exception))
+
+(defun py-asyncio-stream-separator-string (separator)
+  (cond
+    ((or (eq separator *py-none*) (null separator)) (string #\Newline))
+    ((stringp separator) separator)
+    ((py-bytes-object-p separator)
+     (sb-ext:octets-to-string (py-bytes-storage separator "StreamReader.readuntil") :external-format :utf-8))
+    (t (py-raise (make-py-exception *py-type-error-type* "separator must be bytes or str")))))
+
+(defun py-asyncio-string-suffix-p (value suffix)
+  (let ((value-length (length value))
+        (suffix-length (length suffix)))
+    (and (<= suffix-length value-length)
+         (string= suffix value :start1 0 :end1 suffix-length
+                  :start2 (- value-length suffix-length) :end2 value-length))))
+
+(defun py-asyncio-stream-reader-readuntil (reader &optional (separator *py-none*))
+  (make-py-coroutine "StreamReader.readuntil"
+                     (lambda ()
+                       (let ((separator-text (py-asyncio-stream-separator-string separator)))
+                         (when (= (length separator-text) 0)
+                           (py-raise (make-py-exception *py-value-error-type* "Separator should be at least one-byte string")))
+                         (let ((stream (py-asyncio-stream-reader-object-stream reader))
+                               (buffer ""))
+                           (loop for char = (read-char stream nil nil)
+                                 while char
+                                 do (setf buffer (concatenate 'string buffer (string char)))
+                                    (when (py-asyncio-string-suffix-p buffer separator-text)
+                                      (return (py-asyncio-stream-string-bytes buffer)))
+                                 finally
+                                    (progn
+                                      (setf (py-asyncio-stream-reader-object-eof reader) t)
+                                      (py-raise (py-asyncio-stream-incomplete-read-error
+                                                 (py-asyncio-stream-string-bytes buffer)
+                                                 *py-none*)))))))))
+
+(defun py-asyncio-stream-reader-readexactly (reader n)
+  (make-py-coroutine "StreamReader.readexactly"
+                     (lambda ()
+                       (let ((buffer (make-string n))
+                             (stream (py-asyncio-stream-reader-object-stream reader)))
+                         (let ((count (read-sequence buffer stream)))
+                           (when (< count n)
+                             (setf (py-asyncio-stream-reader-object-eof reader) t)
+                             (py-raise
+                              (py-asyncio-stream-incomplete-read-error
+                               (py-asyncio-stream-string-bytes (subseq buffer 0 count))
+                               n)))
+                           (py-asyncio-stream-string-bytes buffer))))))
+
+(defun py-asyncio-stream-reader-at-eof (reader)
+  (py-bool (py-asyncio-stream-reader-object-eof reader)))
+
+(defun py-asyncio-stream-reader-aiter (reader)
+  reader)
+
+(defun py-asyncio-stream-reader-anext (reader)
+  (make-py-coroutine "StreamReader.__anext__"
+                     (lambda ()
+                       (let ((line (py-await (py-asyncio-stream-reader-readline reader))))
+                         (if (= (or (py-object-size line) 0) 0)
+                             (py-raise (make-py-exception *py-stop-async-iteration-type*))
+                             line)))))
+
+(defun py-asyncio-stream-writer-write (writer data)
+  (unless (py-asyncio-stream-writer-object-closing writer)
+    (write-string (py-asyncio-stream-bytes-string data)
+                  (py-asyncio-stream-writer-object-stream writer)))
+  *py-none*)
+
+(defun py-asyncio-stream-writer-writelines (writer data)
+  (let ((iterator (py-iter data)))
+    (loop
+      (multiple-value-bind (item found) (py-next-item iterator)
+        (unless found (return))
+        (py-asyncio-stream-writer-write writer item))))
+  *py-none*)
+
+(defun py-asyncio-stream-writer-can-write-eof (writer)
+  (declare (ignore writer))
+  *py-true*)
+
+(defun py-asyncio-stream-writer-write-eof (writer)
+  (unless (py-asyncio-stream-writer-object-closing writer)
+    (finish-output (py-asyncio-stream-writer-object-stream writer)))
+  *py-none*)
+
+(defun py-asyncio-stream-writer-drain (writer)
+  (make-py-coroutine "StreamWriter.drain"
+                     (lambda ()
+                       (unless (py-asyncio-stream-writer-object-closing writer)
+                         (finish-output (py-asyncio-stream-writer-object-stream writer)))
+                       *py-none*)))
+
+(defun py-asyncio-stream-writer-close (writer)
+  (setf (py-asyncio-stream-writer-object-closing writer) t)
+  (ignore-errors (close (py-asyncio-stream-writer-object-stream writer)))
+  (ignore-errors (sb-bsd-sockets:socket-close (py-asyncio-stream-writer-object-socket writer)))
+  *py-none*)
+
+(defun py-asyncio-stream-writer-wait-closed (writer)
+  (make-py-coroutine "StreamWriter.wait_closed"
+                     (lambda ()
+                       (py-asyncio-stream-writer-close writer)
+                       *py-none*)))
+
+(defun py-asyncio-stream-writer-is-closing (writer)
+  (py-bool (py-asyncio-stream-writer-object-closing writer)))
+
+(defun py-asyncio-stream-writer-get-extra-info (writer name &optional (default *py-none*))
+  (cond
+    ((string= name "peername") (py-asyncio-stream-writer-object-peername writer))
+    ((string= name "sockname") (py-asyncio-socket-name-tuple
+                                (py-asyncio-stream-writer-object-socket writer)))
+    (t default)))
+
+(defun py-asyncio-open-connection (&rest args)
+  (multiple-value-bind (keyword-host keyword-host-supplied-p positional)
+      (py-asyncio-keyword-value args :host *py-none*)
+    (multiple-value-bind (keyword-port keyword-port-supplied-p ignored-positional)
+        (py-asyncio-keyword-value args :port *py-none*)
+      (declare (ignore ignored-positional))
+      (let ((host (cond
+                    (keyword-host-supplied-p keyword-host)
+                    (positional (first positional))
+                    (t *py-none*)))
+            (port (cond
+                    (keyword-port-supplied-p keyword-port)
+                    ((rest positional) (second positional))
+                    (t *py-none*))))
+        (make-py-coroutine "open_connection"
+                           (lambda ()
+                             (unless (and (stringp host) (integerp port))
+                               (py-raise (make-py-exception *py-type-error-type* "open_connection requires host and port")))
+                             (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
+                               (handler-case
+                                   (progn
+                                     (sb-bsd-sockets:socket-connect
+                                      socket
+                                      (car (sb-bsd-sockets:host-ent-addresses
+                                            (sb-bsd-sockets:get-host-by-name host)))
+                                      port)
+                                     (let* ((stream (sb-bsd-sockets:socket-make-stream
+                                                     socket
+                                                     :input t
+                                                     :output t
+                                                     :element-type 'character
+                                                     :external-format :utf-8
+                                                     :buffering :none))
+                                            (peername (make-py-tuple host port))
+                                            (reader (make-py-asyncio-stream-reader-object
+                                                     :type *py-asyncio-stream-reader-type*
+                                                     :socket socket
+                                                     :stream stream))
+                                            (writer (make-py-asyncio-stream-writer-object
+                                                     :type *py-asyncio-stream-writer-type*
+                                                     :socket socket
+                                                     :stream stream
+                                                     :peername peername)))
+                                       (make-py-tuple reader writer)))
+                                 (error (condition)
+                                   (ignore-errors (sb-bsd-sockets:socket-close socket))
+                                   (error condition))))))))))
+
+
+(defun py-asyncio-socket-address (host)
+  (car (sb-bsd-sockets:host-ent-addresses
+        (sb-bsd-sockets:get-host-by-name host))))
+
+(defun py-asyncio-address-string (address)
+  (if (and (vectorp address) (= (length address) 4))
+      (format nil "~D.~D.~D.~D"
+              (aref address 0) (aref address 1) (aref address 2) (aref address 3))
+      (py-str address)))
+
+(defun py-asyncio-socket-name-tuple (socket)
+  (multiple-value-bind (address port) (sb-bsd-sockets:socket-name socket)
+    (make-py-tuple (py-asyncio-address-string address) port)))
+
+(defun py-asyncio-make-stream-pair (socket host port)
+  (let* ((stream (sb-bsd-sockets:socket-make-stream
+                  socket
+                  :input t
+                  :output t
+                  :element-type 'character
+                  :external-format :utf-8
+                  :buffering :none))
+         (peername (make-py-tuple host port))
+         (reader (make-py-asyncio-stream-reader-object
+                  :type *py-asyncio-stream-reader-type*
+                  :socket socket
+                  :stream stream))
+         (writer (make-py-asyncio-stream-writer-object
+                  :type *py-asyncio-stream-writer-type*
+                  :socket socket
+                  :stream stream
+                  :peername peername)))
+    (values reader writer)))
+
+(defun py-asyncio-server-handle-client (server client-socket host port)
+  (handler-case
+      (multiple-value-bind (reader writer)
+          (py-asyncio-make-stream-pair client-socket host port)
+        (let ((result (py-invoke-callable
+                       (py-asyncio-server-object-callback server)
+                       reader
+                       writer)))
+          (when (py-coroutine-object-p result)
+            (py-await result))))
+    (error ()
+      (ignore-errors (sb-bsd-sockets:socket-close client-socket)))))
+
+(defun py-asyncio-server-accept-loop (server host port)
+  (loop while (and (not (py-asyncio-server-object-closed server))
+                   (py-asyncio-server-object-serving server))
+        do (handler-case
+               (let ((client-socket (sb-bsd-sockets:socket-accept
+                                     (py-asyncio-server-object-socket server))))
+                 (py-asyncio-server-handle-client server client-socket host port))
+             (error ()
+               (when (and (not (py-asyncio-server-object-closed server))
+                          (py-asyncio-server-object-serving server))
+                 (sleep 0.01))))))
+
+(defun py-asyncio-server-close (server)
+  (setf (py-asyncio-server-object-closed server) t)
+  (setf (py-asyncio-server-object-serving server) nil)
+  (setf (py-object-attr server "closed") *py-true*)
+  (ignore-errors (sb-bsd-sockets:socket-close (py-asyncio-server-object-socket server)))
+  *py-none*)
+
+(defun py-asyncio-server-wait-closed (server)
+  (make-py-coroutine "Server.wait_closed"
+                     (lambda ()
+                       (let ((thread (py-asyncio-server-object-thread server)))
+                         (when thread
+                           (ignore-errors (sb-thread:join-thread thread :timeout 0.1))))
+                       *py-none*)))
+
+(defun py-asyncio-server-is-serving (server)
+  (py-bool (and (py-asyncio-server-object-serving server)
+                (not (py-asyncio-server-object-closed server)))))
+
+(defun py-asyncio-server-serve-forever (server)
+  (make-py-coroutine "Server.serve_forever"
+                     (lambda ()
+                       (if (py-asyncio-server-is-serving server)
+                           *py-none*
+                           (py-raise (make-py-exception *py-runtime-error-type* "server is closed"))))))
+
+(defun py-asyncio-server-aenter (server)
+  (make-py-coroutine "Server.__aenter__"
+                     (lambda () server)))
+
+(defun py-asyncio-server-aexit (server exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "Server.__aexit__"
+                     (lambda ()
+                       (py-asyncio-server-close server)
+                       (py-await (py-asyncio-server-wait-closed server))
+                       *py-false*)))
+
+(defun py-asyncio-start-server (client-connected-cb &rest args)
+  (multiple-value-bind (keyword-host keyword-host-supplied-p positional)
+      (py-asyncio-keyword-value args :host *py-none*)
+    (multiple-value-bind (keyword-port keyword-port-supplied-p ignored-positional)
+        (py-asyncio-keyword-value args :port *py-none*)
+      (declare (ignore ignored-positional))
+      (let ((host (cond
+                    (keyword-host-supplied-p keyword-host)
+                    (positional (first positional))
+                    (t "127.0.0.1")))
+            (port (cond
+                    (keyword-port-supplied-p keyword-port)
+                    ((rest positional) (second positional))
+                    (t *py-none*))))
+        (make-py-coroutine "start_server"
+                           (lambda ()
+                             (unless (and (stringp host) (integerp port))
+                               (py-raise (make-py-exception *py-type-error-type* "start_server requires host and port")))
+                             (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
+                               (handler-case
+                                   (progn
+                                     (sb-bsd-sockets:socket-bind socket (py-asyncio-socket-address host) port)
+                                     (sb-bsd-sockets:socket-listen socket 5)
+                                     (let ((server (make-py-asyncio-server-object
+                                                    :type *py-asyncio-server-type*
+                                                    :socket socket
+                                                    :callback client-connected-cb
+                                                    :sockets (make-py-tuple
+                                                              (py-asyncio-socket-name-tuple socket)))))
+                                       (setf (py-object-attr server "sockets")
+                                             (py-asyncio-server-object-sockets server))
+                                       (setf (py-object-attr server "closed") *py-false*)
+                                       (setf (py-asyncio-server-object-thread server)
+                                             (sb-thread:make-thread
+                                              (lambda ()
+                                                (py-asyncio-server-accept-loop server host port))
+                                              :name "clamp-asyncio-server"))
+                                       server))
+                                 (error (condition)
+                                   (ignore-errors (sb-bsd-sockets:socket-close socket))
+                                   (error condition))))))))))
+
+(setf (py-type-attr *py-asyncio-server-type* "close") #'py-asyncio-server-close)
+(setf (py-type-attr *py-asyncio-server-type* "wait_closed") #'py-asyncio-server-wait-closed)
+(setf (py-type-attr *py-asyncio-server-type* "is_serving") #'py-asyncio-server-is-serving)
+(setf (py-type-attr *py-asyncio-server-type* "serve_forever") #'py-asyncio-server-serve-forever)
+(setf (py-type-attr *py-asyncio-server-type* "__aenter__") #'py-asyncio-server-aenter)
+(setf (py-type-attr *py-asyncio-server-type* "__aexit__") #'py-asyncio-server-aexit)
+
+(setf (py-type-attr *py-asyncio-stream-reader-type* "read") #'py-asyncio-stream-reader-read)
+(setf (py-type-attr *py-asyncio-stream-reader-type* "readline") #'py-asyncio-stream-reader-readline)
+(setf (py-type-attr *py-asyncio-stream-reader-type* "readuntil") #'py-asyncio-stream-reader-readuntil)
+(setf (py-type-attr *py-asyncio-stream-reader-type* "readexactly") #'py-asyncio-stream-reader-readexactly)
+(setf (py-type-attr *py-asyncio-stream-reader-type* "at_eof") #'py-asyncio-stream-reader-at-eof)
+(setf (py-type-attr *py-asyncio-stream-reader-type* "__aiter__") #'py-asyncio-stream-reader-aiter)
+(setf (py-type-attr *py-asyncio-stream-reader-type* "__anext__") #'py-asyncio-stream-reader-anext)
+(setf (py-type-attr *py-asyncio-stream-writer-type* "write") #'py-asyncio-stream-writer-write)
+(setf (py-type-attr *py-asyncio-stream-writer-type* "writelines") #'py-asyncio-stream-writer-writelines)
+(setf (py-type-attr *py-asyncio-stream-writer-type* "can_write_eof") #'py-asyncio-stream-writer-can-write-eof)
+(setf (py-type-attr *py-asyncio-stream-writer-type* "write_eof") #'py-asyncio-stream-writer-write-eof)
+(setf (py-type-attr *py-asyncio-stream-writer-type* "drain") #'py-asyncio-stream-writer-drain)
+(setf (py-type-attr *py-asyncio-stream-writer-type* "close") #'py-asyncio-stream-writer-close)
+(setf (py-type-attr *py-asyncio-stream-writer-type* "wait_closed") #'py-asyncio-stream-writer-wait-closed)
+(setf (py-type-attr *py-asyncio-stream-writer-type* "is_closing") #'py-asyncio-stream-writer-is-closing)
+(setf (py-type-attr *py-asyncio-stream-writer-type* "get_extra_info") #'py-asyncio-stream-writer-get-extra-info)
 
 (defun py-stop-async-iteration-p (value)
   (cond
@@ -3006,51 +4701,232 @@
                                          :items items
                                          :index 0)))
 
+(defun py-asyncio-as-completed-next-item (iterator stop-exception)
+  (let* ((items (py-asyncio-as-completed-object-items iterator))
+         (index (py-asyncio-as-completed-object-index iterator))
+         (size (or (py-object-size items) 0)))
+    (if (< index size)
+        (prog1
+            (aref (py-object-value items) index)
+          (setf (py-asyncio-as-completed-object-index iterator) (1+ index)))
+        (py-raise stop-exception))))
+
 (defun py-asyncio-as-completed-anext (iterator)
   (make-py-coroutine "as_completed.__anext__"
                      (lambda ()
-                       (let* ((items (py-asyncio-as-completed-object-items iterator))
-                              (index (py-asyncio-as-completed-object-index iterator))
-                              (size (or (py-object-size items) 0)))
-                         (if (< index size)
-                             (prog1
-                                 (aref (py-object-value items) index)
-                               (setf (py-asyncio-as-completed-object-index iterator) (1+ index)))
-                             (py-raise (make-py-exception *py-stop-async-iteration-type*)))))))
+                       (py-asyncio-as-completed-next-item
+                        iterator
+                        (make-py-exception *py-stop-async-iteration-type*)))))
+
+(defun py-asyncio-as-completed-next (iterator)
+  (py-asyncio-as-completed-next-item iterator *py-stop-iteration*))
 
 (setf (py-type-attr *py-coroutine-type* "__await__")
       (lambda (coroutine) coroutine))
 
+(setf (py-type-attr *py-async-generator-type* "__aiter__")
+      (lambda (generator) generator))
+(setf (py-type-attr *py-async-generator-type* "__anext__") #'py-async-generator-anext)
+(setf (py-type-attr *py-async-generator-type* "asend") #'py-async-generator-asend)
+(setf (py-type-attr *py-async-generator-type* "aclose") #'py-async-generator-aclose)
+(setf (py-type-attr *py-async-generator-type* "athrow") #'py-async-generator-athrow)
+
+(defun py-contextlib-async-generator-context-manager (generator)
+  (let ((manager (make-py-contextlib-async-generator-context-manager-object
+                  :type *py-contextlib-async-generator-context-manager-type*
+                  :generator generator)))
+    manager))
+
+(defun py-contextlib-async-generator-context-manager-aenter (manager)
+  (make-py-coroutine "_AsyncGeneratorContextManager.__aenter__"
+                     (lambda ()
+                       (py-await
+                        (py-async-generator-anext
+                         (py-contextlib-async-generator-context-manager-object-generator manager))))))
+
+(defun py-contextlib-async-generator-context-manager-aexit (manager exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "_AsyncGeneratorContextManager.__aexit__"
+                     (lambda ()
+                       (py-await
+                        (py-async-generator-aclose
+                         (py-contextlib-async-generator-context-manager-object-generator manager)))
+                       *py-false*)))
+
+(defun py-contextlib-asynccontextmanager (function)
+  (make-py-callable
+   :name "asynccontextmanager"
+   :fn (lambda (&rest args)
+         (let ((generator (apply #'py-invoke-callable function args)))
+           (unless (py-async-generator-object-p generator)
+             (py-raise (make-py-exception *py-type-error-type*
+                                          "asynccontextmanager function must return an async generator")))
+           (py-contextlib-async-generator-context-manager generator)))))
+
+(setf (py-type-attr *py-contextlib-async-generator-context-manager-type* "__aenter__")
+      #'py-contextlib-async-generator-context-manager-aenter)
+(setf (py-type-attr *py-contextlib-async-generator-context-manager-type* "__aexit__")
+      #'py-contextlib-async-generator-context-manager-aexit)
+
+(defun py-contextlib-aclosing (thing)
+  (make-py-contextlib-aclosing-object :type *py-contextlib-aclosing-type* :thing thing))
+
+(defun py-contextlib-aclosing-aenter (manager)
+  (make-py-coroutine "aclosing.__aenter__"
+                     (lambda ()
+                       (py-contextlib-aclosing-object-thing manager))))
+
+(defun py-contextlib-aclosing-aexit (manager exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "aclosing.__aexit__"
+                     (lambda ()
+                       (py-await
+                        (py-call-attr (py-contextlib-aclosing-object-thing manager) "aclose"))
+                       *py-false*)))
+
+(defun py-contextlib-nullcontext (&optional (enter-result *py-none*))
+  (make-py-contextlib-nullcontext-object :type *py-contextlib-nullcontext-type*
+                                         :enter-result enter-result))
+
+(defun py-contextlib-nullcontext-enter (manager)
+  (py-contextlib-nullcontext-object-enter-result manager))
+
+(defun py-contextlib-nullcontext-exit (manager exc-type exc-value traceback)
+  (declare (ignore manager exc-type exc-value traceback))
+  *py-false*)
+
+(defun py-contextlib-nullcontext-aenter (manager)
+  (make-py-coroutine "nullcontext.__aenter__"
+                     (lambda ()
+                       (py-contextlib-nullcontext-object-enter-result manager))))
+
+(defun py-contextlib-nullcontext-aexit (manager exc-type exc-value traceback)
+  (declare (ignore manager exc-type exc-value traceback))
+  (make-py-coroutine "nullcontext.__aexit__"
+                     (lambda () *py-false*)))
+
+(defun py-contextlib-async-exit-stack ()
+  (make-py-contextlib-async-exit-stack-object
+   :type *py-contextlib-async-exit-stack-type*))
+
+(defun py-contextlib-async-exit-stack-push-async-exit (stack exit)
+  (push exit (py-contextlib-async-exit-stack-object-exit-callbacks stack))
+  exit)
+
+(defun py-contextlib-async-exit-stack-enter-async-context (stack manager)
+  (make-py-coroutine "AsyncExitStack.enter_async_context"
+                     (lambda ()
+                       (let ((value (py-await (py-call-attr manager "__aenter__")))
+                             (exit-callback
+                              (make-py-callable
+                               :name "AsyncExitStack.__aexit__ callback"
+                               :fn (lambda (exc-type exc-value traceback)
+                                     (py-call-attr manager "__aexit__" exc-type exc-value traceback)))))
+                         (py-contextlib-async-exit-stack-push-async-exit stack exit-callback)
+                         value))))
+
+(defun py-contextlib-async-exit-stack-aenter (stack)
+  (make-py-coroutine "AsyncExitStack.__aenter__"
+                     (lambda () stack)))
+
+(defun py-contextlib-async-exit-stack-aexit (stack exc-type exc-value traceback)
+  (make-py-coroutine "AsyncExitStack.__aexit__"
+                     (lambda ()
+                       (let ((suppressed nil))
+                         (loop while (py-contextlib-async-exit-stack-object-exit-callbacks stack)
+                               for exit = (pop (py-contextlib-async-exit-stack-object-exit-callbacks stack))
+                               do (let ((result (py-await (py-invoke-callable exit exc-type exc-value traceback))))
+                                    (when (py-truthy-p result)
+                                      (setf suppressed t))))
+                         (py-bool suppressed)))))
+
+(defun py-contextlib-async-exit-stack-aclose (stack)
+  (py-contextlib-async-exit-stack-aexit stack *py-none* *py-none* *py-none*))
+
+(setf (py-type-attr *py-contextlib-aclosing-type* "__aenter__") #'py-contextlib-aclosing-aenter)
+(setf (py-type-attr *py-contextlib-aclosing-type* "__aexit__") #'py-contextlib-aclosing-aexit)
+(setf (py-type-attr *py-contextlib-nullcontext-type* "__enter__") #'py-contextlib-nullcontext-enter)
+(setf (py-type-attr *py-contextlib-nullcontext-type* "__exit__") #'py-contextlib-nullcontext-exit)
+(setf (py-type-attr *py-contextlib-nullcontext-type* "__aenter__") #'py-contextlib-nullcontext-aenter)
+(setf (py-type-attr *py-contextlib-nullcontext-type* "__aexit__") #'py-contextlib-nullcontext-aexit)
+(setf (py-type-attr *py-contextlib-async-exit-stack-type* "__aenter__") #'py-contextlib-async-exit-stack-aenter)
+(setf (py-type-attr *py-contextlib-async-exit-stack-type* "__aexit__") #'py-contextlib-async-exit-stack-aexit)
+(setf (py-type-attr *py-contextlib-async-exit-stack-type* "enter_async_context") #'py-contextlib-async-exit-stack-enter-async-context)
+(setf (py-type-attr *py-contextlib-async-exit-stack-type* "push_async_exit") #'py-contextlib-async-exit-stack-push-async-exit)
+(setf (py-type-attr *py-contextlib-async-exit-stack-type* "aclose") #'py-contextlib-async-exit-stack-aclose)
+
+(defun make-clamp-contextlib-module ()
+  (let ((module (make-clamp-module "contextlib")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in contextlib compatibility module")
+    (setf (py-object-attr module "asynccontextmanager") #'py-contextlib-asynccontextmanager)
+    (setf (py-object-attr module "aclosing") #'py-contextlib-aclosing)
+    (setf (py-object-attr module "nullcontext") #'py-contextlib-nullcontext)
+    (setf (py-object-attr module "AsyncExitStack") #'py-contextlib-async-exit-stack)
+    (setf (py-object-attr module "_AsyncGeneratorContextManager")
+          *py-contextlib-async-generator-context-manager-type*)
+    module))
+
+(py-register-builtin-module "contextlib" #'make-clamp-contextlib-module)
+
 (setf (py-type-attr *py-asyncio-future-type* "result") #'py-future-result)
+(setf (py-type-attr *py-asyncio-future-type* "exception") #'py-future-exception)
 (setf (py-type-attr *py-asyncio-future-type* "set_result") #'py-future-set-result)
 (setf (py-type-attr *py-asyncio-future-type* "set_exception") #'py-future-set-exception)
 (setf (py-type-attr *py-asyncio-future-type* "done") #'py-future-done)
 (setf (py-type-attr *py-asyncio-future-type* "cancel") #'py-future-cancel)
 (setf (py-type-attr *py-asyncio-future-type* "cancelled") #'py-future-cancelled)
+(setf (py-type-attr *py-asyncio-future-type* "add_done_callback") #'py-future-add-done-callback)
+(setf (py-type-attr *py-asyncio-future-type* "remove_done_callback") #'py-future-remove-done-callback)
+(setf (py-type-attr *py-asyncio-future-type* "get_loop") #'py-future-get-loop)
 (setf (py-type-attr *py-asyncio-future-type* "__await__")
       (lambda (future) future))
 
 (setf (py-type-attr *py-asyncio-task-type* "result") #'py-future-result)
+(setf (py-type-attr *py-asyncio-task-type* "exception") #'py-future-exception)
 (setf (py-type-attr *py-asyncio-task-type* "done") #'py-future-done)
 (setf (py-type-attr *py-asyncio-task-type* "cancel") #'py-future-cancel)
 (setf (py-type-attr *py-asyncio-task-type* "cancelled") #'py-future-cancelled)
+(setf (py-type-attr *py-asyncio-task-type* "add_done_callback") #'py-future-add-done-callback)
+(setf (py-type-attr *py-asyncio-task-type* "remove_done_callback") #'py-future-remove-done-callback)
+(setf (py-type-attr *py-asyncio-task-type* "get_loop") #'py-future-get-loop)
+(setf (py-type-attr *py-asyncio-task-type* "get_name") #'py-task-get-name)
+(setf (py-type-attr *py-asyncio-task-type* "set_name") #'py-task-set-name)
 (setf (py-type-attr *py-asyncio-task-type* "get_coro")
       (lambda (task) (py-asyncio-task-object-coroutine task)))
 (setf (py-type-attr *py-asyncio-task-type* "__await__")
       (lambda (task) task))
 
+(setf (py-type-attr *py-asyncio-event-loop-policy-type* "get_event_loop") #'py-asyncio-policy-get-event-loop)
+(setf (py-type-attr *py-asyncio-event-loop-policy-type* "set_event_loop") #'py-asyncio-policy-set-event-loop)
+(setf (py-type-attr *py-asyncio-event-loop-policy-type* "new_event_loop") #'py-asyncio-policy-new-event-loop)
+
 (setf (py-type-attr *py-asyncio-event-loop-type* "time") #'py-asyncio-loop-time)
 (setf (py-type-attr *py-asyncio-event-loop-type* "create_future") #'py-asyncio-create-future)
 (setf (py-type-attr *py-asyncio-event-loop-type* "create_task") #'py-asyncio-create-task)
 (setf (py-type-attr *py-asyncio-event-loop-type* "run_until_complete") #'py-asyncio-run-until-complete)
+(setf (py-type-attr *py-asyncio-event-loop-type* "run_forever") #'py-asyncio-run-forever)
+(setf (py-type-attr *py-asyncio-event-loop-type* "stop") #'py-asyncio-loop-stop)
 (setf (py-type-attr *py-asyncio-event-loop-type* "call_soon") #'py-asyncio-loop-call-soon)
+(setf (py-type-attr *py-asyncio-event-loop-type* "call_soon_threadsafe") #'py-asyncio-loop-call-soon-threadsafe)
 (setf (py-type-attr *py-asyncio-event-loop-type* "call_later") #'py-asyncio-loop-call-later)
+(setf (py-type-attr *py-asyncio-event-loop-type* "call_at") #'py-asyncio-loop-call-at)
+(setf (py-type-attr *py-asyncio-event-loop-type* "get_debug") #'py-asyncio-loop-get-debug)
+(setf (py-type-attr *py-asyncio-event-loop-type* "set_debug") #'py-asyncio-loop-set-debug)
+(setf (py-type-attr *py-asyncio-event-loop-type* "shutdown_asyncgens") #'py-asyncio-loop-shutdown-asyncgens)
+(setf (py-type-attr *py-asyncio-event-loop-type* "shutdown_default_executor") #'py-asyncio-loop-shutdown-default-executor)
+(setf (py-type-attr *py-asyncio-event-loop-type* "run_in_executor") #'py-asyncio-loop-run-in-executor)
 (setf (py-type-attr *py-asyncio-event-loop-type* "is_running")
       (lambda (loop) (py-bool (py-asyncio-event-loop-object-running loop))))
 (setf (py-type-attr *py-asyncio-event-loop-type* "is_closed")
       (lambda (loop) (py-bool (py-asyncio-event-loop-object-closed loop))))
 (setf (py-type-attr *py-asyncio-event-loop-type* "close")
       (lambda (loop) (setf (py-asyncio-event-loop-object-closed loop) t) *py-none*))
+
+(setf (py-type-attr *py-asyncio-handle-type* "cancel") #'py-asyncio-handle-cancel)
+(setf (py-type-attr *py-asyncio-handle-type* "cancelled") #'py-asyncio-handle-cancelled)
+(setf (py-type-attr *py-asyncio-timer-handle-type* "cancel") #'py-asyncio-handle-cancel)
+(setf (py-type-attr *py-asyncio-timer-handle-type* "cancelled") #'py-asyncio-handle-cancelled)
+(setf (py-type-attr *py-asyncio-timer-handle-type* "when") #'py-asyncio-timer-handle-when)
 
 
 (setf (py-type-attr *py-asyncio-lock-type* "acquire") #'py-asyncio-lock-acquire)
@@ -3060,6 +4936,385 @@
 (setf (py-type-attr *py-asyncio-lock-type* "__aenter__") #'py-asyncio-lock-aenter)
 (setf (py-type-attr *py-asyncio-lock-type* "__aexit__") #'py-asyncio-lock-aexit)
 
+(defun py-asyncio-condition (&rest args)
+  (multiple-value-bind (keyword-lock keyword-lock-supplied-p positional)
+      (py-asyncio-keyword-value args :lock *py-none*)
+    (let ((lock (cond
+                  (keyword-lock-supplied-p keyword-lock)
+                  (positional (first positional))
+                  (t *py-none*))))
+      (when (eq lock *py-none*)
+        (setf lock (py-asyncio-lock)))
+      (make-py-asyncio-condition-object
+       :type *py-asyncio-condition-type*
+       :loop (or *py-asyncio-running-loop*
+                 (py-asyncio-new-event-loop))
+       :lock lock))))
+
+(defun py-asyncio-condition-lock (condition)
+  (py-asyncio-condition-object-lock condition))
+
+(defun py-asyncio-condition-acquire (condition)
+  (py-asyncio-lock-acquire (py-asyncio-condition-lock condition)))
+
+(defun py-asyncio-condition-release (condition)
+  (py-asyncio-lock-release (py-asyncio-condition-lock condition)))
+
+(defun py-asyncio-condition-locked (condition)
+  (py-bool (py-asyncio-lock-object-locked (py-asyncio-condition-lock condition))))
+
+(defun py-asyncio-condition-wait (condition)
+  (make-py-coroutine "Condition.wait"
+                     (lambda ()
+                       (unless (py-asyncio-lock-object-locked (py-asyncio-condition-lock condition))
+                         (py-raise (make-py-exception *py-runtime-error-type*
+                                                      "cannot wait on un-acquired lock")))
+                       (py-asyncio-lock-release (py-asyncio-condition-lock condition))
+                       (py-await (py-asyncio-lock-acquire (py-asyncio-condition-lock condition)))
+                       *py-true*)))
+
+(defun py-asyncio-condition-wait-for (condition predicate)
+  (make-py-coroutine "Condition.wait_for"
+                     (lambda ()
+                       (let ((result (py-invoke-callable predicate)))
+                         (unless (py-truthy-p result)
+                           (py-await (py-asyncio-condition-wait condition))
+                           (setf result (py-invoke-callable predicate)))
+                         result))))
+
+(defun py-asyncio-condition-notify (condition &optional (n 1))
+  (declare (ignore n))
+  (unless (py-asyncio-lock-object-locked (py-asyncio-condition-lock condition))
+    (py-raise (make-py-exception *py-runtime-error-type*
+                                 "cannot notify on un-acquired lock")))
+  *py-none*)
+
+(defun py-asyncio-condition-notify-all (condition)
+  (py-asyncio-condition-notify condition nil))
+
+(defun py-asyncio-condition-aenter (condition)
+  (make-py-coroutine "Condition.__aenter__"
+                     (lambda ()
+                       (py-await (py-asyncio-condition-acquire condition))
+                       *py-none*)))
+
+(defun py-asyncio-condition-aexit (condition exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "Condition.__aexit__"
+                     (lambda ()
+                       (py-asyncio-condition-release condition)
+                       *py-false*)))
+
+(setf (py-type-attr *py-asyncio-condition-type* "acquire") #'py-asyncio-condition-acquire)
+(setf (py-type-attr *py-asyncio-condition-type* "release") #'py-asyncio-condition-release)
+(setf (py-type-attr *py-asyncio-condition-type* "locked") #'py-asyncio-condition-locked)
+(setf (py-type-attr *py-asyncio-condition-type* "wait") #'py-asyncio-condition-wait)
+(setf (py-type-attr *py-asyncio-condition-type* "wait_for") #'py-asyncio-condition-wait-for)
+(setf (py-type-attr *py-asyncio-condition-type* "notify") #'py-asyncio-condition-notify)
+(setf (py-type-attr *py-asyncio-condition-type* "notify_all") #'py-asyncio-condition-notify-all)
+(setf (py-type-attr *py-asyncio-condition-type* "__aenter__") #'py-asyncio-condition-aenter)
+(setf (py-type-attr *py-asyncio-condition-type* "__aexit__") #'py-asyncio-condition-aexit)
+
+(defun py-asyncio-semaphore (&rest args)
+  (multiple-value-bind (keyword-value keyword-value-supplied-p positional)
+      (py-asyncio-keyword-value args :value 1)
+    (let ((value (cond
+                   (keyword-value-supplied-p keyword-value)
+                   (positional (first positional))
+                   (t 1))))
+      (when (and (numberp value) (< value 0))
+        (py-raise (make-py-exception *py-runtime-error-type* "Semaphore initial value must be >= 0")))
+      (make-py-asyncio-semaphore-object :type *py-asyncio-semaphore-type*
+                                        :loop (or *py-asyncio-running-loop*
+                                                  (py-asyncio-new-event-loop))
+                                        :counter value))))
+
+(defun py-asyncio-semaphore-locked (semaphore)
+  (py-bool (<= (py-asyncio-semaphore-object-counter semaphore) 0)))
+
+(defun py-asyncio-semaphore-acquire (semaphore)
+  (make-py-coroutine "Semaphore.acquire"
+                     (lambda ()
+                       (if (> (py-asyncio-semaphore-object-counter semaphore) 0)
+                           (progn
+                             (decf (py-asyncio-semaphore-object-counter semaphore))
+                             *py-true*)
+                           *py-false*))))
+
+(defun py-asyncio-semaphore-release (semaphore)
+  (incf (py-asyncio-semaphore-object-counter semaphore))
+  *py-none*)
+
+(defun py-asyncio-bounded-semaphore (&rest args)
+  (multiple-value-bind (keyword-value keyword-value-supplied-p positional)
+      (py-asyncio-keyword-value args :value 1)
+    (let ((value (cond
+                   (keyword-value-supplied-p keyword-value)
+                   (positional (first positional))
+                   (t 1))))
+      (when (and (numberp value) (< value 0))
+        (py-raise (make-py-exception *py-value-error-type*
+                                     "Semaphore initial value must be >= 0")))
+      (make-py-asyncio-bounded-semaphore-object
+       :type *py-asyncio-bounded-semaphore-type*
+       :loop (or *py-asyncio-running-loop*
+                 (py-asyncio-new-event-loop))
+       :counter value
+       :bound value))))
+
+(defun py-asyncio-bounded-semaphore-release (semaphore)
+  (when (>= (py-asyncio-semaphore-object-counter semaphore)
+            (py-asyncio-bounded-semaphore-object-bound semaphore))
+    (py-raise (make-py-exception *py-value-error-type*
+                                 "BoundedSemaphore released too many times")))
+  (py-asyncio-semaphore-release semaphore))
+
+(defun py-asyncio-semaphore-aenter (semaphore)
+  (make-py-coroutine "Semaphore.__aenter__"
+                     (lambda ()
+                       (py-await (py-asyncio-semaphore-acquire semaphore))
+                       *py-none*)))
+
+(defun py-asyncio-semaphore-aexit (semaphore exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "Semaphore.__aexit__"
+                     (lambda ()
+                       (py-asyncio-semaphore-release semaphore)
+                       *py-false*)))
+
+(defun py-asyncio-bounded-semaphore-aexit (semaphore exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "BoundedSemaphore.__aexit__"
+                     (lambda ()
+                       (py-asyncio-bounded-semaphore-release semaphore)
+                       *py-false*)))
+
+(setf (py-type-attr *py-asyncio-semaphore-type* "acquire") #'py-asyncio-semaphore-acquire)
+(setf (py-type-attr *py-asyncio-semaphore-type* "release") #'py-asyncio-semaphore-release)
+(setf (py-type-attr *py-asyncio-semaphore-type* "locked") #'py-asyncio-semaphore-locked)
+(setf (py-type-attr *py-asyncio-semaphore-type* "__aenter__") #'py-asyncio-semaphore-aenter)
+(setf (py-type-attr *py-asyncio-semaphore-type* "__aexit__") #'py-asyncio-semaphore-aexit)
+(setf (py-type-attr *py-asyncio-bounded-semaphore-type* "acquire") #'py-asyncio-semaphore-acquire)
+(setf (py-type-attr *py-asyncio-bounded-semaphore-type* "release") #'py-asyncio-bounded-semaphore-release)
+(setf (py-type-attr *py-asyncio-bounded-semaphore-type* "locked") #'py-asyncio-semaphore-locked)
+(setf (py-type-attr *py-asyncio-bounded-semaphore-type* "__aenter__") #'py-asyncio-semaphore-aenter)
+(setf (py-type-attr *py-asyncio-bounded-semaphore-type* "__aexit__") #'py-asyncio-bounded-semaphore-aexit)
+
+(defun py-asyncio-barrier-refresh-attrs (barrier)
+  (setf (py-object-attr barrier "parties") (py-asyncio-barrier-object-parties barrier))
+  (setf (py-object-attr barrier "n_waiting") (py-asyncio-barrier-object-waiting barrier))
+  (setf (py-object-attr barrier "broken") (py-bool (py-asyncio-barrier-object-broken barrier)))
+  barrier)
+
+(defun py-asyncio-barrier (&rest args)
+  (multiple-value-bind (keyword-parties keyword-parties-supplied-p positional)
+      (py-asyncio-keyword-value args :parties *py-none*)
+    (let ((parties (cond
+                     (keyword-parties-supplied-p keyword-parties)
+                     (positional (first positional))
+                     (t *py-none*))))
+      (when (or (eq parties *py-none*) (and (numberp parties) (< parties 1)))
+        (py-raise (make-py-exception *py-value-error-type* "parties must be >= 1")))
+      (py-asyncio-barrier-refresh-attrs
+       (make-py-asyncio-barrier-object
+        :type *py-asyncio-barrier-type*
+        :loop (or *py-asyncio-running-loop*
+                  (py-asyncio-new-event-loop))
+        :parties parties)))))
+
+(defun py-asyncio-barrier-wait (barrier)
+  (make-py-coroutine "Barrier.wait"
+                     (lambda ()
+                       (when (py-asyncio-barrier-object-broken barrier)
+                         (py-raise (make-py-exception *py-asyncio-broken-barrier-error-type*
+                                                      "Barrier is broken")))
+                       (let ((index (py-asyncio-barrier-object-waiting barrier)))
+                         (incf (py-asyncio-barrier-object-waiting barrier))
+                         (when (>= (py-asyncio-barrier-object-waiting barrier)
+                                   (py-asyncio-barrier-object-parties barrier))
+                           (setf (py-asyncio-barrier-object-waiting barrier) 0))
+                         (py-asyncio-barrier-refresh-attrs barrier)
+                         index))))
+
+(defun py-asyncio-barrier-reset (barrier)
+  (make-py-coroutine "Barrier.reset"
+                     (lambda ()
+                       (setf (py-asyncio-barrier-object-waiting barrier) 0)
+                       (setf (py-asyncio-barrier-object-broken barrier) nil)
+                       (py-asyncio-barrier-refresh-attrs barrier)
+                       *py-none*)))
+
+(defun py-asyncio-barrier-abort (barrier)
+  (make-py-coroutine "Barrier.abort"
+                     (lambda ()
+                       (setf (py-asyncio-barrier-object-broken barrier) t)
+                       (py-asyncio-barrier-refresh-attrs barrier)
+                       *py-none*)))
+
+(defun py-asyncio-barrier-aenter (barrier)
+  (make-py-coroutine "Barrier.__aenter__"
+                     (lambda ()
+                       (py-await (py-asyncio-barrier-wait barrier))
+                       *py-none*)))
+
+(defun py-asyncio-barrier-aexit (barrier exc-type exc-value traceback)
+  (declare (ignore barrier exc-type exc-value traceback))
+  (make-py-coroutine "Barrier.__aexit__"
+                     (lambda () *py-false*)))
+
+(setf (py-type-attr *py-asyncio-barrier-type* "wait") #'py-asyncio-barrier-wait)
+(setf (py-type-attr *py-asyncio-barrier-type* "reset") #'py-asyncio-barrier-reset)
+(setf (py-type-attr *py-asyncio-barrier-type* "abort") #'py-asyncio-barrier-abort)
+(setf (py-type-attr *py-asyncio-barrier-type* "__aenter__") #'py-asyncio-barrier-aenter)
+(setf (py-type-attr *py-asyncio-barrier-type* "__aexit__") #'py-asyncio-barrier-aexit)
+
+(defun py-asyncio-event ()
+  (make-py-asyncio-event-object :type *py-asyncio-event-type*
+                                :loop (or *py-asyncio-running-loop*
+                                          (py-asyncio-new-event-loop))))
+
+(defun py-asyncio-event-is-set (event)
+  (py-bool (py-asyncio-event-object-flag event)))
+
+(defun py-asyncio-event-set (event)
+  (setf (py-asyncio-event-object-flag event) t)
+  *py-none*)
+
+(defun py-asyncio-event-clear (event)
+  (setf (py-asyncio-event-object-flag event) nil)
+  *py-none*)
+
+(defun py-asyncio-event-wait (event)
+  (make-py-coroutine "Event.wait"
+                     (lambda ()
+                       (py-bool (py-asyncio-event-object-flag event)))))
+
+(defun py-asyncio-make-queue (type args)
+  (multiple-value-bind (keyword-maxsize keyword-maxsize-supplied-p positional)
+      (py-asyncio-keyword-value args :maxsize 0)
+    (let ((maxsize (cond
+                     (keyword-maxsize-supplied-p keyword-maxsize)
+                     (positional (first positional))
+                     (t 0))))
+      (make-py-asyncio-queue-object :type type
+                                    :loop (or *py-asyncio-running-loop*
+                                              (py-asyncio-new-event-loop))
+                                    :maxsize maxsize))))
+
+(defun py-asyncio-queue (&rest args)
+  (py-asyncio-make-queue *py-asyncio-queue-type* args))
+
+(defun py-asyncio-priority-queue (&rest args)
+  (py-asyncio-make-queue *py-asyncio-priority-queue-type* args))
+
+(defun py-asyncio-lifo-queue (&rest args)
+  (py-asyncio-make-queue *py-asyncio-lifo-queue-type* args))
+
+(defun py-asyncio-queue-size (queue)
+  (length (py-asyncio-queue-object-items queue)))
+
+(defun py-asyncio-queue-full-p (queue)
+  (let ((maxsize (py-asyncio-queue-object-maxsize queue)))
+    (and (numberp maxsize) (> maxsize 0)
+         (>= (py-asyncio-queue-size queue) maxsize))))
+
+(defun py-asyncio-queue-empty (queue)
+  (py-bool (= (py-asyncio-queue-size queue) 0)))
+
+(defun py-asyncio-queue-full (queue)
+  (py-bool (py-asyncio-queue-full-p queue)))
+
+(defun py-asyncio-queue-qsize (queue)
+  (py-asyncio-queue-size queue))
+
+(defun py-asyncio-queue-put-nowait (queue item)
+  (when (py-asyncio-queue-full-p queue)
+    (py-raise (make-py-exception *py-asyncio-queue-full-type* "Queue full")))
+  (setf (py-asyncio-queue-object-items queue)
+        (append (py-asyncio-queue-object-items queue) (list item)))
+  (incf (py-asyncio-queue-object-unfinished-tasks queue))
+  *py-none*)
+
+(defun py-asyncio-priority-queue-put-nowait (queue item)
+  (py-asyncio-queue-put-nowait queue item)
+  (setf (py-asyncio-queue-object-items queue)
+        (stable-sort (copy-list (py-asyncio-queue-object-items queue))
+                     (lambda (left right)
+                       (py-truthy-p (py-lt left right)))))
+  *py-none*)
+
+(defun py-asyncio-queue-put (queue item)
+  (make-py-coroutine "Queue.put"
+                     (lambda ()
+                       (py-asyncio-queue-put-nowait queue item))))
+
+(defun py-asyncio-priority-queue-put (queue item)
+  (make-py-coroutine "PriorityQueue.put"
+                     (lambda ()
+                       (py-asyncio-priority-queue-put-nowait queue item))))
+
+(defun py-asyncio-queue-get-nowait (queue)
+  (let ((items (py-asyncio-queue-object-items queue)))
+    (unless items
+      (py-raise (make-py-exception *py-asyncio-queue-empty-type* "Queue empty")))
+    (let ((item (first items)))
+      (setf (py-asyncio-queue-object-items queue) (rest items))
+      item)))
+
+(defun py-asyncio-lifo-queue-get-nowait (queue)
+  (let ((items (py-asyncio-queue-object-items queue)))
+    (unless items
+      (py-raise (make-py-exception *py-asyncio-queue-empty-type* "Queue empty")))
+    (let ((item (car (last items))))
+      (setf (py-asyncio-queue-object-items queue) (butlast items))
+      item)))
+
+(defun py-asyncio-queue-get (queue)
+  (make-py-coroutine "Queue.get"
+                     (lambda ()
+                       (py-asyncio-queue-get-nowait queue))))
+
+(defun py-asyncio-lifo-queue-get (queue)
+  (make-py-coroutine "LifoQueue.get"
+                     (lambda ()
+                       (py-asyncio-lifo-queue-get-nowait queue))))
+
+(defun py-asyncio-queue-task-done (queue)
+  (when (<= (py-asyncio-queue-object-unfinished-tasks queue) 0)
+    (py-raise (make-py-exception *py-runtime-error-type* "task_done() called too many times")))
+  (decf (py-asyncio-queue-object-unfinished-tasks queue))
+  *py-none*)
+
+(defun py-asyncio-queue-join (queue)
+  (make-py-coroutine "Queue.join"
+                     (lambda ()
+                       (if (= (py-asyncio-queue-object-unfinished-tasks queue) 0)
+                           *py-none*
+                           (py-raise (make-py-exception *py-runtime-error-type*
+                                                        "Queue join would block"))))))
+
+(setf (py-type-attr *py-asyncio-event-type* "is_set") #'py-asyncio-event-is-set)
+(setf (py-type-attr *py-asyncio-event-type* "set") #'py-asyncio-event-set)
+(setf (py-type-attr *py-asyncio-event-type* "clear") #'py-asyncio-event-clear)
+(setf (py-type-attr *py-asyncio-event-type* "wait") #'py-asyncio-event-wait)
+
+(setf (py-type-attr *py-asyncio-queue-type* "qsize") #'py-asyncio-queue-qsize)
+(setf (py-type-attr *py-asyncio-queue-type* "empty") #'py-asyncio-queue-empty)
+(setf (py-type-attr *py-asyncio-queue-type* "full") #'py-asyncio-queue-full)
+(setf (py-type-attr *py-asyncio-queue-type* "put") #'py-asyncio-queue-put)
+(setf (py-type-attr *py-asyncio-queue-type* "put_nowait") #'py-asyncio-queue-put-nowait)
+(setf (py-type-attr *py-asyncio-queue-type* "get") #'py-asyncio-queue-get)
+(setf (py-type-attr *py-asyncio-queue-type* "get_nowait") #'py-asyncio-queue-get-nowait)
+(setf (py-type-attr *py-asyncio-queue-type* "task_done") #'py-asyncio-queue-task-done)
+(setf (py-type-attr *py-asyncio-queue-type* "join") #'py-asyncio-queue-join)
+(setf (py-type-attr *py-asyncio-priority-queue-type* "put") #'py-asyncio-priority-queue-put)
+(setf (py-type-attr *py-asyncio-priority-queue-type* "put_nowait") #'py-asyncio-priority-queue-put-nowait)
+(setf (py-type-attr *py-asyncio-lifo-queue-type* "get") #'py-asyncio-lifo-queue-get)
+(setf (py-type-attr *py-asyncio-lifo-queue-type* "get_nowait") #'py-asyncio-lifo-queue-get-nowait)
+
+(setf (py-type-attr *py-asyncio-as-completed-type* "__iter__")
+      (lambda (iterator) iterator))
+(setf (py-type-attr *py-asyncio-as-completed-type* "__next__") #'py-asyncio-as-completed-next)
 (setf (py-type-attr *py-asyncio-as-completed-type* "__aiter__")
       (lambda (iterator) iterator))
 (setf (py-type-attr *py-asyncio-as-completed-type* "__anext__") #'py-asyncio-as-completed-anext)
@@ -3068,31 +5323,2264 @@
   (let ((module (make-clamp-module "asyncio")))
     (setf (py-object-attr module "__doc__") "Clamp built-in asyncio core module")
     (setf (py-object-attr module "run") #'py-asyncio-run)
+    (setf (py-object-attr module "Runner") #'py-asyncio-runner)
     (setf (py-object-attr module "sleep") #'py-asyncio-sleep)
     (setf (py-object-attr module "gather") #'py-asyncio-gather)
+    (setf (py-object-attr module "wait") #'py-asyncio-wait)
+    (setf (py-object-attr module "FIRST_COMPLETED") *py-asyncio-first-completed*)
+    (setf (py-object-attr module "FIRST_EXCEPTION") *py-asyncio-first-exception*)
+    (setf (py-object-attr module "ALL_COMPLETED") *py-asyncio-all-completed*)
     (setf (py-object-attr module "get_running_loop") #'py-asyncio-get-running-loop)
+    (setf (py-object-attr module "get_event_loop") #'py-asyncio-get-event-loop)
+    (setf (py-object-attr module "set_event_loop") #'py-asyncio-set-event-loop)
+    (setf (py-object-attr module "get_event_loop_policy") #'py-asyncio-get-event-loop-policy)
+    (setf (py-object-attr module "set_event_loop_policy") #'py-asyncio-set-event-loop-policy)
     (setf (py-object-attr module "create_task") #'py-asyncio-module-create-task)
+    (setf (py-object-attr module "run_coroutine_threadsafe") #'py-asyncio-run-coroutine-threadsafe)
+    (setf (py-object-attr module "isfuture") #'py-asyncio-isfuture)
+    (setf (py-object-attr module "iscoroutine") #'py-asyncio-iscoroutine)
+    (setf (py-object-attr module "iscoroutinefunction") #'py-asyncio-iscoroutinefunction)
+    (setf (py-object-attr module "to_thread") #'py-asyncio-to-thread)
+    (setf (py-object-attr module "TaskGroup") #'py-asyncio-task-group)
+    (setf (py-object-attr module "ensure_future") #'py-asyncio-ensure-future)
+    (setf (py-object-attr module "shield") #'py-asyncio-shield)
+    (setf (py-object-attr module "wait_for") #'py-asyncio-wait-for)
+    (setf (py-object-attr module "timeout") #'py-asyncio-timeout)
+    (setf (py-object-attr module "timeout_at") #'py-asyncio-timeout-at)
+    (setf (py-object-attr module "Timeout") *py-asyncio-timeout-type*)
+    (setf (py-object-attr module "current_task") #'py-asyncio-current-task)
+    (setf (py-object-attr module "all_tasks") #'py-asyncio-all-tasks)
     (setf (py-object-attr module "new_event_loop") #'py-asyncio-new-event-loop)
     (setf (py-object-attr module "Lock") #'py-asyncio-lock)
+    (setf (py-object-attr module "Condition") #'py-asyncio-condition)
+    (setf (py-object-attr module "Semaphore") #'py-asyncio-semaphore)
+    (setf (py-object-attr module "BoundedSemaphore") #'py-asyncio-bounded-semaphore)
+    (setf (py-object-attr module "Barrier") #'py-asyncio-barrier)
+    (setf (py-object-attr module "Event") #'py-asyncio-event)
+    (setf (py-object-attr module "Queue") #'py-asyncio-queue)
+    (setf (py-object-attr module "PriorityQueue") #'py-asyncio-priority-queue)
+    (setf (py-object-attr module "LifoQueue") #'py-asyncio-lifo-queue)
     (setf (py-object-attr module "as_completed") #'py-asyncio-as-completed)
-    (setf (py-object-attr module "Future")
-          (lambda (&optional (loop *py-none*))
-            (py-asyncio-create-future (if (eq loop *py-none*)
-                                          (or *py-asyncio-running-loop*
-                                              (py-asyncio-new-event-loop))
-                                          loop))))
-    (setf (py-object-attr module "Task")
-          (lambda (coroutine &optional (loop *py-none*))
-            (py-asyncio-create-task (if (eq loop *py-none*)
-                                        (or *py-asyncio-running-loop*
-                                            (py-asyncio-new-event-loop))
-                                        loop)
-                                    coroutine)))
+    (setf (py-object-attr module "open_connection") #'py-asyncio-open-connection)
+    (setf (py-object-attr module "start_server") #'py-asyncio-start-server)
+    (setf (py-object-attr module "StreamReader") *py-asyncio-stream-reader-type*)
+    (setf (py-object-attr module "StreamWriter") *py-asyncio-stream-writer-type*)
+    (setf (py-object-attr module "Server") *py-asyncio-server-type*)
+    (setf (py-object-attr module "create_subprocess_exec") #'py-asyncio-create-subprocess-exec)
+    (setf (py-object-attr module "create_subprocess_shell") #'py-asyncio-create-subprocess-shell)
+    (setf (py-object-attr module "Process") *py-asyncio-process-type*)
+    (setf (py-object-attr module "PIPE") *py-asyncio-subprocess-pipe*)
+    (setf (py-object-attr module "STDOUT") *py-asyncio-subprocess-stdout*)
+    (setf (py-object-attr module "DEVNULL") *py-asyncio-subprocess-devnull*)
+    (setf (py-object-attr module "Future") #'py-asyncio-future-constructor)
+    (setf (py-object-attr module "Task") #'py-asyncio-task-constructor)
     (setf (py-object-attr module "CancelledError") *py-asyncio-cancelled-error-type*)
+    (setf (py-object-attr module "TimeoutError") *py-timeout-error-type*)
     (setf (py-object-attr module "InvalidStateError") *py-asyncio-invalid-state-error-type*)
+    (setf (py-object-attr module "IncompleteReadError") *py-asyncio-incomplete-read-error-type*)
+    (setf (py-object-attr module "LimitOverrunError") *py-asyncio-limit-overrun-error-type*)
+    (setf (py-object-attr module "QueueFull") *py-asyncio-queue-full-type*)
+    (setf (py-object-attr module "QueueEmpty") *py-asyncio-queue-empty-type*)
+    (setf (py-object-attr module "BrokenBarrierError") *py-asyncio-broken-barrier-error-type*)
     module))
 
 (py-register-builtin-module "asyncio" #'make-clamp-asyncio-module)
+
+(defun make-clamp-asyncio-exceptions-module ()
+  (let ((module (make-clamp-module "asyncio.exceptions")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio exceptions module")
+    (setf (py-object-attr module "CancelledError") *py-asyncio-cancelled-error-type*)
+    (setf (py-object-attr module "TimeoutError") *py-timeout-error-type*)
+    (setf (py-object-attr module "InvalidStateError") *py-asyncio-invalid-state-error-type*)
+    (setf (py-object-attr module "IncompleteReadError") *py-asyncio-incomplete-read-error-type*)
+    (setf (py-object-attr module "LimitOverrunError") *py-asyncio-limit-overrun-error-type*)
+    module))
+
+(py-register-builtin-module "asyncio.exceptions" #'make-clamp-asyncio-exceptions-module)
+
+(defun make-clamp-asyncio-futures-module ()
+  (let ((module (make-clamp-module "asyncio.futures")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio futures module")
+    (setf (py-object-attr module "Future") #'py-asyncio-future-constructor)
+    (setf (py-object-attr module "isfuture") #'py-asyncio-isfuture)
+    (setf (py-object-attr module "InvalidStateError") *py-asyncio-invalid-state-error-type*)
+    module))
+
+(py-register-builtin-module "asyncio.futures" #'make-clamp-asyncio-futures-module)
+
+(defun make-clamp-asyncio-tasks-module ()
+  (let ((module (make-clamp-module "asyncio.tasks")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio tasks module")
+    (setf (py-object-attr module "Task") #'py-asyncio-task-constructor)
+    (setf (py-object-attr module "create_task") #'py-asyncio-module-create-task)
+    (setf (py-object-attr module "ensure_future") #'py-asyncio-ensure-future)
+    (setf (py-object-attr module "shield") #'py-asyncio-shield)
+    (setf (py-object-attr module "wait_for") #'py-asyncio-wait-for)
+    (setf (py-object-attr module "wait") #'py-asyncio-wait)
+    (setf (py-object-attr module "gather") #'py-asyncio-gather)
+    (setf (py-object-attr module "as_completed") #'py-asyncio-as-completed)
+    (setf (py-object-attr module "current_task") #'py-asyncio-current-task)
+    (setf (py-object-attr module "all_tasks") #'py-asyncio-all-tasks)
+    (setf (py-object-attr module "FIRST_COMPLETED") *py-asyncio-first-completed*)
+    (setf (py-object-attr module "FIRST_EXCEPTION") *py-asyncio-first-exception*)
+    (setf (py-object-attr module "ALL_COMPLETED") *py-asyncio-all-completed*)
+    module))
+
+(py-register-builtin-module "asyncio.tasks" #'make-clamp-asyncio-tasks-module)
+
+(defun make-clamp-asyncio-locks-module ()
+  (let ((module (make-clamp-module "asyncio.locks")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio locks module")
+    (setf (py-object-attr module "Lock") #'py-asyncio-lock)
+    (setf (py-object-attr module "Event") #'py-asyncio-event)
+    (setf (py-object-attr module "Condition") #'py-asyncio-condition)
+    (setf (py-object-attr module "Semaphore") #'py-asyncio-semaphore)
+    (setf (py-object-attr module "BoundedSemaphore") #'py-asyncio-bounded-semaphore)
+    (setf (py-object-attr module "Barrier") #'py-asyncio-barrier)
+    (setf (py-object-attr module "BrokenBarrierError") *py-asyncio-broken-barrier-error-type*)
+    module))
+
+(py-register-builtin-module "asyncio.locks" #'make-clamp-asyncio-locks-module)
+
+(defun make-clamp-asyncio-queues-module ()
+  (let ((module (make-clamp-module "asyncio.queues")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio queues module")
+    (setf (py-object-attr module "Queue") #'py-asyncio-queue)
+    (setf (py-object-attr module "PriorityQueue") #'py-asyncio-priority-queue)
+    (setf (py-object-attr module "LifoQueue") #'py-asyncio-lifo-queue)
+    (setf (py-object-attr module "QueueFull") *py-asyncio-queue-full-type*)
+    (setf (py-object-attr module "QueueEmpty") *py-asyncio-queue-empty-type*)
+    module))
+
+(py-register-builtin-module "asyncio.queues" #'make-clamp-asyncio-queues-module)
+
+(defun make-clamp-asyncio-runners-module ()
+  (let ((module (make-clamp-module "asyncio.runners")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio runners module")
+    (setf (py-object-attr module "run") #'py-asyncio-run)
+    (setf (py-object-attr module "Runner") #'py-asyncio-runner)
+    module))
+
+(py-register-builtin-module "asyncio.runners" #'make-clamp-asyncio-runners-module)
+
+(defun make-clamp-asyncio-timeouts-module ()
+  (let ((module (make-clamp-module "asyncio.timeouts")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio timeouts module")
+    (setf (py-object-attr module "Timeout") *py-asyncio-timeout-type*)
+    (setf (py-object-attr module "timeout") #'py-asyncio-timeout)
+    (setf (py-object-attr module "timeout_at") #'py-asyncio-timeout-at)
+    module))
+
+(py-register-builtin-module "asyncio.timeouts" #'make-clamp-asyncio-timeouts-module)
+
+(defun make-clamp-asyncio-taskgroups-module ()
+  (let ((module (make-clamp-module "asyncio.taskgroups")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio taskgroups module")
+    (setf (py-object-attr module "TaskGroup") #'py-asyncio-task-group)
+    module))
+
+(py-register-builtin-module "asyncio.taskgroups" #'make-clamp-asyncio-taskgroups-module)
+
+(defun make-clamp-asyncio-events-module ()
+  (let ((module (make-clamp-module "asyncio.events")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio events module")
+    (setf (py-object-attr module "get_running_loop") #'py-asyncio-get-running-loop)
+    (setf (py-object-attr module "get_event_loop") #'py-asyncio-get-event-loop)
+    (setf (py-object-attr module "set_event_loop") #'py-asyncio-set-event-loop)
+    (setf (py-object-attr module "new_event_loop") #'py-asyncio-new-event-loop)
+    (setf (py-object-attr module "get_event_loop_policy") #'py-asyncio-get-event-loop-policy)
+    (setf (py-object-attr module "set_event_loop_policy") #'py-asyncio-set-event-loop-policy)
+    module))
+
+(py-register-builtin-module "asyncio.events" #'make-clamp-asyncio-events-module)
+
+(defun make-clamp-asyncio-coroutines-module ()
+  (let ((module (make-clamp-module "asyncio.coroutines")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio coroutines module")
+    (setf (py-object-attr module "iscoroutine") #'py-asyncio-iscoroutine)
+    (setf (py-object-attr module "iscoroutinefunction") #'py-asyncio-iscoroutinefunction)
+    module))
+
+(py-register-builtin-module "asyncio.coroutines" #'make-clamp-asyncio-coroutines-module)
+
+(defun make-clamp-asyncio-streams-module ()
+  (let ((module (make-clamp-module "asyncio.streams")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio streams module")
+    (setf (py-object-attr module "open_connection") #'py-asyncio-open-connection)
+    (setf (py-object-attr module "start_server") #'py-asyncio-start-server)
+    (setf (py-object-attr module "StreamReader") *py-asyncio-stream-reader-type*)
+    (setf (py-object-attr module "StreamWriter") *py-asyncio-stream-writer-type*)
+    (setf (py-object-attr module "Server") *py-asyncio-server-type*)
+    (setf (py-object-attr module "IncompleteReadError") *py-asyncio-incomplete-read-error-type*)
+    (setf (py-object-attr module "LimitOverrunError") *py-asyncio-limit-overrun-error-type*)
+    module))
+
+(py-register-builtin-module "asyncio.streams" #'make-clamp-asyncio-streams-module)
+
+(defun make-clamp-asyncio-subprocess-module ()
+  (let ((module (make-clamp-module "asyncio.subprocess")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in asyncio subprocess module")
+    (setf (py-object-attr module "create_subprocess_exec") #'py-asyncio-create-subprocess-exec)
+    (setf (py-object-attr module "create_subprocess_shell") #'py-asyncio-create-subprocess-shell)
+    (setf (py-object-attr module "Process") *py-asyncio-process-type*)
+    (setf (py-object-attr module "PIPE") *py-asyncio-subprocess-pipe*)
+    (setf (py-object-attr module "STDOUT") *py-asyncio-subprocess-stdout*)
+    (setf (py-object-attr module "DEVNULL") *py-asyncio-subprocess-devnull*)
+    module))
+
+(py-register-builtin-module "asyncio.subprocess" #'make-clamp-asyncio-subprocess-module)
+
+
+(defstruct (py-contextvars-context-var-object (:include py-object))
+  name
+  default
+  (has-default nil))
+
+(defstruct (py-contextvars-token-object (:include py-object))
+  var
+  old-value
+  (had-value nil)
+  (used nil))
+
+(defstruct (py-contextvars-context-object (:include py-object))
+  values)
+
+(defstruct (py-contextlib-async-generator-context-manager-object (:include py-object))
+  generator)
+
+(defstruct (py-contextlib-aclosing-object (:include py-object))
+  thing)
+
+(defstruct (py-contextlib-nullcontext-object (:include py-object))
+  enter-result)
+
+(defstruct (py-contextlib-async-exit-stack-object (:include py-object))
+  (exit-callbacks '()))
+
+(defvar *py-contextvars-current-values* (make-hash-table :test #'eq))
+(defparameter *py-contextvars-token-missing*
+  (make-py-object :type *py-object-type*))
+
+(defun py-contextvars-copy-values (values)
+  (let ((copy (make-hash-table :test #'eq)))
+    (maphash (lambda (key value)
+               (setf (gethash key copy) value))
+             values)
+    copy))
+
+(defun py-contextvars-context-var (&rest args)
+  (multiple-value-bind (keyword-default keyword-default-supplied-p positional)
+      (py-asyncio-keyword-value args :default *py-none*)
+    (let ((name (first positional)))
+      (unless (stringp name)
+        (py-raise (make-py-exception *py-type-error-type* "ContextVar name must be a str")))
+      (let ((var (make-py-contextvars-context-var-object
+                  :type *py-contextvars-context-var-type*
+                  :name name
+                  :default keyword-default
+                  :has-default keyword-default-supplied-p)))
+        (setf (py-object-attr var "name") name)
+        var))))
+
+(defun py-contextvars-context-var-get (var &optional (default *py-contextvars-token-missing*))
+  (multiple-value-bind (value found) (gethash var *py-contextvars-current-values*)
+    (cond
+      (found value)
+      ((not (eq default *py-contextvars-token-missing*)) default)
+      ((py-contextvars-context-var-object-has-default var)
+       (py-contextvars-context-var-object-default var))
+      (t
+       (py-raise (make-py-exception *py-lookup-error-type*))))))
+
+(defun py-contextvars-context-var-set (var value)
+  (multiple-value-bind (old-value found) (gethash var *py-contextvars-current-values*)
+    (setf (gethash var *py-contextvars-current-values*) value)
+    (let ((token (make-py-contextvars-token-object
+                  :type *py-contextvars-token-type*
+                  :var var
+                  :old-value old-value
+                  :had-value found)))
+      (setf (py-object-attr token "var") var)
+      (setf (py-object-attr token "old_value")
+            (if found old-value *py-contextvars-token-missing*))
+      token)))
+
+(defun py-contextvars-context-var-reset (var token)
+  (unless (and (py-contextvars-token-object-p token)
+               (eq (py-contextvars-token-object-var token) var))
+    (py-raise (make-py-exception *py-value-error-type* "Token was created by a different ContextVar")))
+  (when (py-contextvars-token-object-used token)
+    (py-raise (make-py-exception *py-runtime-error-type* "Token has already been used once")))
+  (setf (py-contextvars-token-object-used token) t)
+  (if (py-contextvars-token-object-had-value token)
+      (setf (gethash var *py-contextvars-current-values*)
+            (py-contextvars-token-object-old-value token))
+      (remhash var *py-contextvars-current-values*))
+  *py-none*)
+
+(defun py-contextvars-context ()
+  (make-py-contextvars-context-object
+   :type *py-contextvars-context-type*
+   :values (make-hash-table :test #'eq)))
+
+(defun py-contextvars-copy-context ()
+  (make-py-contextvars-context-object
+   :type *py-contextvars-context-type*
+   :values (py-contextvars-copy-values *py-contextvars-current-values*)))
+
+(defun py-contextvars-context-copy (context)
+  (make-py-contextvars-context-object
+   :type *py-contextvars-context-type*
+   :values (py-contextvars-copy-values (py-contextvars-context-object-values context))))
+
+(defun py-contextvars-context-run (context callable &rest args)
+  (let ((*py-contextvars-current-values*
+          (py-contextvars-copy-values (py-contextvars-context-object-values context))))
+    (unwind-protect
+         (apply #'py-invoke-callable callable args)
+      (setf (py-contextvars-context-object-values context)
+            (py-contextvars-copy-values *py-contextvars-current-values*)))))
+
+(defun py-contextvars-context-get (context var &optional (default *py-none*))
+  (multiple-value-bind (value found)
+      (gethash var (py-contextvars-context-object-values context))
+    (if found value default)))
+
+(setf (py-type-attr *py-contextvars-context-var-type* "get") #'py-contextvars-context-var-get)
+(setf (py-type-attr *py-contextvars-context-var-type* "set") #'py-contextvars-context-var-set)
+(setf (py-type-attr *py-contextvars-context-var-type* "reset") #'py-contextvars-context-var-reset)
+(setf (py-type-attr *py-contextvars-context-type* "run") #'py-contextvars-context-run)
+(setf (py-type-attr *py-contextvars-context-type* "copy") #'py-contextvars-context-copy)
+(setf (py-type-attr *py-contextvars-context-type* "get") #'py-contextvars-context-get)
+
+(defun make-clamp-contextvars-module ()
+  (let ((module (make-clamp-module "contextvars")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in contextvars module")
+    (setf (py-object-attr module "ContextVar") #'py-contextvars-context-var)
+    (setf (py-object-attr module "Token") *py-contextvars-token-type*)
+    (setf (py-object-attr module "Context") #'py-contextvars-context)
+    (setf (py-object-attr module "copy_context") #'py-contextvars-copy-context)
+    (setf (py-object-attr *py-contextvars-token-type* "MISSING") *py-contextvars-token-missing*)
+    module))
+
+(py-register-builtin-module "contextvars" #'make-clamp-contextvars-module)
+
+
+(defstruct (py-aiohttp-client-session-object (:include py-object))
+  headers
+  auth
+  base-url
+  timeout
+  connector
+  connector-owner
+  cookie-jar
+  raise-for-status
+  (closed nil))
+
+(defstruct (py-aiohttp-client-timeout-object (:include py-object))
+  total
+  connect
+  sock-read
+  sock-connect
+  ceil-threshold)
+
+(defstruct (py-aiohttp-tcp-connector-object (:include py-object))
+  ssl
+  limit
+  limit-per-host
+  force-close
+  (closed nil))
+
+(defstruct (py-aiohttp-basic-auth-object (:include py-object))
+  login
+  password
+  encoding)
+
+(defstruct (py-aiohttp-form-data-object (:include py-object))
+  (fields '()))
+
+(defstruct (py-aiohttp-cookie-jar-object (:include py-object))
+  cookies)
+
+(defstruct (py-aiohttp-request-context-object (:include py-object))
+  session
+  method
+  url
+  headers
+  body
+  timeout
+  raise-for-status
+  allow-redirects
+  max-redirects
+  response)
+
+(defstruct (py-aiohttp-client-response-object (:include py-object))
+  url
+  method
+  status
+  reason
+  body
+  headers
+  content
+  (closed nil))
+
+(defstruct (py-aiohttp-stream-reader-object (:include py-object))
+  response
+  body
+  (index 0))
+
+(defstruct (py-aiohttp-chunk-iterator-object (:include py-object))
+  reader
+  chunk-size
+  (tuple-mode nil))
+
+(defstruct (py-aiohttp-client-websocket-response-object (:include py-object))
+  url
+  messages
+  sent
+  (closed nil))
+
+(defstruct (py-aiohttp-ws-message-object (:include py-object))
+  message-type
+  data
+  extra)
+
+(defun py-aiohttp-client-session (&rest args)
+  (multiple-value-bind (keyword-headers keyword-headers-supplied-p positional)
+      (py-asyncio-keyword-value args :headers *py-none*)
+    (declare (ignore positional))
+    (multiple-value-bind (keyword-auth keyword-auth-supplied-p ignored-auth-positional)
+        (py-asyncio-keyword-value args :auth *py-none*)
+      (declare (ignore ignored-auth-positional))
+      (multiple-value-bind (keyword-base-url keyword-base-url-supplied-p ignored-base-url-positional)
+          (py-asyncio-keyword-value args :base_url *py-none*)
+        (declare (ignore ignored-base-url-positional))
+        (multiple-value-bind (keyword-timeout keyword-timeout-supplied-p ignored-timeout-positional)
+            (py-asyncio-keyword-value args :timeout *py-none*)
+          (declare (ignore ignored-timeout-positional))
+          (multiple-value-bind (keyword-connector keyword-connector-supplied-p ignored-connector-positional)
+              (py-asyncio-keyword-value args :connector *py-none*)
+            (declare (ignore ignored-connector-positional))
+            (multiple-value-bind (keyword-connector-owner keyword-connector-owner-supplied-p ignored-connector-owner-positional)
+                (py-asyncio-keyword-value args :connector_owner *py-true*)
+              (declare (ignore ignored-connector-owner-positional))
+            (multiple-value-bind (keyword-cookie-jar keyword-cookie-jar-supplied-p ignored-cookie-jar-positional)
+                (py-asyncio-keyword-value args :cookie_jar *py-none*)
+              (declare (ignore ignored-cookie-jar-positional))
+              (multiple-value-bind (keyword-cookies keyword-cookies-supplied-p ignored-cookies-positional)
+                  (py-asyncio-keyword-value args :cookies *py-none*)
+                (declare (ignore ignored-cookies-positional))
+                (multiple-value-bind (keyword-raise-for-status keyword-raise-for-status-supplied-p ignored-raise-for-status-positional)
+                    (py-asyncio-keyword-value args :raise_for_status *py-false*)
+                  (declare (ignore ignored-raise-for-status-positional))
+                  (let* ((headers (if keyword-headers-supplied-p keyword-headers *py-none*))
+                         (auth (if keyword-auth-supplied-p keyword-auth *py-none*))
+                         (base-url (if keyword-base-url-supplied-p keyword-base-url *py-none*))
+                         (timeout (if keyword-timeout-supplied-p keyword-timeout *py-none*))
+                         (connector (if keyword-connector-supplied-p keyword-connector *py-none*))
+                         (connector-owner (if keyword-connector-owner-supplied-p keyword-connector-owner *py-true*))
+                         (raise-for-status (if keyword-raise-for-status-supplied-p keyword-raise-for-status *py-false*))
+                         (cookie-jar (if (and keyword-cookie-jar-supplied-p
+                                              (not (eq keyword-cookie-jar *py-none*)))
+                                         keyword-cookie-jar
+                                         (py-aiohttp-cookie-jar)))
+                         (session (make-py-aiohttp-client-session-object
+                                   :type *py-aiohttp-client-session-type*
+                                   :headers headers
+                                   :auth auth
+                                   :base-url base-url
+                                   :timeout timeout
+                                   :connector connector
+                                   :connector-owner connector-owner
+                                   :cookie-jar cookie-jar
+                                   :raise-for-status raise-for-status)))
+                    (when keyword-cookies-supplied-p
+                      (py-aiohttp-cookie-jar-update-cookies cookie-jar keyword-cookies))
+                    (setf (py-object-attr session "closed") *py-false*)
+                    (setf (py-object-attr session "headers") headers)
+                    (setf (py-object-attr session "auth") auth)
+                    (setf (py-object-attr session "base_url") base-url)
+                    (setf (py-object-attr session "timeout") timeout)
+                    (setf (py-object-attr session "connector") connector)
+                    (setf (py-object-attr session "connector_owner") connector-owner)
+                    (setf (py-object-attr session "cookie_jar") cookie-jar)
+                    (setf (py-object-attr session "raise_for_status") raise-for-status)
+                    session)))))))))))
+(defun py-aiohttp-client-timeout (&rest args)
+  (multiple-value-bind (keyword-total keyword-total-supplied-p positional)
+      (py-asyncio-keyword-value args :total *py-none*)
+    (multiple-value-bind (keyword-connect keyword-connect-supplied-p ignored-positional)
+        (py-asyncio-keyword-value args :connect *py-none*)
+      (declare (ignore ignored-positional))
+      (multiple-value-bind (keyword-sock-read keyword-sock-read-supplied-p ignored-positional)
+          (py-asyncio-keyword-value args :sock_read *py-none*)
+        (declare (ignore ignored-positional))
+        (multiple-value-bind (keyword-sock-connect keyword-sock-connect-supplied-p ignored-positional)
+            (py-asyncio-keyword-value args :sock_connect *py-none*)
+          (declare (ignore ignored-positional))
+          (multiple-value-bind (keyword-ceil-threshold keyword-ceil-threshold-supplied-p ignored-positional)
+              (py-asyncio-keyword-value args :ceil_threshold 5)
+            (declare (ignore ignored-positional))
+            (let* ((total (cond
+                            (keyword-total-supplied-p keyword-total)
+                            (positional (first positional))
+                            (t *py-none*)))
+                   (connect (if keyword-connect-supplied-p keyword-connect *py-none*))
+                   (sock-read (if keyword-sock-read-supplied-p keyword-sock-read *py-none*))
+                   (sock-connect (if keyword-sock-connect-supplied-p keyword-sock-connect *py-none*))
+                   (ceil-threshold (if keyword-ceil-threshold-supplied-p keyword-ceil-threshold 5))
+                   (timeout (make-py-aiohttp-client-timeout-object
+                             :type *py-aiohttp-client-timeout-type*
+                             :total total
+                             :connect connect
+                             :sock-read sock-read
+                             :sock-connect sock-connect
+                             :ceil-threshold ceil-threshold)))
+              (setf (py-object-attr timeout "total") total)
+              (setf (py-object-attr timeout "connect") connect)
+              (setf (py-object-attr timeout "sock_read") sock-read)
+              (setf (py-object-attr timeout "sock_connect") sock-connect)
+              (setf (py-object-attr timeout "ceil_threshold") ceil-threshold)
+              timeout)))))))
+
+(defun py-aiohttp-tcp-connector (&rest args)
+  (multiple-value-bind (keyword-ssl keyword-ssl-supplied-p positional)
+      (py-asyncio-keyword-value args :ssl *py-none*)
+    (declare (ignore positional))
+    (multiple-value-bind (keyword-limit keyword-limit-supplied-p ignored-positional)
+        (py-asyncio-keyword-value args :limit 100)
+      (declare (ignore ignored-positional))
+      (multiple-value-bind (keyword-limit-per-host keyword-limit-per-host-supplied-p ignored-positional)
+          (py-asyncio-keyword-value args :limit_per_host 0)
+        (declare (ignore ignored-positional))
+        (multiple-value-bind (keyword-force-close keyword-force-close-supplied-p ignored-positional)
+            (py-asyncio-keyword-value args :force_close *py-false*)
+          (declare (ignore ignored-positional))
+          (let* ((ssl (if keyword-ssl-supplied-p keyword-ssl *py-none*))
+                 (limit (if keyword-limit-supplied-p keyword-limit 100))
+                 (limit-per-host (if keyword-limit-per-host-supplied-p keyword-limit-per-host 0))
+                 (force-close (if keyword-force-close-supplied-p keyword-force-close *py-false*))
+                 (connector (make-py-aiohttp-tcp-connector-object
+                             :type *py-aiohttp-tcp-connector-type*
+                             :ssl ssl
+                             :limit limit
+                             :limit-per-host limit-per-host
+                             :force-close force-close)))
+            (setf (py-object-attr connector "ssl") ssl)
+            (setf (py-object-attr connector "limit") limit)
+            (setf (py-object-attr connector "limit_per_host") limit-per-host)
+            (setf (py-object-attr connector "force_close") force-close)
+            (setf (py-object-attr connector "closed") *py-false*)
+            connector))))))
+
+(defun py-aiohttp-tcp-connector-close (connector)
+  (setf (py-aiohttp-tcp-connector-object-closed connector) t)
+  (setf (py-object-attr connector "closed") *py-true*)
+  *py-none*)
+
+(defun py-aiohttp-base64-encode (text)
+  (let* ((octets (sb-ext:string-to-octets text :external-format :utf-8))
+         (alphabet "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"))
+    (with-output-to-string (stream)
+      (loop for index from 0 below (length octets) by 3
+            for remaining = (- (length octets) index)
+            for b1 = (aref octets index)
+            for b2 = (if (> remaining 1) (aref octets (1+ index)) 0)
+            for b3 = (if (> remaining 2) (aref octets (+ index 2)) 0)
+            for triple = (+ (ash b1 16) (ash b2 8) b3)
+            do (progn
+                 (write-char (char alphabet (ldb (byte 6 18) triple)) stream)
+                 (write-char (char alphabet (ldb (byte 6 12) triple)) stream)
+                 (write-char (if (> remaining 1)
+                                 (char alphabet (ldb (byte 6 6) triple))
+                                 #\=)
+                             stream)
+                 (write-char (if (> remaining 2)
+                                 (char alphabet (ldb (byte 6 0) triple))
+                                 #\=)
+                             stream))))))
+
+(defun py-aiohttp-basic-auth (&rest args)
+  (multiple-value-bind (keyword-encoding keyword-encoding-supplied-p positional)
+      (py-asyncio-keyword-value args :encoding "latin1")
+    (multiple-value-bind (keyword-login keyword-login-supplied-p ignored-login-positional)
+        (py-asyncio-keyword-value args :login *py-none*)
+      (declare (ignore ignored-login-positional))
+      (multiple-value-bind (keyword-password keyword-password-supplied-p ignored-password-positional)
+          (py-asyncio-keyword-value args :password "")
+        (declare (ignore ignored-password-positional))
+        (let* ((login (cond
+                        (keyword-login-supplied-p keyword-login)
+                        (positional (first positional))
+                        (t (py-raise (make-py-exception *py-type-error-type* "BasicAuth requires login")))))
+               (password (cond
+                           (keyword-password-supplied-p keyword-password)
+                           ((rest positional) (second positional))
+                           (t "")))
+               (encoding (if keyword-encoding-supplied-p keyword-encoding "latin1"))
+               (auth (make-py-aiohttp-basic-auth-object
+                      :type *py-aiohttp-basic-auth-type*
+                      :login login
+                      :password password
+                      :encoding encoding)))
+          (setf (py-object-attr auth "login") login)
+          (setf (py-object-attr auth "password") password)
+          (setf (py-object-attr auth "encoding") encoding)
+          auth)))))
+(defun py-aiohttp-basic-auth-encode (auth)
+  (concatenate 'string
+               "Basic "
+               (py-aiohttp-base64-encode
+                (concatenate 'string
+                             (py-str (py-aiohttp-basic-auth-object-login auth))
+                             ":"
+                             (py-str (py-aiohttp-basic-auth-object-password auth))))))
+
+(defun py-aiohttp-form-data-add-pair (form name value)
+  (push (cons name value) (py-aiohttp-form-data-object-fields form))
+  *py-none*)
+
+(defun py-aiohttp-form-data-add-one (form item)
+  (cond
+    ((py-dict-object-p item)
+     (let ((storage (py-dict-storage item "FormData"))
+           (keys (py-dict-object-keys item)))
+       (loop for index from 0 below (fill-pointer keys)
+             for key = (aref keys index)
+             do (py-aiohttp-form-data-add-pair form key (gethash key storage)))))
+    ((py-list-object-p item)
+     (let ((storage (py-object-value item))
+           (size (or (py-object-size item) 0)))
+       (loop for index from 0 below size
+             for pair = (aref storage index)
+             do (let ((items (py-unpack-sequence pair 2)))
+                  (py-aiohttp-form-data-add-pair form (first items) (second items))))))
+    ((py-tuple-object-p item)
+     (let ((storage (py-object-value item))
+           (size (or (py-object-size item) 0)))
+       (if (and (= size 2)
+                (not (or (py-list-object-p (aref storage 0))
+                         (py-tuple-object-p (aref storage 0)))))
+           (py-aiohttp-form-data-add-pair form (aref storage 0) (aref storage 1))
+           (loop for index from 0 below size
+                 for pair = (aref storage index)
+                 do (let ((items (py-unpack-sequence pair 2)))
+                      (py-aiohttp-form-data-add-pair form (first items) (second items)))))))
+    (t
+     (let ((items (py-unpack-sequence item 2)))
+       (py-aiohttp-form-data-add-pair form (first items) (second items)))))
+  *py-none*)
+
+(defun py-aiohttp-form-data (&rest args)
+  (let ((form (make-py-aiohttp-form-data-object :type *py-aiohttp-form-data-type*)))
+    (dolist (item args)
+      (py-aiohttp-form-data-add-one form item))
+    (setf (py-object-attr form "is_multipart") *py-false*)
+    form))
+
+(defun py-aiohttp-form-data-add-field (form name value &rest args)
+  (declare (ignore args))
+  (py-aiohttp-form-data-add-pair form name value)
+  *py-none*)
+
+(defun py-aiohttp-form-data-add-fields (form &rest fields)
+  (dolist (field fields)
+    (py-aiohttp-form-data-add-one form field))
+  *py-none*)
+
+(defun py-aiohttp-cookie-jar (&rest args)
+  (declare (ignore args))
+  (let ((jar (make-py-aiohttp-cookie-jar-object
+              :type *py-aiohttp-cookie-jar-type*
+              :cookies (make-hash-table :test #'equal))))
+    jar))
+
+(defun py-aiohttp-cookie-jar-update-cookies (jar cookies &optional (response-url *py-none*))
+  (declare (ignore response-url))
+  (when (and cookies (not (eq cookies *py-none*)))
+    (cond
+      ((py-dict-object-p cookies)
+       (let ((storage (py-dict-storage cookies "CookieJar.update_cookies"))
+             (keys (py-dict-object-keys cookies)))
+         (loop for index from 0 below (fill-pointer keys)
+               for key = (aref keys index)
+               do (setf (gethash (py-str key) (py-aiohttp-cookie-jar-object-cookies jar))
+                        (py-str (gethash key storage))))))
+      ((stringp cookies)
+       (dolist (part (split-string-on-char cookies #\;))
+         (let* ((trimmed (string-trim '(#\Space #\Tab) part))
+                (equals (position #\= trimmed)))
+           (when equals
+             (setf (gethash (subseq trimmed 0 equals) (py-aiohttp-cookie-jar-object-cookies jar))
+                   (subseq trimmed (1+ equals)))))))
+      (t
+       (py-raise (make-py-exception *py-type-error-type* "cookies must be a dict or cookie header string")))))
+  *py-none*)
+
+(defun py-aiohttp-cookie-jar-filter-cookies (jar &optional (request-url *py-none*))
+  (declare (ignore request-url))
+  (let ((pairs '()))
+    (maphash (lambda (key value)
+               (push (list key value) pairs))
+             (py-aiohttp-cookie-jar-object-cookies jar))
+    (apply #'make-py-dict-from-pairs (nreverse pairs))))
+
+(defun py-aiohttp-cookie-jar-clear (jar)
+  (clrhash (py-aiohttp-cookie-jar-object-cookies jar))
+  *py-none*)
+
+(defun py-aiohttp-cookie-header-from-table (table)
+  (let ((pairs '()))
+    (maphash (lambda (key value)
+               (push (cons key value) pairs))
+             table)
+    (when pairs
+      (with-output-to-string (stream)
+        (loop for pair in (nreverse pairs)
+              for first = t then nil
+              do (progn
+                   (unless first (princ "; " stream))
+                   (princ (car pair) stream)
+                   (write-char #\= stream)
+                   (princ (cdr pair) stream)))))))
+
+(defun py-aiohttp-cookie-header (jar extra-cookies)
+  (let ((combined (make-hash-table :test #'equal)))
+    (when (and jar (not (eq jar *py-none*)))
+      (maphash (lambda (key value)
+                 (setf (gethash key combined) value))
+               (py-aiohttp-cookie-jar-object-cookies jar)))
+    (when (and extra-cookies (not (eq extra-cookies *py-none*)))
+      (cond
+        ((py-dict-object-p extra-cookies)
+         (let ((storage (py-dict-storage extra-cookies "request cookies"))
+               (keys (py-dict-object-keys extra-cookies)))
+           (loop for index from 0 below (fill-pointer keys)
+                 for key = (aref keys index)
+                 do (setf (gethash (py-str key) combined) (py-str (gethash key storage))))))
+        ((stringp extra-cookies)
+         (py-aiohttp-cookie-jar-update-cookies
+          (make-py-aiohttp-cookie-jar-object :type *py-aiohttp-cookie-jar-type* :cookies combined)
+          extra-cookies))
+        (t
+         (py-raise (make-py-exception *py-type-error-type* "cookies must be a dict or cookie header string")))))
+    (py-aiohttp-cookie-header-from-table combined)))
+
+(defun py-aiohttp-add-cookie-header (headers jar cookies)
+  (let ((header (py-aiohttp-cookie-header jar cookies)))
+    (when (and header (not (py-aiohttp-headers-have-p headers "cookie")))
+      (py-dict-set-entry headers "Cookie" header)))
+  headers)
+
+(defun py-aiohttp-parse-set-cookie (set-cookie)
+  (when (and set-cookie (not (eq set-cookie *py-none*)))
+    (let* ((first-part (first (split-string-on-char (py-str set-cookie) #\;)))
+           (equals (and first-part (position #\= first-part))))
+      (when equals
+        (list (subseq first-part 0 equals)
+              (subseq first-part (1+ equals)))))))
+
+(defun py-aiohttp-cookie-jar-update-set-cookie (jar set-cookie)
+  (let ((pair (py-aiohttp-parse-set-cookie set-cookie)))
+    (when (and jar (not (eq jar *py-none*)) pair)
+      (setf (gethash (first pair) (py-aiohttp-cookie-jar-object-cookies jar))
+            (second pair))))
+  *py-none*)
+
+(defun py-aiohttp-response-cookies (headers)
+  (let ((pair (and (py-dict-object-p headers)
+                   (py-aiohttp-parse-set-cookie
+                    (gethash "set-cookie" (py-dict-storage headers "aiohttp response cookies"))))))
+    (if pair
+        (make-py-dict-from-pairs pair)
+        (make-py-dict-from-pairs))))
+
+(defun py-aiohttp-form-data-urlencode-pairs (pairs)
+  (with-output-to-string (stream)
+    (loop for pair in pairs
+          for first = t then nil
+          do (progn
+               (unless first (write-char #\& stream))
+               (princ (py-aiohttp-query-encode (car pair)) stream)
+               (write-char #\= stream)
+               (princ (py-aiohttp-query-encode (cdr pair)) stream)))))
+
+(defun py-aiohttp-form-data-body (form)
+  (py-aiohttp-form-data-urlencode-pairs
+   (nreverse (copy-list (py-aiohttp-form-data-object-fields form)))))
+
+(defun py-aiohttp-dict-form-body (data)
+  (let ((pairs '())
+        (storage (py-dict-storage data "aiohttp form data"))
+        (keys (py-dict-object-keys data)))
+    (loop for index from 0 below (fill-pointer keys)
+          for key = (aref keys index)
+          do (push (cons key (gethash key storage)) pairs))
+    (py-aiohttp-form-data-urlencode-pairs (nreverse pairs))))
+
+(defun py-aiohttp-form-content-type-p (body)
+  (or (py-aiohttp-form-data-object-p body)
+      (py-dict-object-p body)))
+
+(defun py-aiohttp-body-content-type (body)
+  (if (py-aiohttp-form-content-type-p body)
+      "application/x-www-form-urlencoded"
+      *py-none*))
+
+(defun py-aiohttp-auth-header (auth)
+  (cond
+    ((or (null auth) (eq auth *py-none*)) *py-none*)
+    ((py-aiohttp-basic-auth-object-p auth)
+     (py-aiohttp-basic-auth-encode auth))
+    ((or (py-list-object-p auth) (py-tuple-object-p auth))
+     (let ((items (py-unpack-sequence auth 2)))
+       (py-aiohttp-basic-auth-encode
+        (py-aiohttp-basic-auth (first items) (second items)))))
+    (t
+     (py-raise (make-py-exception *py-type-error-type* "auth must be aiohttp.BasicAuth or a (login, password) pair")))))
+
+(defun py-aiohttp-request-headers (headers body auth)
+  (let ((copy (py-aiohttp-copy-headers headers))
+        (body-content-type (py-aiohttp-body-content-type body))
+        (auth-header (py-aiohttp-auth-header auth)))
+    (when (and (not (eq body-content-type *py-none*))
+               (not (py-aiohttp-headers-have-p copy "content-type")))
+      (py-dict-set-entry copy "Content-Type" body-content-type))
+    (when (and (not (or (null body) (eq body *py-none*)))
+               (not (py-aiohttp-headers-have-p copy "content-length")))
+      (py-dict-set-entry copy "Content-Length" (length (py-aiohttp-normalize-body body))))
+    (when (and (not (eq auth-header *py-none*))
+               (not (py-aiohttp-headers-have-p copy "authorization")))
+      (py-dict-set-entry copy "Authorization" auth-header))
+    copy))
+
+(defun py-aiohttp-session-aenter (session)
+  (make-py-coroutine "ClientSession.__aenter__"
+                     (lambda () session)))
+
+(defun py-aiohttp-session-close-now (session)
+  (when (and (py-truthy-p (py-aiohttp-client-session-object-connector-owner session))
+             (py-aiohttp-tcp-connector-object-p (py-aiohttp-client-session-object-connector session)))
+    (py-aiohttp-tcp-connector-close (py-aiohttp-client-session-object-connector session)))
+  (setf (py-aiohttp-client-session-object-closed session) t)
+  (setf (py-object-attr session "closed") *py-true*)
+  *py-none*)
+
+(defun py-aiohttp-session-detach (session)
+  (setf (py-aiohttp-client-session-object-connector session) *py-none*)
+  (setf (py-object-attr session "connector") *py-none*)
+  (setf (py-aiohttp-client-session-object-closed session) t)
+  (setf (py-object-attr session "closed") *py-true*)
+  *py-none*)
+
+(defun py-aiohttp-session-close (session)
+  (py-aiohttp-session-close-now session)
+  (make-py-coroutine "ClientSession.close"
+                     (lambda () *py-none*)))
+
+(defun py-aiohttp-session-aexit (session exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "ClientSession.__aexit__"
+                     (lambda ()
+                       (py-aiohttp-session-close-now session)
+                       *py-false*)))
+
+(defun py-aiohttp-strip-query-fragment (url)
+  (let ((end (length url)))
+    (loop for marker across "?#"
+          do (let ((pos (position marker url)))
+               (when pos
+                 (setf end (min end pos)))))
+    (subseq url 0 end)))
+
+(defun py-aiohttp-percent-decode (text)
+  (with-output-to-string (out)
+    (loop for index from 0 below (length text)
+          do (let ((ch (char text index)))
+               (cond
+                 ((and (char= ch #\%)
+                       (<= (+ index 2) (1- (length text))))
+                  (let ((hex (subseq text (1+ index) (+ index 3))))
+                    (write-char (code-char (parse-integer hex :radix 16)) out)
+                    (incf index 2)))
+                 ((char= ch #\+)
+                  (write-char #\Space out))
+                 (t
+                  (write-char ch out)))))))
+
+(defun py-aiohttp-data-url-parts (url)
+  (let* ((comma (position #\, url))
+         (metadata (if comma (subseq url (length "data:") comma) ""))
+         (payload (if comma (subseq url (1+ comma)) ""))
+         (media-type (if (string= metadata "")
+                         "text/plain;charset=US-ASCII"
+                         (first (split-string-on-char metadata #\;)))))
+    (values media-type (py-aiohttp-percent-decode payload))))
+
+(defun py-aiohttp-file-url-path (url)
+  (py-aiohttp-percent-decode (py-aiohttp-strip-query-fragment (subseq url (length "file://")))))
+
+(defun py-aiohttp-http-url-p (url)
+  (and (stringp url)
+       (>= (length url) (length "http://"))
+       (string= url "http://" :end1 (length "http://") :end2 (length "http://"))))
+
+(defun py-aiohttp-parse-http-url (url)
+  (let* ((rest (subseq url (length "http://")))
+         (slash (position #\/ rest))
+         (authority (if slash (subseq rest 0 slash) rest))
+         (path (if slash (subseq rest slash) "/"))
+         (colon (position #\: authority :from-end t))
+         (host (if colon (subseq authority 0 colon) authority))
+         (port (if colon (parse-integer (subseq authority (1+ colon))) 80)))
+    (values host port path)))
+
+(defun py-aiohttp-normalize-body (body)
+  (cond
+    ((or (null body) (eq body *py-none*)) "")
+    ((stringp body) body)
+    ((py-bytes-object-p body)
+     (sb-ext:octets-to-string (py-bytes-storage body "aiohttp body") :external-format :utf-8))
+    ((py-aiohttp-form-data-object-p body)
+     (py-aiohttp-form-data-body body))
+    ((py-dict-object-p body)
+     (py-aiohttp-dict-form-body body))
+    (t (py-str body))))
+
+(defun py-aiohttp-json-escape-string (value)
+  (with-output-to-string (stream)
+    (write-char #\" stream)
+    (loop for char across value
+          do (case char
+               (#\" (princ "\\\"" stream))
+               (#\\ (princ "\\\\" stream))
+               (#\Newline (princ "\\n" stream))
+               (#\Return (princ "\\r" stream))
+               (#\Tab (princ "\\t" stream))
+               (otherwise (write-char char stream))))
+    (write-char #\" stream)))
+
+(defun py-aiohttp-json-dumps (value)
+  (cond
+    ((eq value *py-none*) "null")
+    ((eq value *py-true*) "true")
+    ((eq value *py-false*) "false")
+    ((stringp value) (py-aiohttp-json-escape-string value))
+    ((numberp value) (write-to-string value))
+    ((py-list-object-p value)
+     (with-output-to-string (stream)
+       (write-char #\[ stream)
+       (loop for index from 0 below (or (py-object-size value) 0)
+             do (progn
+                  (when (> index 0) (write-char #\, stream))
+                  (princ (py-aiohttp-json-dumps (aref (py-object-value value) index)) stream)))
+       (write-char #\] stream)))
+    ((py-tuple-object-p value)
+     (with-output-to-string (stream)
+       (write-char #\[ stream)
+       (loop for index from 0 below (or (py-object-size value) 0)
+             do (progn
+                  (when (> index 0) (write-char #\, stream))
+                  (princ (py-aiohttp-json-dumps (aref (py-object-value value) index)) stream)))
+       (write-char #\] stream)))
+    ((py-dict-object-p value)
+     (with-output-to-string (stream)
+       (let ((storage (py-dict-storage value "aiohttp json"))
+             (keys (py-dict-object-keys value)))
+         (write-char #\{ stream)
+         (loop for index from 0 below (fill-pointer keys)
+               for key = (aref keys index)
+               do (progn
+                    (when (> index 0) (write-char #\, stream))
+                    (princ (py-aiohttp-json-escape-string (py-str key)) stream)
+                    (write-char #\: stream)
+                    (princ (py-aiohttp-json-dumps (gethash key storage)) stream)))
+         (write-char #\} stream))))
+    (t (py-aiohttp-json-escape-string (py-str value)))))
+
+(defun py-aiohttp-query-safe-char-p (char)
+  (or (alphanumericp char)
+      (member char '(#\- #\_ #\. #\~))))
+
+(defun py-aiohttp-query-encode (value)
+  (with-output-to-string (stream)
+    (loop for char across (py-str value)
+          do (cond
+               ((py-aiohttp-query-safe-char-p char)
+                (write-char char stream))
+               ((char= char #\Space)
+                (write-char #\+ stream))
+               (t
+                (format stream "%~2,'0X" (char-code char)))))))
+
+(defun py-aiohttp-params-string (params)
+  (cond
+    ((or (null params) (eq params *py-none*)) "")
+    ((stringp params) params)
+    ((py-dict-object-p params)
+     (with-output-to-string (stream)
+       (let ((storage (py-dict-storage params "aiohttp params"))
+             (keys (py-dict-object-keys params)))
+         (loop for index from 0 below (fill-pointer keys)
+               for key = (aref keys index)
+               do (progn
+                    (when (> index 0) (write-char #\& stream))
+                    (princ (py-aiohttp-query-encode key) stream)
+                    (write-char #\= stream)
+                    (princ (py-aiohttp-query-encode (gethash key storage)) stream))))))
+    (t (py-str params))))
+
+(defun py-aiohttp-url-with-params (url params)
+  (let ((query (py-aiohttp-params-string params)))
+    (if (= (length query) 0)
+        url
+        (concatenate 'string url (if (position #\? url) "&" "?") query))))
+
+(defun py-aiohttp-absolute-url-p (url)
+  (or (and (stringp url) (>= (length url) (length "http://"))
+           (string= url "http://" :end1 (length "http://") :end2 (length "http://")))
+      (and (stringp url) (>= (length url) (length "data:"))
+           (string= url "data:" :end1 (length "data:") :end2 (length "data:")))
+      (and (stringp url) (>= (length url) (length "file://"))
+           (string= url "file://" :end1 (length "file://") :end2 (length "file://")))))
+
+(defun py-aiohttp-join-url (base url)
+  (if (or (eq base *py-none*) (py-aiohttp-absolute-url-p url))
+      url
+      (let* ((base-text (py-str base))
+             (url-text (py-str url))
+             (base-has-slash (and (> (length base-text) 0)
+                                  (char= (char base-text (1- (length base-text))) #\/)))
+             (url-has-slash (and (> (length url-text) 0)
+                                 (char= (char url-text 0) #\/))))
+        (cond
+          ((and base-has-slash url-has-slash)
+           (concatenate 'string base-text (subseq url-text 1)))
+          ((or base-has-slash url-has-slash)
+           (concatenate 'string base-text url-text))
+          (t
+           (concatenate 'string base-text "/" url-text))))))
+
+(defun py-aiohttp-merge-headers (session-headers request-headers)
+  (let ((merged (py-aiohttp-copy-headers session-headers)))
+    (when (and request-headers (not (eq request-headers *py-none*)))
+      (unless (py-dict-object-p request-headers)
+        (error "aiohttp headers must be a dict"))
+      (let ((storage (py-dict-storage request-headers "aiohttp headers"))
+            (keys (py-dict-object-keys request-headers)))
+        (loop for index from 0 below (fill-pointer keys)
+              for key = (aref keys index)
+              do (py-dict-set-entry merged key (gethash key storage)))))
+    merged))
+
+(defun py-aiohttp-headers-have-p (headers name)
+  (and (py-dict-object-p headers)
+       (let ((keys (py-dict-object-keys headers)))
+         (loop for index from 0 below (fill-pointer keys)
+               for key = (aref keys index)
+               thereis (string= (string-downcase (py-str key)) name)))))
+
+(defun py-aiohttp-copy-headers (headers)
+  (if (and headers (not (eq headers *py-none*)))
+      (let ((copy (make-py-dict-from-pairs))
+            (storage (py-dict-storage headers "aiohttp headers"))
+            (keys (py-dict-object-keys headers)))
+        (loop for index from 0 below (fill-pointer keys)
+              for key = (aref keys index)
+              do (py-dict-set-entry copy key (gethash key storage)))
+        copy)
+      (make-py-dict-from-pairs)))
+
+(defun py-aiohttp-json-headers (headers)
+  (let ((copy (py-aiohttp-copy-headers headers)))
+    (unless (py-aiohttp-headers-have-p copy "content-type")
+      (py-dict-set-entry copy "Content-Type" "application/json"))
+    copy))
+
+(defun py-aiohttp-read-http-body (stream headers)
+  (let ((content-length (gethash "content-length" headers)))
+    (if content-length
+        (let* ((size (parse-integer content-length :junk-allowed t))
+               (body (make-string (or size 0))))
+          (when (> (length body) 0)
+            (read-sequence body stream))
+          body)
+        (with-output-to-string (out)
+          (loop for char = (read-char stream nil nil)
+                while char
+                do (write-char char out))))))
+
+(defun py-aiohttp-headers-dict-from-table (headers-table)
+  (let ((pairs '()))
+    (maphash (lambda (key value)
+               (push (list key value) pairs))
+             headers-table)
+    (apply #'make-py-dict-from-pairs (nreverse pairs))))
+
+(defun py-aiohttp-request-header-pairs (headers)
+  (let ((pairs '()))
+    (when (and headers (not (eq headers *py-none*)))
+      (unless (py-dict-object-p headers)
+        (error "aiohttp headers must be a dict"))
+      (let ((storage (py-dict-storage headers "aiohttp headers"))
+            (keys (py-dict-object-keys headers)))
+        (loop for index from 0 below (fill-pointer keys)
+              for key = (aref keys index)
+              for value = (gethash key storage)
+              do (push (cons (py-str key) (py-str value)) pairs))))
+    (nreverse pairs)))
+
+(defun py-aiohttp-http-request (method url body request-headers)
+  (multiple-value-bind (host port path) (py-aiohttp-parse-http-url url)
+    (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
+      (multiple-value-prog1
+          (handler-case
+              (progn
+                (sb-bsd-sockets:socket-connect
+                 socket
+                 (car (sb-bsd-sockets:host-ent-addresses
+                       (sb-bsd-sockets:get-host-by-name host)))
+                 port)
+                (let ((stream (sb-bsd-sockets:socket-make-stream
+                               socket
+                               :input t
+                               :output t
+                               :element-type 'character
+                               :external-format :utf-8
+                               :buffering :none))
+                      (request-body (py-aiohttp-normalize-body body))
+                      (header-pairs (py-aiohttp-request-header-pairs request-headers)))
+                  (format stream "~A ~A HTTP/1.0~C~CHost: ~A~C~C" method path #\Return #\Linefeed host #\Return #\Linefeed)
+                  (dolist (pair header-pairs)
+                    (format stream "~A: ~A~C~C" (car pair) (cdr pair) #\Return #\Linefeed))
+                  (format stream "Connection: close~C~C" #\Return #\Linefeed)
+                  (when (> (length request-body) 0)
+                    (unless (find "content-length" header-pairs :key (lambda (pair) (string-downcase (car pair))) :test #'string=)
+                      (format stream "Content-Length: ~A~C~C" (length request-body) #\Return #\Linefeed)))
+                  (format stream "~C~C" #\Return #\Linefeed)
+                  (when (> (length request-body) 0)
+                    (write-string request-body stream))
+                  (finish-output stream)
+                  (let* ((status-line (or (read-line stream nil nil) "HTTP/1.0 599 Network Unavailable"))
+                         (first-space (position #\Space status-line))
+                         (second-space (and first-space (position #\Space status-line :start (1+ first-space))))
+                         (status (if first-space
+                                     (parse-integer status-line :start (1+ first-space)
+                                                                :end (or second-space (length status-line))
+                                                                :junk-allowed t)
+                                     599))
+                         (reason (if second-space (subseq status-line (1+ second-space)) ""))
+                         (headers-table (make-hash-table :test #'equal)))
+                    (loop for raw-line = (read-line stream nil nil)
+                          for line = (and raw-line (string-trim '(#\Return) raw-line))
+                          while (and line (not (string= line "")))
+                          do (let ((colon (position #\: line)))
+                               (when colon
+                                 (setf (gethash (string-downcase (subseq line 0 colon)) headers-table)
+                                       (string-trim '(#\Space #\Tab #\Return) (subseq line (1+ colon)))))))
+                    (let ((body-text (py-aiohttp-read-http-body stream headers-table))
+                          (headers-dict (py-aiohttp-headers-dict-from-table headers-table)))
+                      (values status
+                              reason
+                              body-text
+                              (or (gethash "content-type" headers-table) "application/octet-stream")
+                              headers-dict)))))
+            (error ()
+              (values 599 "Network Unavailable" "" "text/plain" (make-py-dict-from-pairs))))
+        (ignore-errors (sb-bsd-sockets:socket-close socket))))))
+
+(defun py-aiohttp-load-url-body (method url body request-headers)
+  (cond
+    ((and (stringp url) (>= (length url) (length "data:"))
+          (string= url "data:" :end1 (length "data:") :end2 (length "data:")))
+     (multiple-value-bind (content-type response-body) (py-aiohttp-data-url-parts url)
+       (values 200 "OK" response-body content-type
+               (make-py-dict-from-pairs (list "content-type" content-type)))))
+    ((and (stringp url) (>= (length url) (length "file://"))
+          (string= url "file://" :end1 (length "file://") :end2 (length "file://")))
+     (let ((path (py-aiohttp-file-url-path url))
+           (content-type "text/plain"))
+       (if (probe-file path)
+           (values 200 "OK"
+                   (with-open-file (stream path :direction :input :external-format :utf-8)
+                     (let ((contents (make-string (file-length stream))))
+                       (read-sequence contents stream)
+                       contents))
+                   content-type
+                   (make-py-dict-from-pairs (list "content-type" content-type)))
+           (values 404 "Not Found" "" content-type
+                   (make-py-dict-from-pairs (list "content-type" content-type))))))
+    ((py-aiohttp-http-url-p url)
+     (py-aiohttp-http-request method url body request-headers))
+    (t
+     (values 599 "Network Unavailable"
+             "Clamp aiohttp supports http://, data:, and file:// URLs"
+             "text/plain"
+             (make-py-dict-from-pairs (list "content-type" "text/plain"))))))
+
+(defun py-aiohttp-redirect-status-p (status)
+  (member status '(301 302 303 307 308)))
+
+(defun py-aiohttp-header-value (headers name)
+  (and (py-dict-object-p headers)
+       (gethash (string-downcase name) (py-dict-storage headers "aiohttp response headers"))))
+
+(defun py-aiohttp-content-length (headers)
+  (let ((value (py-aiohttp-header-value headers "content-length")))
+    (if value
+        (or (parse-integer (py-str value) :junk-allowed t) *py-none*)
+        *py-none*)))
+
+(defun py-aiohttp-content-charset (content-type)
+  (when content-type
+    (dolist (part (rest (split-string-on-char (py-str content-type) #\;)))
+      (let* ((trimmed (string-trim '(#\Space #\Tab) part))
+             (equals (position #\= trimmed)))
+        (when (and equals
+                   (string= (string-downcase (subseq trimmed 0 equals)) "charset"))
+          (return (string-trim '(#\Space #\Tab #\") (subseq trimmed (1+ equals)))))))))
+
+(defun py-aiohttp-response-encoding (response)
+  (let ((charset (py-object-attr response "charset")))
+    (if (eq charset *py-none*) "utf-8" charset)))
+
+(defun py-aiohttp-timeout-total (timeout)
+  (cond
+    ((or (null timeout) (eq timeout *py-none*)) *py-none*)
+    ((numberp timeout) timeout)
+    ((py-aiohttp-client-timeout-object-p timeout)
+     (py-aiohttp-client-timeout-object-total timeout))
+    (t *py-none*)))
+
+(defun py-aiohttp-timeout-expired-p (timeout)
+  (let ((total (py-aiohttp-timeout-total timeout)))
+    (and (not (eq total *py-none*))
+         (numberp total)
+         (<= total 0))))
+
+(defun py-aiohttp-raise-timeout ()
+  (py-raise (make-py-exception *py-aiohttp-server-timeout-error-type* "Request timed out")))
+
+(defun py-aiohttp-origin (url)
+  (when (py-aiohttp-http-url-p url)
+    (let* ((rest (subseq url (length "http://")))
+           (slash (position #\/ rest))
+           (authority (if slash (subseq rest 0 slash) rest)))
+      (concatenate 'string "http://" authority))))
+
+(defun py-aiohttp-resolve-location (url location)
+  (cond
+    ((py-aiohttp-absolute-url-p location) location)
+    ((not (py-aiohttp-http-url-p url)) location)
+    ((and (> (length location) 0) (char= (char location 0) #\/))
+     (concatenate 'string (py-aiohttp-origin url) location))
+    (t
+     (let* ((origin (py-aiohttp-origin url))
+            (rest (subseq url (length origin)))
+            (path (py-aiohttp-strip-query-fragment (if (> (length rest) 0) rest "/")))
+            (last-slash (position #\/ path :from-end t))
+            (directory (if last-slash (subseq path 0 (1+ last-slash)) "/")))
+       (concatenate 'string origin directory location)))))
+
+(defun py-aiohttp-response-request-info (url method headers)
+  (make-py-dict-from-pairs
+   (list "url" url)
+   (list "method" method)
+   (list "headers" headers)))
+
+(defun py-aiohttp-build-response (request url status reason body content-type headers history)
+  (let ((response (make-py-aiohttp-client-response-object
+                   :type *py-aiohttp-client-response-type*
+                   :url url
+                   :method (py-aiohttp-request-context-object-method request)
+                   :status status
+                   :reason reason
+                   :body body
+                   :headers headers)))
+    (setf (py-aiohttp-client-response-object-content response)
+          (py-aiohttp-make-stream-reader response body))
+    (py-aiohttp-cookie-jar-update-set-cookie
+     (py-aiohttp-client-session-object-cookie-jar
+      (py-aiohttp-request-context-object-session request))
+     (py-aiohttp-header-value headers "set-cookie"))
+    (setf (py-object-attr response "status") status)
+    (setf (py-object-attr response "reason") reason)
+    (setf (py-object-attr response "url") url)
+    (setf (py-object-attr response "real_url") url)
+    (setf (py-object-attr response "method") (py-aiohttp-request-context-object-method request))
+    (setf (py-object-attr response "request_info")
+          (py-aiohttp-response-request-info url
+                                            (py-aiohttp-request-context-object-method request)
+                                            (py-aiohttp-request-context-object-headers request)))
+    (setf (py-object-attr response "history") (apply #'make-py-tuple history))
+    (setf (py-object-attr response "cookies") (py-aiohttp-response-cookies headers))
+    (setf (py-object-attr response "content_type") content-type)
+    (setf (py-object-attr response "content_length") (py-aiohttp-content-length headers))
+    (setf (py-object-attr response "charset") (or (py-aiohttp-content-charset content-type) *py-none*))
+    (setf (py-object-attr response "ok") (py-bool (< status 400)))
+    (setf (py-object-attr response "closed") *py-false*)
+    (setf (py-object-attr response "headers") (py-aiohttp-client-response-object-headers response))
+    (setf (py-object-attr response "content") (py-aiohttp-client-response-object-content response))
+    response))
+
+(defun py-aiohttp-string-bytes (text)
+  (make-py-bytes-from-vector
+   (sb-ext:string-to-octets text :external-format :utf-8)))
+
+(defun py-aiohttp-stream-reader-remaining (reader)
+  (let ((body (py-aiohttp-stream-reader-object-body reader))
+        (index (py-aiohttp-stream-reader-object-index reader)))
+    (max 0 (- (length body) index))))
+
+(defun py-aiohttp-stream-reader-at-eof (reader)
+  (py-bool (= (py-aiohttp-stream-reader-remaining reader) 0)))
+
+(defun py-aiohttp-stream-reader-feed-eof (reader)
+  (setf (py-aiohttp-stream-reader-object-index reader)
+        (length (py-aiohttp-stream-reader-object-body reader)))
+  *py-none*)
+
+(defun py-aiohttp-stream-reader-read-now (reader n)
+  (let* ((body (py-aiohttp-stream-reader-object-body reader))
+         (index (py-aiohttp-stream-reader-object-index reader))
+         (remaining (- (length body) index))
+         (requested (if (or (eq n *py-none*) (< n 0)) remaining (min n remaining)))
+         (end (+ index requested))
+         (chunk (subseq body index end)))
+    (setf (py-aiohttp-stream-reader-object-index reader) end)
+    (py-aiohttp-string-bytes chunk)))
+
+(defun py-aiohttp-stream-reader-read (reader &optional (n -1))
+  (make-py-coroutine "StreamReader.read"
+                     (lambda ()
+                       (py-aiohttp-stream-reader-read-now reader n))))
+
+(defun py-aiohttp-stream-reader-readany (reader)
+  (py-aiohttp-stream-reader-read reader -1))
+
+(defun py-aiohttp-stream-reader-read-nowait (reader &optional (n -1))
+  (py-aiohttp-stream-reader-read-now reader n))
+
+(defun py-aiohttp-stream-reader-readchunk (reader)
+  (make-py-coroutine "StreamReader.readchunk"
+                     (lambda ()
+                       (make-py-tuple
+                        (py-aiohttp-stream-reader-read-now reader -1)
+                        *py-false*))))
+
+(defun py-aiohttp-stream-reader-is-eof (reader)
+  (py-aiohttp-stream-reader-at-eof reader))
+
+(defun py-aiohttp-stream-reader-exception (reader)
+  (declare (ignore reader))
+  *py-none*)
+
+(defun py-aiohttp-stream-reader-readexactly (reader n)
+  (make-py-coroutine "StreamReader.readexactly"
+                     (lambda ()
+                       (let ((remaining (py-aiohttp-stream-reader-remaining reader)))
+                         (when (< remaining n)
+                           (let ((partial (py-aiohttp-stream-reader-read-now reader remaining))
+                                 (exception (make-py-exception *py-asyncio-incomplete-read-error-type*
+                                                               "not enough bytes available")))
+                             (setf (py-object-attr exception "partial") partial)
+                             (setf (py-object-attr exception "expected") n)
+                             (py-raise exception)))
+                         (py-aiohttp-stream-reader-read-now reader n)))))
+
+(defun py-aiohttp-stream-reader-readline (reader)
+  (make-py-coroutine "StreamReader.readline"
+                     (lambda ()
+                       (let* ((body (py-aiohttp-stream-reader-object-body reader))
+                              (index (py-aiohttp-stream-reader-object-index reader))
+                              (newline (position #\Newline body :start index))
+                              (end (if newline (1+ newline) (length body))))
+                         (setf (py-aiohttp-stream-reader-object-index reader) end)
+                         (py-aiohttp-string-bytes (subseq body index end))))))
+
+(defun py-aiohttp-stream-reader-aiter (reader)
+  reader)
+
+(defun py-aiohttp-stream-reader-anext (reader)
+  (make-py-coroutine "StreamReader.__anext__"
+                     (lambda ()
+                       (let ((line (py-await (py-aiohttp-stream-reader-readline reader))))
+                         (if (= (or (py-object-size line) 0) 0)
+                             (py-raise (make-py-exception *py-stop-async-iteration-type*))
+                             line)))))
+
+(defun py-aiohttp-stream-reader-iter-chunked (reader n)
+  (make-py-aiohttp-chunk-iterator-object :type *py-aiohttp-chunk-iterator-type*
+                                         :reader reader
+                                         :chunk-size n))
+
+(defun py-aiohttp-stream-reader-iter-any (reader)
+  (make-py-aiohttp-chunk-iterator-object :type *py-aiohttp-chunk-iterator-type*
+                                         :reader reader
+                                         :chunk-size -1))
+
+(defun py-aiohttp-stream-reader-iter-chunks (reader)
+  (make-py-aiohttp-chunk-iterator-object :type *py-aiohttp-chunk-iterator-type*
+                                         :reader reader
+                                         :chunk-size -1
+                                         :tuple-mode t))
+
+(defun py-aiohttp-chunk-iterator-anext (iterator)
+  (make-py-coroutine "AsyncStreamIterator.__anext__"
+                     (lambda ()
+                       (let ((reader (py-aiohttp-chunk-iterator-object-reader iterator)))
+                         (when (= (py-aiohttp-stream-reader-remaining reader) 0)
+                           (py-raise (make-py-exception *py-stop-async-iteration-type*)))
+                         (let ((chunk (py-aiohttp-stream-reader-read-now
+                                      reader
+                                      (py-aiohttp-chunk-iterator-object-chunk-size iterator))))
+                           (if (py-aiohttp-chunk-iterator-object-tuple-mode iterator)
+                               (make-py-tuple chunk *py-false*)
+                               chunk))))))
+
+(defun py-aiohttp-make-stream-reader (response body)
+  (make-py-aiohttp-stream-reader-object :type *py-aiohttp-stream-reader-type*
+                                        :response response
+                                        :body body))
+
+(defun py-aiohttp-json-whitespace-p (char)
+  (member char '(#\Space #\Tab #\Newline #\Return)))
+
+(defun py-aiohttp-json-skip-ws (text index)
+  (loop while (and (< index (length text))
+                   (py-aiohttp-json-whitespace-p (char text index)))
+        do (incf index))
+  index)
+
+(defun py-aiohttp-json-parse-string (text index)
+  (unless (and (< index (length text)) (char= (char text index) #\"))
+    (error "expected JSON string"))
+  (incf index)
+  (let ((stream (make-string-output-stream)))
+    (loop while (< index (length text))
+          for char = (char text index)
+          do (cond
+               ((char= char #\")
+                (return-from py-aiohttp-json-parse-string
+                  (values (get-output-stream-string stream) (1+ index))))
+               ((char= char #\\)
+                (incf index)
+                (when (>= index (length text))
+                  (error "unterminated JSON escape"))
+                (let ((escaped (char text index)))
+                  (write-char
+                   (case escaped
+                     (#\" #\")
+                     (#\\ #\\)
+                     (#\/ #\/)
+                     (#\b #\Backspace)
+                     (#\f #\Page)
+                     (#\n #\Newline)
+                     (#\r #\Return)
+                     (#\t #\Tab)
+                     (otherwise escaped))
+                   stream)))
+               (t
+                (write-char char stream)))
+          do (incf index)))
+  (error "unterminated JSON string"))
+
+(defun py-aiohttp-json-parse-number (text index)
+  (let ((start index))
+    (when (and (< index (length text)) (char= (char text index) #\-))
+      (incf index))
+    (loop while (and (< index (length text)) (digit-char-p (char text index)))
+          do (incf index))
+    (if (and (< index (length text)) (char= (char text index) #\.))
+        (progn
+          (incf index)
+          (loop while (and (< index (length text)) (digit-char-p (char text index)))
+                do (incf index))
+          (values (read-from-string (subseq text start index)) index))
+        (values (parse-integer (subseq text start index)) index))))
+
+(defun py-aiohttp-json-parse-literal (text index literal value)
+  (let ((end (+ index (length literal))))
+    (unless (and (<= end (length text))
+                 (string= text literal :start1 index :end1 end))
+      (error "invalid JSON literal"))
+    (values value end)))
+
+(defun py-aiohttp-json-parse-array (text index)
+  (let ((items '()))
+    (incf index)
+    (setf index (py-aiohttp-json-skip-ws text index))
+    (when (and (< index (length text)) (char= (char text index) #\]))
+      (return-from py-aiohttp-json-parse-array
+        (values (make-py-list :size 0 :value (make-array 0 :adjustable t :fill-pointer 0)) (1+ index))))
+    (loop
+      (multiple-value-bind (value next-index) (py-aiohttp-json-parse-value text index)
+        (push value items)
+        (setf index (py-aiohttp-json-skip-ws text next-index)))
+      (cond
+        ((and (< index (length text)) (char= (char text index) #\,))
+         (setf index (py-aiohttp-json-skip-ws text (1+ index))))
+        ((and (< index (length text)) (char= (char text index) #\]))
+         (return (values (apply #'make-py-list (nreverse items)) (1+ index))))
+        (t
+         (error "expected JSON array delimiter"))))))
+
+(defun py-aiohttp-json-parse-object (text index)
+  (let ((pairs '()))
+    (incf index)
+    (setf index (py-aiohttp-json-skip-ws text index))
+    (when (and (< index (length text)) (char= (char text index) #\}))
+      (return-from py-aiohttp-json-parse-object
+        (values (make-py-dict-from-pairs) (1+ index))))
+    (loop
+      (multiple-value-bind (key next-index) (py-aiohttp-json-parse-string text index)
+        (setf index (py-aiohttp-json-skip-ws text next-index))
+        (unless (and (< index (length text)) (char= (char text index) #\:))
+          (error "expected JSON object colon"))
+        (multiple-value-bind (value value-index)
+            (py-aiohttp-json-parse-value text (py-aiohttp-json-skip-ws text (1+ index)))
+          (push (list key value) pairs)
+          (setf index (py-aiohttp-json-skip-ws text value-index))))
+      (cond
+        ((and (< index (length text)) (char= (char text index) #\,))
+         (setf index (py-aiohttp-json-skip-ws text (1+ index))))
+        ((and (< index (length text)) (char= (char text index) #\}))
+         (return (values (apply #'make-py-dict-from-pairs (nreverse pairs)) (1+ index))))
+        (t
+         (error "expected JSON object delimiter"))))))
+
+(defun py-aiohttp-json-parse-value (text index)
+  (setf index (py-aiohttp-json-skip-ws text index))
+  (when (>= index (length text))
+    (error "unexpected end of JSON input"))
+  (let ((char (char text index)))
+    (cond
+      ((char= char #\") (py-aiohttp-json-parse-string text index))
+      ((char= char #\{) (py-aiohttp-json-parse-object text index))
+      ((char= char #\[) (py-aiohttp-json-parse-array text index))
+      ((or (char= char #\-) (digit-char-p char)) (py-aiohttp-json-parse-number text index))
+      ((char= char #\t) (py-aiohttp-json-parse-literal text index "true" *py-true*))
+      ((char= char #\f) (py-aiohttp-json-parse-literal text index "false" *py-false*))
+      ((char= char #\n) (py-aiohttp-json-parse-literal text index "null" *py-none*))
+      (t (error "unexpected JSON character: ~A" char)))))
+
+(defun py-aiohttp-json-loads (text)
+  (multiple-value-bind (value index) (py-aiohttp-json-parse-value text 0)
+    (let ((end (py-aiohttp-json-skip-ws text index)))
+      (unless (= end (length text))
+        (error "extra data after JSON value"))
+      value)))
+
+(defun py-aiohttp-make-response (request)
+  (when (py-aiohttp-timeout-expired-p (py-aiohttp-request-context-object-timeout request))
+    (py-aiohttp-raise-timeout))
+  (let ((url (py-aiohttp-request-context-object-url request))
+        (history '())
+        (remaining (py-aiohttp-request-context-object-max-redirects request)))
+    (loop
+      (multiple-value-bind (status reason body content-type headers)
+          (py-aiohttp-load-url-body (py-aiohttp-request-context-object-method request)
+                                    url
+                                    (py-aiohttp-request-context-object-body request)
+                                    (py-aiohttp-request-context-object-headers request))
+        (let ((location (py-aiohttp-header-value headers "location")))
+          (if (and (py-truthy-p (py-aiohttp-request-context-object-allow-redirects request))
+                   (py-aiohttp-redirect-status-p status)
+                   location)
+              (progn
+                (let ((redirect-response (py-aiohttp-build-response request url status reason body content-type headers (nreverse history))))
+                  (push redirect-response history))
+                (decf remaining)
+                (when (< remaining 0)
+                  (py-raise
+                   (py-aiohttp-make-response-error
+                    *py-aiohttp-too-many-redirects-type*
+                    (first history)
+                    "Too many redirects")))
+                (setf url (py-aiohttp-resolve-location url location)))
+              (let ((response (py-aiohttp-build-response request url status reason body content-type headers (nreverse history))))
+                (when (py-truthy-p (py-aiohttp-request-context-object-raise-for-status request))
+                  (py-aiohttp-response-raise-for-status response))
+                (return response))))))))
+
+(defun py-aiohttp-request-aenter (request)
+  (make-py-coroutine "_RequestContextManager.__aenter__"
+                     (lambda ()
+                       (let ((response (py-aiohttp-make-response request)))
+                         (setf (py-aiohttp-request-context-object-response request) response)
+                         response))))
+
+(defun py-aiohttp-request-aexit (request exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "_RequestContextManager.__aexit__"
+                     (lambda ()
+                       (let ((response (py-aiohttp-request-context-object-response request)))
+                         (when response
+                           (py-aiohttp-response-release response)))
+                       *py-false*)))
+
+(defun py-aiohttp-request-await (request)
+  (let ((response (py-aiohttp-make-response request)))
+    (setf (py-aiohttp-request-context-object-response request) response)
+    (py-iter (make-py-list response))))
+
+(defparameter *py-aiohttp-ws-msg-text* 1)
+(defparameter *py-aiohttp-ws-msg-binary* 2)
+(defparameter *py-aiohttp-ws-msg-close* 8)
+(defparameter *py-aiohttp-ws-msg-ping* 9)
+(defparameter *py-aiohttp-ws-msg-pong* 10)
+(defparameter *py-aiohttp-ws-msg-closed* 257)
+(defparameter *py-aiohttp-ws-msg-error* 258)
+
+(defun py-aiohttp-ws-message (message-type data &optional (extra *py-none*))
+  (let ((message (make-py-aiohttp-ws-message-object
+                  :type *py-aiohttp-ws-message-type*
+                  :message-type message-type
+                  :data data
+                  :extra extra)))
+    (setf (py-object-attr message "type") message-type)
+    (setf (py-object-attr message "data") data)
+    (setf (py-object-attr message "extra") extra)
+    message))
+
+(defun py-aiohttp-websocket-sync-closed (ws)
+  (setf (py-object-attr ws "closed") (py-bool (py-aiohttp-client-websocket-response-object-closed ws)))
+  ws)
+
+(defun py-aiohttp-make-websocket-response (url messages)
+  (let ((ws (make-py-aiohttp-client-websocket-response-object
+             :type *py-aiohttp-client-websocket-response-type*
+             :url url
+             :messages messages
+             :sent '())))
+    (setf (py-object-attr ws "url") url)
+    (setf (py-object-attr ws "closed") *py-false*)
+    ws))
+
+(defun py-aiohttp-websocket-from-url (url timeout)
+  (when (py-aiohttp-timeout-expired-p timeout)
+    (py-aiohttp-raise-timeout))
+  (multiple-value-bind (status reason body content-type headers)
+      (py-aiohttp-load-url-body "GET" url *py-none* (make-py-dict-from-pairs))
+    (declare (ignore reason content-type headers))
+    (when (>= status 400)
+      (py-raise (make-py-exception *py-aiohttp-client-response-error-type* (format nil "HTTP ~A" status))))
+    (py-aiohttp-make-websocket-response
+     url
+     (if (> (length body) 0)
+         (list (py-aiohttp-ws-message *py-aiohttp-ws-msg-text* body))
+         '()))))
+
+(defun py-aiohttp-websocket-aenter (ws)
+  (make-py-coroutine "ClientWebSocketResponse.__aenter__"
+                     (lambda () ws)))
+
+(defun py-aiohttp-websocket-aexit (ws exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "ClientWebSocketResponse.__aexit__"
+                     (lambda ()
+                       (py-aiohttp-websocket-close-now ws)
+                       *py-false*)))
+
+(defun py-aiohttp-websocket-await (ws)
+  (py-iter (make-py-list ws)))
+
+(defun py-aiohttp-websocket-close-now (ws)
+  (setf (py-aiohttp-client-websocket-response-object-closed ws) t)
+  (py-aiohttp-websocket-sync-closed ws)
+  *py-true*)
+
+(defun py-aiohttp-websocket-close (ws &rest args)
+  (declare (ignore args))
+  (make-py-coroutine "ClientWebSocketResponse.close"
+                     (lambda ()
+                       (py-aiohttp-websocket-close-now ws))))
+
+(defun py-aiohttp-websocket-receive-now (ws)
+  (let ((messages (py-aiohttp-client-websocket-response-object-messages ws)))
+    (cond
+      (messages
+       (let ((message (first messages)))
+         (setf (py-aiohttp-client-websocket-response-object-messages ws) (rest messages))
+         message))
+      ((py-aiohttp-client-websocket-response-object-closed ws)
+       (py-aiohttp-ws-message *py-aiohttp-ws-msg-closed* *py-none*))
+      (t
+       (py-aiohttp-websocket-close-now ws)
+       (py-aiohttp-ws-message *py-aiohttp-ws-msg-closed* *py-none*)))))
+
+(defun py-aiohttp-websocket-receive (ws &rest args)
+  (declare (ignore args))
+  (make-py-coroutine "ClientWebSocketResponse.receive"
+                     (lambda () (py-aiohttp-websocket-receive-now ws))))
+
+(defun py-aiohttp-websocket-aiter (ws)
+  ws)
+
+(defun py-aiohttp-websocket-anext (ws)
+  (make-py-coroutine "ClientWebSocketResponse.__anext__"
+                     (lambda ()
+                       (let ((message (py-aiohttp-websocket-receive-now ws)))
+                         (if (member (py-aiohttp-ws-message-object-message-type message)
+                                     (list *py-aiohttp-ws-msg-close*
+                                           *py-aiohttp-ws-msg-closed*
+                                           *py-aiohttp-ws-msg-error*))
+                             (py-raise (make-py-exception *py-stop-async-iteration-type*))
+                             message)))))
+
+(defun py-aiohttp-websocket-receive-str (ws &rest args)
+  (declare (ignore args))
+  (make-py-coroutine "ClientWebSocketResponse.receive_str"
+                     (lambda ()
+                       (let ((message (py-aiohttp-websocket-receive-now ws)))
+                         (if (= (py-aiohttp-ws-message-object-message-type message) *py-aiohttp-ws-msg-text*)
+                             (py-aiohttp-ws-message-object-data message)
+                             (py-raise (make-py-exception *py-type-error-type* "Received message is not str")))))))
+
+(defun py-aiohttp-websocket-receive-bytes (ws &rest args)
+  (declare (ignore args))
+  (make-py-coroutine "ClientWebSocketResponse.receive_bytes"
+                     (lambda ()
+                       (let ((message (py-aiohttp-websocket-receive-now ws)))
+                         (if (= (py-aiohttp-ws-message-object-message-type message) *py-aiohttp-ws-msg-binary*)
+                             (py-aiohttp-ws-message-object-data message)
+                             (py-raise (make-py-exception *py-type-error-type* "Received message is not bytes")))))))
+
+(defun py-aiohttp-websocket-send-str (ws data &rest args)
+  (declare (ignore args))
+  (make-py-coroutine "ClientWebSocketResponse.send_str"
+                     (lambda ()
+                       (let ((text (py-str data)))
+                         (push text (py-aiohttp-client-websocket-response-object-sent ws))
+                         (setf (py-aiohttp-client-websocket-response-object-messages ws)
+                               (append (py-aiohttp-client-websocket-response-object-messages ws)
+                                       (list (py-aiohttp-ws-message *py-aiohttp-ws-msg-text* text)))))
+                       *py-none*)))
+
+(defun py-aiohttp-websocket-send-bytes (ws data &rest args)
+  (declare (ignore args))
+  (make-py-coroutine "ClientWebSocketResponse.send_bytes"
+                     (lambda ()
+                       (unless (py-bytes-object-p data)
+                         (py-raise (make-py-exception *py-type-error-type* "data argument must be bytes-like")))
+                       (push data (py-aiohttp-client-websocket-response-object-sent ws))
+                       (setf (py-aiohttp-client-websocket-response-object-messages ws)
+                             (append (py-aiohttp-client-websocket-response-object-messages ws)
+                                     (list (py-aiohttp-ws-message *py-aiohttp-ws-msg-binary* data))))
+                       *py-none*)))
+
+(defun py-aiohttp-websocket-send-json (ws data &rest args)
+  (declare (ignore args))
+  (py-aiohttp-websocket-send-str ws (py-aiohttp-json-dumps data)))
+
+(defun py-aiohttp-websocket-receive-json (ws &rest args)
+  (declare (ignore args))
+  (make-py-coroutine "ClientWebSocketResponse.receive_json"
+                     (lambda ()
+                       (py-aiohttp-json-loads
+                        (py-await (py-aiohttp-websocket-receive-str ws))))))
+
+(defun py-aiohttp-response-aenter (response)
+  (make-py-coroutine "ClientResponse.__aenter__"
+                     (lambda () response)))
+
+(defun py-aiohttp-response-release (response)
+  (setf (py-aiohttp-client-response-object-closed response) t)
+  (setf (py-object-attr response "closed") *py-true*)
+  *py-none*)
+
+(defun py-aiohttp-response-close (response)
+  (py-aiohttp-response-release response))
+
+(defun py-aiohttp-response-wait-for-close (response)
+  (make-py-coroutine "ClientResponse.wait_for_close"
+                     (lambda ()
+                       (py-aiohttp-response-release response))))
+
+(defun py-aiohttp-response-aexit (response exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (make-py-coroutine "ClientResponse.__aexit__"
+                     (lambda ()
+                       (py-aiohttp-response-release response)
+                       *py-false*)))
+
+(defun py-aiohttp-response-text (response &rest args)
+  (declare (ignore args))
+  (make-py-coroutine "ClientResponse.text"
+                     (lambda () (py-aiohttp-client-response-object-body response))))
+
+(defun py-aiohttp-response-read (response)
+  (make-py-coroutine "ClientResponse.read"
+                     (lambda ()
+                       (py-aiohttp-string-bytes
+                        (py-aiohttp-client-response-object-body response)))))
+
+(defun py-aiohttp-response-get-encoding (response)
+  (py-aiohttp-response-encoding response))
+
+(defun py-aiohttp-make-response-error (type response message)
+  (let ((exception (make-py-exception type message)))
+    (setf (py-object-attr exception "status") (py-aiohttp-client-response-object-status response))
+    (setf (py-object-attr exception "message") message)
+    (setf (py-object-attr exception "headers")
+          (py-aiohttp-client-response-object-headers response))
+    (setf (py-object-attr exception "request_info")
+          (make-py-dict-from-pairs
+           (list "url" (py-aiohttp-client-response-object-url response))
+           (list "method" (py-aiohttp-client-response-object-method response))))
+    exception))
+
+(defun py-aiohttp-content-type-matches-p (actual expected)
+  (or (eq expected *py-none*)
+      (let ((actual-text (string-downcase (or actual "")))
+            (expected-text (string-downcase (py-str expected))))
+        (or (string= expected-text "")
+            (search expected-text actual-text)
+            (and (string= expected-text "application/json")
+                 (search "+json" actual-text))))))
+
+(defun py-aiohttp-response-json (response &rest args)
+  (multiple-value-bind (content-type content-type-supplied-p positional)
+      (py-asyncio-keyword-value args :content_type "application/json")
+    (declare (ignore positional))
+    (let ((expected-content-type (if content-type-supplied-p content-type "application/json")))
+      (make-py-coroutine "ClientResponse.json"
+                         (lambda ()
+                           (let ((actual (py-object-attr response "content_type")))
+                             (unless (py-aiohttp-content-type-matches-p actual expected-content-type)
+                               (py-raise
+                                (py-aiohttp-make-response-error
+                                 *py-aiohttp-content-type-error-type*
+                                 response
+                                 (format nil "Attempt to decode JSON with unexpected mimetype: ~A" actual))))
+                             (py-aiohttp-json-loads
+                              (py-aiohttp-client-response-object-body response))))))))
+
+(defun py-aiohttp-response-raise-for-status (response)
+  (let ((status (py-aiohttp-client-response-object-status response)))
+    (when (>= status 400)
+      (let* ((reason (py-aiohttp-client-response-object-reason response))
+             (message (if (and (stringp reason) (> (length reason) 0))
+                          reason
+                          (format nil "HTTP ~A" status))))
+        (py-raise
+         (py-aiohttp-make-response-error
+          *py-aiohttp-client-response-error-type*
+          response
+          message)))))
+  *py-none*)
+
+(defun py-aiohttp-session-request (session method url &rest args)
+  (multiple-value-bind (keyword-data keyword-data-supplied-p positional)
+      (py-asyncio-keyword-value args :data *py-none*)
+    (declare (ignore positional))
+    (multiple-value-bind (keyword-json keyword-json-supplied-p ignored-json-positional)
+        (py-asyncio-keyword-value args :json *py-none*)
+      (declare (ignore ignored-json-positional))
+      (multiple-value-bind (keyword-params keyword-params-supplied-p ignored-params-positional)
+          (py-asyncio-keyword-value args :params *py-none*)
+        (declare (ignore ignored-params-positional))
+        (multiple-value-bind (keyword-headers keyword-headers-supplied-p ignored-headers-positional)
+            (py-asyncio-keyword-value args :headers *py-none*)
+          (declare (ignore ignored-headers-positional))
+          (multiple-value-bind (keyword-auth keyword-auth-supplied-p ignored-auth-positional)
+              (py-asyncio-keyword-value args :auth *py-none*)
+            (declare (ignore ignored-auth-positional))
+            (multiple-value-bind (keyword-cookies keyword-cookies-supplied-p ignored-cookies-positional)
+                (py-asyncio-keyword-value args :cookies *py-none*)
+              (declare (ignore ignored-cookies-positional))
+              (multiple-value-bind (keyword-raise-for-status keyword-raise-for-status-supplied-p ignored-raise-for-status-positional)
+                  (py-asyncio-keyword-value args :raise_for_status *py-none*)
+                (declare (ignore ignored-raise-for-status-positional))
+                (multiple-value-bind (keyword-allow-redirects keyword-allow-redirects-supplied-p ignored-allow-redirects-positional)
+                    (py-asyncio-keyword-value args :allow_redirects *py-true*)
+                  (declare (ignore ignored-allow-redirects-positional))
+                  (multiple-value-bind (keyword-max-redirects keyword-max-redirects-supplied-p ignored-max-redirects-positional)
+                      (py-asyncio-keyword-value args :max_redirects 10)
+                    (declare (ignore ignored-max-redirects-positional))
+                    (multiple-value-bind (keyword-timeout keyword-timeout-supplied-p ignored-timeout-positional)
+                        (py-asyncio-keyword-value args :timeout *py-none*)
+                      (declare (ignore ignored-timeout-positional))
+                (when (py-aiohttp-client-session-object-closed session)
+                  (py-raise (make-py-exception *py-runtime-error-type* "Session is closed")))
+                (when (and keyword-data-supplied-p keyword-json-supplied-p)
+                  (py-raise (make-py-exception *py-value-error-type* "data and json parameters can not be used at the same time")))
+                (let* ((joined-url (py-aiohttp-join-url
+                                    (py-aiohttp-client-session-object-base-url session)
+                                    url))
+                       (request-url (if keyword-params-supplied-p
+                                        (py-aiohttp-url-with-params joined-url keyword-params)
+                                        joined-url))
+                       (request-body (cond
+                                       (keyword-json-supplied-p (py-aiohttp-json-dumps keyword-json))
+                                       (keyword-data-supplied-p keyword-data)
+                                       (t *py-none*)))
+                       (request-headers-arg (if keyword-headers-supplied-p keyword-headers *py-none*))
+                       (merged-headers (py-aiohttp-merge-headers
+                                        (py-aiohttp-client-session-object-headers session)
+                                        request-headers-arg))
+                       (base-headers (if keyword-json-supplied-p
+                                         (py-aiohttp-json-headers merged-headers)
+                                         merged-headers))
+                       (request-auth (if keyword-auth-supplied-p
+                                         keyword-auth
+                                         (py-aiohttp-client-session-object-auth session)))
+                       (request-timeout (if keyword-timeout-supplied-p
+                                            keyword-timeout
+                                            (py-aiohttp-client-session-object-timeout session)))
+                       (raise-for-status (if keyword-raise-for-status-supplied-p
+                                             keyword-raise-for-status
+                                             (py-aiohttp-client-session-object-raise-for-status session)))
+                       (allow-redirects (if keyword-allow-redirects-supplied-p keyword-allow-redirects *py-true*))
+                       (max-redirects (if keyword-max-redirects-supplied-p keyword-max-redirects 10))
+                       (request-headers (py-aiohttp-request-headers
+                                         base-headers
+                                         request-body
+                                         request-auth)))
+                  (py-aiohttp-add-cookie-header
+                   request-headers
+                   (py-aiohttp-client-session-object-cookie-jar session)
+                   (if keyword-cookies-supplied-p keyword-cookies *py-none*))
+                  (make-py-aiohttp-request-context-object :type *py-aiohttp-request-context-type*
+                                                          :session session
+                                                          :method method
+                                                          :url request-url
+                                                          :headers request-headers
+                                                          :body request-body
+                                                          :timeout request-timeout
+                                                          :raise-for-status raise-for-status
+                                                          :allow-redirects allow-redirects
+                                                          :max-redirects max-redirects)))))))))))))
+(defun py-aiohttp-session-get (session url &rest args)
+  (apply #'py-aiohttp-session-request session "GET" url args))
+
+(defun py-aiohttp-session-post (session url &rest args)
+  (apply #'py-aiohttp-session-request session "POST" url args))
+
+(defun py-aiohttp-session-put (session url &rest args)
+  (apply #'py-aiohttp-session-request session "PUT" url args))
+
+(defun py-aiohttp-session-delete (session url &rest args)
+  (apply #'py-aiohttp-session-request session "DELETE" url args))
+
+(defun py-aiohttp-session-patch (session url &rest args)
+  (apply #'py-aiohttp-session-request session "PATCH" url args))
+
+(defun py-aiohttp-session-head (session url &rest args)
+  (apply #'py-aiohttp-session-request session "HEAD" url args))
+
+(defun py-aiohttp-session-options (session url &rest args)
+  (apply #'py-aiohttp-session-request session "OPTIONS" url args))
+
+(defun py-aiohttp-session-ws-connect (session url &rest args)
+  (multiple-value-bind (keyword-timeout keyword-timeout-supplied-p positional)
+      (py-asyncio-keyword-value args :timeout *py-none*)
+    (declare (ignore positional))
+    (when (py-aiohttp-client-session-object-closed session)
+      (py-raise (make-py-exception *py-runtime-error-type* "Session is closed")))
+    (let* ((request-url (py-aiohttp-join-url
+                         (py-aiohttp-client-session-object-base-url session)
+                         url))
+           (timeout (if keyword-timeout-supplied-p
+                        keyword-timeout
+                        (py-aiohttp-client-session-object-timeout session))))
+      (py-aiohttp-websocket-from-url request-url timeout))))
+
+(defun py-aiohttp-module-request (method url &rest args)
+  (apply #'py-aiohttp-session-request (py-aiohttp-client-session) method url args))
+
+(defun py-aiohttp-module-get (url &rest args)
+  (apply #'py-aiohttp-module-request "GET" url args))
+
+(defun py-aiohttp-module-post (url &rest args)
+  (apply #'py-aiohttp-module-request "POST" url args))
+
+(defun py-aiohttp-module-put (url &rest args)
+  (apply #'py-aiohttp-module-request "PUT" url args))
+
+(defun py-aiohttp-module-delete (url &rest args)
+  (apply #'py-aiohttp-module-request "DELETE" url args))
+
+(defun py-aiohttp-module-patch (url &rest args)
+  (apply #'py-aiohttp-module-request "PATCH" url args))
+
+(defun py-aiohttp-module-head (url &rest args)
+  (apply #'py-aiohttp-module-request "HEAD" url args))
+
+(defun py-aiohttp-module-options (url &rest args)
+  (apply #'py-aiohttp-module-request "OPTIONS" url args))
+
+(defun py-aiohttp-module-ws-connect (url &rest args)
+  (apply #'py-aiohttp-session-ws-connect (py-aiohttp-client-session) url args))
+
+(setf (py-type-attr *py-aiohttp-client-session-type* "__aenter__") #'py-aiohttp-session-aenter)
+(setf (py-type-attr *py-aiohttp-client-session-type* "__aexit__") #'py-aiohttp-session-aexit)
+(setf (py-type-attr *py-aiohttp-client-session-type* "close") #'py-aiohttp-session-close)
+(setf (py-type-attr *py-aiohttp-client-session-type* "detach") #'py-aiohttp-session-detach)
+(setf (py-type-attr *py-aiohttp-client-session-type* "request") #'py-aiohttp-session-request)
+(setf (py-type-attr *py-aiohttp-client-session-type* "get") #'py-aiohttp-session-get)
+(setf (py-type-attr *py-aiohttp-client-session-type* "post") #'py-aiohttp-session-post)
+(setf (py-type-attr *py-aiohttp-client-session-type* "put") #'py-aiohttp-session-put)
+(setf (py-type-attr *py-aiohttp-client-session-type* "delete") #'py-aiohttp-session-delete)
+(setf (py-type-attr *py-aiohttp-client-session-type* "patch") #'py-aiohttp-session-patch)
+(setf (py-type-attr *py-aiohttp-client-session-type* "head") #'py-aiohttp-session-head)
+(setf (py-type-attr *py-aiohttp-client-session-type* "options") #'py-aiohttp-session-options)
+(setf (py-type-attr *py-aiohttp-client-session-type* "ws_connect") #'py-aiohttp-session-ws-connect)
+
+(setf (py-type-attr *py-aiohttp-tcp-connector-type* "close") #'py-aiohttp-tcp-connector-close)
+
+(setf (py-type-attr *py-aiohttp-basic-auth-type* "encode") #'py-aiohttp-basic-auth-encode)
+(setf (py-type-attr *py-aiohttp-form-data-type* "add_field") #'py-aiohttp-form-data-add-field)
+(setf (py-type-attr *py-aiohttp-form-data-type* "add_fields") #'py-aiohttp-form-data-add-fields)
+
+(setf (py-type-attr *py-aiohttp-cookie-jar-type* "update_cookies") #'py-aiohttp-cookie-jar-update-cookies)
+(setf (py-type-attr *py-aiohttp-cookie-jar-type* "filter_cookies") #'py-aiohttp-cookie-jar-filter-cookies)
+(setf (py-type-attr *py-aiohttp-cookie-jar-type* "clear") #'py-aiohttp-cookie-jar-clear)
+
+(setf (py-type-attr *py-aiohttp-request-context-type* "__aenter__") #'py-aiohttp-request-aenter)
+(setf (py-type-attr *py-aiohttp-request-context-type* "__aexit__") #'py-aiohttp-request-aexit)
+(setf (py-type-attr *py-aiohttp-request-context-type* "__await__") #'py-aiohttp-request-await)
+
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "__aenter__") #'py-aiohttp-websocket-aenter)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "__aexit__") #'py-aiohttp-websocket-aexit)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "__await__") #'py-aiohttp-websocket-await)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "__aiter__") #'py-aiohttp-websocket-aiter)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "__anext__") #'py-aiohttp-websocket-anext)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "close") #'py-aiohttp-websocket-close)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "receive") #'py-aiohttp-websocket-receive)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "receive_str") #'py-aiohttp-websocket-receive-str)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "receive_bytes") #'py-aiohttp-websocket-receive-bytes)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "receive_json") #'py-aiohttp-websocket-receive-json)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "send_str") #'py-aiohttp-websocket-send-str)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "send_bytes") #'py-aiohttp-websocket-send-bytes)
+(setf (py-type-attr *py-aiohttp-client-websocket-response-type* "send_json") #'py-aiohttp-websocket-send-json)
+
+(setf (py-type-attr *py-aiohttp-client-response-type* "__aenter__") #'py-aiohttp-response-aenter)
+(setf (py-type-attr *py-aiohttp-client-response-type* "__aexit__") #'py-aiohttp-response-aexit)
+(setf (py-type-attr *py-aiohttp-client-response-type* "text") #'py-aiohttp-response-text)
+(setf (py-type-attr *py-aiohttp-client-response-type* "read") #'py-aiohttp-response-read)
+(setf (py-type-attr *py-aiohttp-client-response-type* "json") #'py-aiohttp-response-json)
+(setf (py-type-attr *py-aiohttp-client-response-type* "get_encoding") #'py-aiohttp-response-get-encoding)
+(setf (py-type-attr *py-aiohttp-client-response-type* "raise_for_status") #'py-aiohttp-response-raise-for-status)
+(setf (py-type-attr *py-aiohttp-client-response-type* "release") #'py-aiohttp-response-release)
+(setf (py-type-attr *py-aiohttp-client-response-type* "close") #'py-aiohttp-response-close)
+(setf (py-type-attr *py-aiohttp-client-response-type* "wait_for_close") #'py-aiohttp-response-wait-for-close)
+
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "read") #'py-aiohttp-stream-reader-read)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "readany") #'py-aiohttp-stream-reader-readany)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "read_nowait") #'py-aiohttp-stream-reader-read-nowait)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "readchunk") #'py-aiohttp-stream-reader-readchunk)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "readexactly") #'py-aiohttp-stream-reader-readexactly)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "readline") #'py-aiohttp-stream-reader-readline)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "iter_chunked") #'py-aiohttp-stream-reader-iter-chunked)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "iter_any") #'py-aiohttp-stream-reader-iter-any)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "iter_chunks") #'py-aiohttp-stream-reader-iter-chunks)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "at_eof") #'py-aiohttp-stream-reader-at-eof)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "is_eof") #'py-aiohttp-stream-reader-is-eof)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "exception") #'py-aiohttp-stream-reader-exception)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "feed_eof") #'py-aiohttp-stream-reader-feed-eof)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "__aiter__") #'py-aiohttp-stream-reader-aiter)
+(setf (py-type-attr *py-aiohttp-stream-reader-type* "__anext__") #'py-aiohttp-stream-reader-anext)
+
+(setf (py-type-attr *py-aiohttp-chunk-iterator-type* "__aiter__")
+      (lambda (iterator) iterator))
+(setf (py-type-attr *py-aiohttp-chunk-iterator-type* "__anext__") #'py-aiohttp-chunk-iterator-anext)
+
+(defun py-aiohttp-export-client-api (module)
+  (setf (py-object-attr module "ClientSession") #'py-aiohttp-client-session)
+  (setf (py-object-attr module "request") #'py-aiohttp-module-request)
+  (setf (py-object-attr module "get") #'py-aiohttp-module-get)
+  (setf (py-object-attr module "post") #'py-aiohttp-module-post)
+  (setf (py-object-attr module "put") #'py-aiohttp-module-put)
+  (setf (py-object-attr module "delete") #'py-aiohttp-module-delete)
+  (setf (py-object-attr module "patch") #'py-aiohttp-module-patch)
+  (setf (py-object-attr module "head") #'py-aiohttp-module-head)
+  (setf (py-object-attr module "options") #'py-aiohttp-module-options)
+  (setf (py-object-attr module "ws_connect") #'py-aiohttp-module-ws-connect)
+  (setf (py-object-attr module "ClientTimeout") #'py-aiohttp-client-timeout)
+  (setf (py-object-attr module "TCPConnector") #'py-aiohttp-tcp-connector)
+  (setf (py-object-attr module "BasicAuth") #'py-aiohttp-basic-auth)
+  (setf (py-object-attr module "FormData") #'py-aiohttp-form-data)
+  (setf (py-object-attr module "CookieJar") #'py-aiohttp-cookie-jar)
+  (setf (py-object-attr module "ClientResponse") *py-aiohttp-client-response-type*)
+  (setf (py-object-attr module "ClientWebSocketResponse") *py-aiohttp-client-websocket-response-type*)
+  (setf (py-object-attr module "WSMessage") *py-aiohttp-ws-message-type*)
+  (setf (py-object-attr module "WSMsgType") (py-aiohttp-ws-msg-type-object))
+  module)
+
+(defun py-aiohttp-ws-msg-type-object ()
+  (let ((obj (make-py-object :type *py-object-type*)))
+    (setf (py-object-attr obj "TEXT") *py-aiohttp-ws-msg-text*)
+    (setf (py-object-attr obj "BINARY") *py-aiohttp-ws-msg-binary*)
+    (setf (py-object-attr obj "CLOSE") *py-aiohttp-ws-msg-close*)
+    (setf (py-object-attr obj "PING") *py-aiohttp-ws-msg-ping*)
+    (setf (py-object-attr obj "PONG") *py-aiohttp-ws-msg-pong*)
+    (setf (py-object-attr obj "CLOSED") *py-aiohttp-ws-msg-closed*)
+    (setf (py-object-attr obj "ERROR") *py-aiohttp-ws-msg-error*)
+    obj))
+
+(defun py-aiohttp-export-exceptions (module)
+  (setf (py-object-attr module "ClientError") *py-aiohttp-client-error-type*)
+  (setf (py-object-attr module "ClientResponseError") *py-aiohttp-client-response-error-type*)
+  (setf (py-object-attr module "ContentTypeError") *py-aiohttp-content-type-error-type*)
+  (setf (py-object-attr module "ClientConnectionError") *py-aiohttp-client-connection-error-type*)
+  (setf (py-object-attr module "ClientConnectorError") *py-aiohttp-client-connector-error-type*)
+  (setf (py-object-attr module "ClientPayloadError") *py-aiohttp-client-payload-error-type*)
+  (setf (py-object-attr module "InvalidURL") *py-aiohttp-invalid-url-type*)
+  (setf (py-object-attr module "TooManyRedirects") *py-aiohttp-too-many-redirects-type*)
+  (setf (py-object-attr module "ServerTimeoutError") *py-aiohttp-server-timeout-error-type*)
+  module)
+
+(defun py-aiohttp-export-all (module)
+  (py-aiohttp-export-client-api module)
+  (py-aiohttp-export-exceptions module)
+  module)
+
+(defun make-clamp-aiohttp-module ()
+  (let ((module (make-clamp-module "aiohttp")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in aiohttp-compatible offline module")
+    (setf (py-object-attr module "__all__")
+          (make-py-list
+           "ClientSession" "request" "get" "post" "put" "delete" "patch" "head" "options" "ws_connect"
+           "ClientTimeout" "TCPConnector" "BasicAuth" "FormData" "CookieJar" "ClientResponse" "ClientWebSocketResponse" "WSMessage" "WSMsgType"
+           "ClientError" "ClientResponseError" "ContentTypeError" "ClientConnectionError"
+           "ClientConnectorError" "ClientPayloadError" "InvalidURL" "TooManyRedirects" "ServerTimeoutError"))
+    (py-aiohttp-export-all module)))
+
+(defun make-clamp-aiohttp-client-module ()
+  (let ((module (make-clamp-module "aiohttp.client")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in aiohttp.client compatibility module")
+    (setf (py-object-attr module "__all__")
+          (make-py-list
+           "ClientSession" "request" "get" "post" "put" "delete" "patch" "head" "options" "ws_connect"
+           "ClientTimeout" "TCPConnector" "BasicAuth" "FormData" "CookieJar" "ClientResponse" "ClientWebSocketResponse" "WSMessage" "WSMsgType"))
+    (py-aiohttp-export-client-api module)))
+
+(defun make-clamp-aiohttp-client-exceptions-module ()
+  (let ((module (make-clamp-module "aiohttp.client_exceptions")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in aiohttp.client_exceptions compatibility module")
+    (setf (py-object-attr module "__all__")
+          (make-py-list
+           "ClientError" "ClientResponseError" "ContentTypeError" "ClientConnectionError"
+           "ClientConnectorError" "ClientPayloadError" "InvalidURL" "TooManyRedirects" "ServerTimeoutError"))
+    (py-aiohttp-export-exceptions module)))
+
+(defun make-clamp-aiohttp-connector-module ()
+  (let ((module (make-clamp-module "aiohttp.connector")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in aiohttp.connector compatibility module")
+    (setf (py-object-attr module "__all__") (make-py-list "TCPConnector"))
+    (setf (py-object-attr module "TCPConnector") #'py-aiohttp-tcp-connector)
+    module))
+
+(defun make-clamp-aiohttp-client-reqrep-module ()
+  (let ((module (make-clamp-module "aiohttp.client_reqrep")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in aiohttp.client_reqrep compatibility module")
+    (setf (py-object-attr module "__all__") (make-py-list "ClientResponse" "ClientWebSocketResponse" "WSMessage"))
+    (setf (py-object-attr module "ClientResponse") *py-aiohttp-client-response-type*)
+    (setf (py-object-attr module "ClientWebSocketResponse") *py-aiohttp-client-websocket-response-type*)
+    (setf (py-object-attr module "WSMessage") *py-aiohttp-ws-message-type*)
+    module))
+
+(defun py-aiohttp-set-header-constants (module)
+  (setf (py-object-attr module "METH_ANY") "*")
+  (setf (py-object-attr module "METH_CONNECT") "CONNECT")
+  (setf (py-object-attr module "METH_DELETE") "DELETE")
+  (setf (py-object-attr module "METH_GET") "GET")
+  (setf (py-object-attr module "METH_HEAD") "HEAD")
+  (setf (py-object-attr module "METH_OPTIONS") "OPTIONS")
+  (setf (py-object-attr module "METH_PATCH") "PATCH")
+  (setf (py-object-attr module "METH_POST") "POST")
+  (setf (py-object-attr module "METH_PUT") "PUT")
+  (setf (py-object-attr module "METH_TRACE") "TRACE")
+  (setf (py-object-attr module "ACCEPT") "ACCEPT")
+  (setf (py-object-attr module "ACCEPT_ENCODING") "ACCEPT-ENCODING")
+  (setf (py-object-attr module "AUTHORIZATION") "AUTHORIZATION")
+  (setf (py-object-attr module "CONTENT_LENGTH") "CONTENT-LENGTH")
+  (setf (py-object-attr module "CONTENT_TYPE") "CONTENT-TYPE")
+  (setf (py-object-attr module "COOKIE") "COOKIE")
+  (setf (py-object-attr module "HOST") "HOST")
+  (setf (py-object-attr module "LOCATION") "LOCATION")
+  (setf (py-object-attr module "SET_COOKIE") "SET-COOKIE")
+  (setf (py-object-attr module "USER_AGENT") "USER-AGENT")
+  module)
+
+(defun make-clamp-aiohttp-hdrs-module ()
+  (let ((module (make-clamp-module "aiohttp.hdrs")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in aiohttp.hdrs compatibility module")
+    (setf (py-object-attr module "__all__")
+          (make-py-list
+           "METH_ANY" "METH_CONNECT" "METH_DELETE" "METH_GET" "METH_HEAD" "METH_OPTIONS"
+           "METH_PATCH" "METH_POST" "METH_PUT" "METH_TRACE" "ACCEPT" "ACCEPT_ENCODING"
+           "AUTHORIZATION" "CONTENT_LENGTH" "CONTENT_TYPE" "COOKIE" "HOST" "LOCATION"
+           "SET_COOKIE" "USER_AGENT"))
+    (py-aiohttp-set-header-constants module)))
+
+(defun make-clamp-aiohttp-helpers-module ()
+  (let ((module (make-clamp-module "aiohttp.helpers")))
+    (setf (py-object-attr module "__doc__") "Clamp built-in aiohttp.helpers compatibility module")
+    (setf (py-object-attr module "__all__") (make-py-list "BasicAuth"))
+    (setf (py-object-attr module "BasicAuth") #'py-aiohttp-basic-auth)
+    module))
+
+(py-register-builtin-module "aiohttp" #'make-clamp-aiohttp-module)
+(py-register-builtin-module "aiohttp.client" #'make-clamp-aiohttp-client-module)
+(py-register-builtin-module "aiohttp.client_exceptions" #'make-clamp-aiohttp-client-exceptions-module)
+(py-register-builtin-module "aiohttp.connector" #'make-clamp-aiohttp-connector-module)
+(py-register-builtin-module "aiohttp.client_reqrep" #'make-clamp-aiohttp-client-reqrep-module)
+(py-register-builtin-module "aiohttp.hdrs" #'make-clamp-aiohttp-hdrs-module)
+(py-register-builtin-module "aiohttp.helpers" #'make-clamp-aiohttp-helpers-module)
+
+
+(defun py-keyword-argument-name (keyword)
+  (string-downcase (symbol-name keyword)))
+
+(defun py-bind-args (function-name param-names required-count defaults call-args)
+  (let* ((param-count (length param-names))
+         (values (make-array param-count :initial-element nil))
+         (supplied (make-array param-count :initial-element nil))
+         (pos-index 0)
+         (seen-keyword nil)
+         (remaining call-args))
+    (labels ((param-index (name)
+               (position name param-names :test #'string=))
+             (mark-value (index value source-name)
+               (when (aref supplied index)
+                 (error "~A() got multiple values for argument '~A'"
+                        function-name source-name))
+               (setf (aref values index) value)
+               (setf (aref supplied index) t)))
+      (loop while remaining
+            do (let ((item (pop remaining)))
+                 (cond
+                   ((keywordp item)
+                    (setf seen-keyword t)
+                    (unless remaining
+                      (error "~A() keyword argument ~A has no value"
+                             function-name item))
+                    (let* ((name (py-keyword-argument-name item))
+                           (index (param-index name)))
+                      (unless index
+                        (error "~A() got an unexpected keyword argument '~A'"
+                               function-name name))
+                      (mark-value index (pop remaining) name)))
+                   (seen-keyword
+                    (error "~A() positional argument follows keyword argument"
+                           function-name))
+                   (t
+                    (when (>= pos-index param-count)
+                      (error "~A() takes ~A positional arguments but more were given"
+                             function-name param-count))
+                    (mark-value pos-index item (nth pos-index param-names))
+                    (incf pos-index))))))
+    (loop for index from 0 below param-count
+          collect (cond
+                    ((aref supplied index)
+                     (aref values index))
+                    ((< index required-count)
+                     (error "~A() missing required argument: '~A'"
+                            function-name (nth index param-names)))
+                    (t
+                     (nth (- index required-count) defaults))))))
 
 (defun py-find-type-attr (type name)
   (multiple-value-bind (attr found) (gethash name (py-type-attrs type))
@@ -3151,19 +7639,34 @@
          (py-type-name (py-type-of obj))
          name))
 
+(defun py-instantiate-type (type &rest args)
+  (when (py-type-subtype-p type *py-base-exception-type*)
+    (return-from py-instantiate-type (apply #'make-py-exception type args)))
+  (let ((instance (make-py-instance type)))
+    (multiple-value-bind (initializer found) (py-find-type-attr type "__init__")
+      (when found
+        (let ((result (apply #'py-invoke-callable initializer instance args)))
+          (unless (eq result *py-none*)
+            (error "__init__() should return None, not ~A"
+                   (py-type-name (py-type-of result)))))))
+    instance))
+
 (defun py-invoke-callable (callable &rest args)
   (cond
     ((py-callable-p callable)
      (apply (py-callable-fn callable) args))
     ((functionp callable)
      (apply callable args))
+    ((py-type-p callable)
+     (apply #'py-instantiate-type callable args))
     (t
      (error "Python attribute is not callable: ~S" callable))))
 
 (defun py-callable (value)
   (py-bool
    (or (functionp value)
-       (py-callable-p value))))
+       (py-callable-p value)
+       (py-type-p value))))
 
 (defun py-type-subtype-p (derived cls)
   (cond
@@ -5406,7 +9909,8 @@
            (eq (py-object-type obj) *py-map-type*)
            (eq (py-object-type obj) *py-range-iterator-type*)
            (eq (py-object-type obj) *py-dict-key-iterator-type*)
-           (eq (py-object-type obj) *py-buffered-reader-type*))))
+           (eq (py-object-type obj) *py-buffered-reader-type*)
+           (eq (py-object-type obj) *py-asyncio-as-completed-type*))))
 
 (defun py-forward-list-iterator-p (obj)
   (and (py-object-p obj)
@@ -5884,6 +10388,8 @@
        (if (> (or (py-object-size line) 0) 0)
            line
            (py-raise *py-stop-iteration*))))
+    ((py-asyncio-as-completed-object-p iterator)
+     (py-asyncio-as-completed-next iterator))
     (t
      (error "Expected Python iterator, got ~S" iterator))))
 
@@ -5894,6 +10400,21 @@
       (if (py-stop-iteration-p condition)
           (values nil nil)
           (error condition)))))
+
+(defun py-unpack-sequence (value expected-count)
+  (let ((iterator (py-iter value))
+        (items '()))
+    (loop for index from 0 below expected-count
+          do (multiple-value-bind (item found) (py-next-item iterator)
+               (unless found
+                 (error "not enough values to unpack (expected ~A, got ~A)"
+                        expected-count index))
+               (push item items)))
+    (multiple-value-bind (extra found) (py-next-item iterator)
+      (declare (ignore extra))
+      (when found
+        (error "too many values to unpack (expected ~A)" expected-count)))
+    (nreverse items)))
 
 (defun py-list-iterator-length-hint (iterator)
   (let* ((sequence (py-list-iterator-object-sequence iterator))

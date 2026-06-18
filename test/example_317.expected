@@ -1,0 +1,4 @@
+b'ab'
+b'cdef' False True None
+[b'xyz'] True
+[(b'12345', False)]

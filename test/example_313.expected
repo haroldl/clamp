@@ -1,0 +1,8 @@
+b'ab'
+b'cdef'
+True
+b'line1\n'
+b'line2'
+True
+[b'abc', b'def', b'g']
+True

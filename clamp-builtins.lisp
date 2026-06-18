@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print :min :max :sum :sorted :abs :round :filter :map :hash :list :tuple :slice :chr :hex :type :str)
-  (:export :test :dir :plus :times :__import__ :print :len :bool :callable :isinstance :repr :ascii :str :type :id :iter :next :reversed :min :max :sum :sorted :list :tuple :abs :round :hash :pow :divmod :all :any :enumerate :zip :filter :map :range :slice :bin :oct :hex :chr :ord :assign :notimplemented))
+  (:export :test :dir :plus :times :__import__ :print :len :bool :callable :isinstance :repr :ascii :str :type :id :iter :next :aiter :anext :reversed :min :max :sum :sorted :list :tuple :abs :round :hash :pow :divmod :all :any :enumerate :zip :filter :map :range :slice :bin :oct :hex :chr :ord :assign :notimplemented :baseexception :exception :runtimeerror :typeerror :valueerror :lookuperror :timeouterror :stopiteration :stopasynciteration))
 
 (in-package "CLAMP.__builtins__")
 
@@ -31,6 +31,33 @@
 
 (defvar NotImplemented
   |CLAMP.__CLAMP_INTERNALS__|:*PY-NOT-IMPLEMENTED*)
+
+(defvar BaseException
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-BASE-EXCEPTION-TYPE*)
+
+(defvar Exception
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-EXCEPTION-TYPE*)
+
+(defvar StopIteration
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-STOP-ITERATION-TYPE*)
+
+(defvar RuntimeError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-RUNTIME-ERROR-TYPE*)
+
+(defvar TypeError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-TYPE-ERROR-TYPE*)
+
+(defvar ValueError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-VALUE-ERROR-TYPE*)
+
+(defvar LookupError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-LOOKUP-ERROR-TYPE*)
+
+(defvar TimeoutError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-TIMEOUT-ERROR-TYPE*)
+
+(defvar StopAsyncIteration
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-STOP-ASYNC-ITERATION-TYPE*)
 
 (defvar plus
   (lambda (&rest xs)
@@ -120,6 +147,22 @@
             (|CLAMP.__CLAMP_INTERNALS__|:PY-NEXT-ITEM iterator)
           (if found item default))
         (|CLAMP.__CLAMP_INTERNALS__|:PY-NEXT iterator))))
+
+(defvar aiter
+  (lambda (obj)
+    (|CLAMP.__CLAMP_INTERNALS__|:PY-AITER obj)))
+
+(defvar anext
+  (lambda (iterator &optional
+                    (default |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE* default-supplied-p))
+    (if default-supplied-p
+        (|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-COROUTINE
+         "anext"
+         (lambda ()
+           (common-lisp:multiple-value-bind (item found)
+               (|CLAMP.__CLAMP_INTERNALS__|:PY-ANEXT-ITEM iterator)
+             (if found item default))))
+        (|CLAMP.__CLAMP_INTERNALS__|:PY-CALL-ATTR iterator "__anext__"))))
 
 (defvar reversed
   (lambda (obj)

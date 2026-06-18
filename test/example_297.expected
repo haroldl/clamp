@@ -1,0 +1,10 @@
+Handle False
+None
+True
+TimerHandle False
+callback first
+callback later
+['first', 'later']
+None
+True
+['first', 'later']

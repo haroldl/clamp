@@ -1,0 +1,3 @@
+default 404 Not Found
+override 404
+request 404

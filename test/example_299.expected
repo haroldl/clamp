@@ -1,0 +1,10 @@
+False
+first True
+second True
+None
+False ['first', 'second']
+None
+False ['first', 'second']
+second True
+None
+['first', 'second', 'second']

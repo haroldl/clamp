@@ -1,0 +1,5 @@
+404 False
+True
+404 Not Found
+GET file:///tmp/clamp-aiohttp-missing-file-for-raise-status
+None

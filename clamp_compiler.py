@@ -80,23 +80,82 @@ def codegen(node, context : Context = Context(top_level_stmt=False)):
         )
 
 
-def codegen_assign(node, context : Context):
-    # Standalone assignment form. Prefer codegen_block to orchestrate proper scoping.
-    # Fallback: emit ASSIGN without a body.
-    if len(node.targets) == 1:
-        target = node.targets[0]
-        rhs = codegen(node.value, context.child())
-        if isinstance(target, ast.Subscript):
-            return codegen_subscript_store(target, rhs, context.child())
-        if isinstance(target, ast.Attribute):
-            return codegen_attribute_store(target, rhs, context.child())
-        lhs = codegen(target, context.child())
+def target_binding_names(target):
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names = []
+        for elt in target.elts:
+            for name in target_binding_names(elt):
+                if name not in names:
+                    names.append(name)
+        return names
+    return []
+
+
+def codegen_target_bindings(target, context: Context):
+    return " ".join(
+        f"({map_name(name)} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)"
+        for name in target_binding_names(target)
+    )
+
+
+def codegen_store_target(target, value_code: str, context: Context):
+    child_context = context.child()
+    if isinstance(target, ast.Name):
+        lhs = codegen(target, child_context)
         if context.top_level_stmt:
-            return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {codegen(target.id, context.child())} {lhs} {rhs})"
-        else:
-            return f"(|CLAMP.__builtins__|:ASSIGN ({lhs} {rhs}))"
-    else:
+            return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {codegen(target.id, child_context)} {lhs} {value_code})"
+        return f"(common-lisp:setf {lhs} {value_code})"
+    if isinstance(target, ast.Subscript):
+        return codegen_subscript_store(target, value_code, child_context)
+    if isinstance(target, ast.Attribute):
+        return codegen_attribute_store(target, value_code, child_context)
+    if isinstance(target, (ast.Tuple, ast.List)):
+        unpacked_symbol = f"__clamp_unpack_{id(target)}"
+        stores = " ".join(
+            codegen_store_target(elt, f"(common-lisp:nth {index} {unpacked_symbol})", context)
+            for index, elt in enumerate(target.elts)
+        )
+        return (
+            f"(common-lisp:let (({unpacked_symbol} "
+            f"(|CLAMP.__CLAMP_INTERNALS__|:PY-UNPACK-SEQUENCE {value_code} {len(target.elts)}))) "
+            f"{stores})"
+        )
+    raise Exception(f"TODO: unsupported assignment target {type(target)}")
+
+
+def codegen_assign(node, context : Context):
+    if len(node.targets) != 1:
         raise Exception("TODO: destructuring bind")
+    return codegen_store_target(node.targets[0], codegen(node.value, context.child()), context)
+
+
+def node_contains_yield(node):
+    return any(isinstance(child, (ast.Yield, ast.YieldFrom)) for child in ast.walk(node))
+
+
+def apply_function_decorators(node, context: Context, target_expr: str) -> str:
+    decorated = target_expr
+    for decorator in reversed(node.decorator_list):
+        decorated = (
+            f"(|CLAMP.__CLAMP_INTERNALS__|:PY-INVOKE-CALLABLE "
+            f"{codegen(decorator, context.child())} {decorated})"
+        )
+    return decorated
+
+
+def decorated_function_rebind(node, context: Context) -> str:
+    if not node.decorator_list:
+        return ""
+    target = map_name(node.name)
+    decorated = apply_function_decorators(node, context, target)
+    if context.top_level_stmt:
+        return (
+            f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL "
+            f"{codegen(node.name, context.child())} {target} {decorated})"
+        )
+    return f"(common-lisp:setf {target} {decorated})"
 
 
 def codegen_block(stmts, context: Context) -> str:
@@ -125,8 +184,14 @@ def codegen_block(stmts, context: Context) -> str:
             rest_code = codegen_block(rest, context)
             return first_code + ("\n" + rest_code if rest_code else "")
         if not isinstance(target, ast.Name):
-            first_code = codegen_assign(first, context)
+            rhs = codegen(first.value, context.child())
+            first_code = codegen_store_target(target, rhs, context)
             rest_code = codegen_block(rest, context)
+            if isinstance(target, (ast.Tuple, ast.List)) and not context.top_level_stmt and not context.mutation_context:
+                bindings = codegen_target_bindings(target, context)
+                if bindings:
+                    body = first_code + ("\n" + rest_code if rest_code else "")
+                    return f"(common-lisp:let ({bindings}) {body})"
             return first_code + ("\n" + rest_code if rest_code else "")
 
         lhs = codegen(target, context.child())
@@ -153,6 +218,27 @@ def codegen_block(stmts, context: Context) -> str:
         rest_code = codegen_block(rest, context)
         return first_code + ("\n" + rest_code if rest_code else "")
 
+    if isinstance(first, (ast.For, ast.AsyncFor, ast.AsyncWith)) and not context.top_level_stmt and not context.mutation_context:
+        names = []
+        if isinstance(first, ast.AsyncWith):
+            for item in first.items:
+                if item.optional_vars:
+                    for name in target_binding_names(item.optional_vars):
+                        if name not in names:
+                            names.append(name)
+        else:
+            names = target_binding_names(first.target)
+        if names:
+            bindings = " ".join(
+                f"({map_name(name)} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)"
+                for name in names
+            )
+            mutation_context = replace(context, mutation_context=True)
+            first_code = codegen(first, mutation_context)
+            rest_code = codegen_block(rest, mutation_context)
+            body = first_code + ("\n" + rest_code if rest_code else "")
+            return f"(common-lisp:let ({bindings}) {body})"
+
     if isinstance(first, (ast.Import, ast.ImportFrom)) and not context.top_level_stmt and not context.mutation_context:
         return codegen_import_block(first, rest, context)
 
@@ -162,6 +248,37 @@ def codegen_block(stmts, context: Context) -> str:
     return first_code + ("\n" + rest_code if rest_code else "")
 
 
+
+def codegen_args_with_keyword_support(args, context: Context, default_symbols=None, owner_id=None):
+    default_symbols = default_symbols or []
+    owner_id = owner_id or id(args)
+    if args.posonlyargs or args.kwonlyargs or args.vararg or args.kwarg:
+        raise Exception("TODO: unsupported function parameter shape")
+    call_args = f"__clamp_call_args_{owner_id}"
+    bound_args = f"__clamp_bound_args_{owner_id}"
+    param_names = "'(" + " ".join(lisp_string(arg.arg) for arg in args.args) + ")"
+    required_count = len(args.args) - len(default_symbols)
+    defaults = (
+        "(common-lisp:list " + " ".join(default_symbols) + ")"
+        if default_symbols else
+        "COMMON-LISP::nil"
+    )
+    lambda_list = f"common-lisp:&rest {call_args}"
+    bindings = [
+        f"({arg.arg} (common-lisp:nth {index} {bound_args}))"
+        for index, arg in enumerate(args.args)
+    ]
+    body_prefix = (
+        f"(common-lisp:let* (({bound_args} "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-BIND-ARGS {lisp_string(owner_id if isinstance(owner_id, str) else str(owner_id))} "
+        f"{param_names} {required_count} {defaults} {call_args})) "
+        + " ".join(bindings)
+        + ") "
+    )
+    body_suffix = ")"
+    return lambda_list, body_prefix, body_suffix
+
+
 def codegen_function(node, context : Context):
     child_context = context.child()
 
@@ -169,7 +286,7 @@ def codegen_function(node, context : Context):
         f"__clamp_default_{id(node)}_{index}"
         for index, _ in enumerate(node.args.defaults)
     ]
-    params = codegen_args(node.args, child_context, default_symbols)
+    params, arg_body_prefix, arg_body_suffix = codegen_args_with_keyword_support(node.args, child_context, default_symbols, node.name)
 
     # Python is a Lisp-1, Common Lisp is a Lisp-2
     # For compiled Python code running in SBCL, we'll put functions and other variables in the
@@ -192,24 +309,30 @@ def codegen_function(node, context : Context):
     hed = (
         setter
         + f"{default_bindings}"
-        + f"(common-lisp:lambda ({params}) (common-lisp:block {node.name} "
+        + f"(common-lisp:lambda ({params}) {arg_body_prefix}(common-lisp:block {node.name} "
     )
 
     body_context = replace(child_context, block_name=node.name)
     bod = codegen_block(node.body, body_context)
+    body = f"(common-lisp:progn {bod} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)" if bod else "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
 
-    return hed + bod + ")))" + (")" if default_bindings else "") + "\n"
+    definition = hed + body + ")))" + arg_body_suffix + ( ")" if default_bindings else "")
+    rebind = decorated_function_rebind(node, context)
+    if rebind:
+        return f"(common-lisp:progn {definition} {rebind})\n"
+    return definition + "\n"
 
 
 
 def codegen_async_function(node, context: Context):
     child_context = context.child()
+    is_async_generator = node_contains_yield(node)
 
     default_symbols = [
         f"__clamp_default_{id(node)}_{index}"
         for index, _ in enumerate(node.args.defaults)
     ]
-    params = codegen_args(node.args, child_context, default_symbols)
+    params, arg_body_prefix, arg_body_suffix = codegen_args_with_keyword_support(node.args, child_context, default_symbols, node.name)
 
     default_bindings = ""
     if node.args.defaults:
@@ -226,11 +349,13 @@ def codegen_async_function(node, context: Context):
         if context.top_level_stmt
         else f"(common-lisp:setf {node.name} "
     )
+    maker = "MAKE-PY-ASYNC-GENERATOR" if is_async_generator else "MAKE-PY-COROUTINE"
     hed = (
         setter
         + f"{default_bindings}"
-        + f"(common-lisp:lambda ({params}) "
-        + f"(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-COROUTINE {lisp_string(node.name)} "
+        + f"(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-CALLABLE :NAME {lisp_string(node.name)} :COROUTINE-FUNCTION COMMON-LISP:T :ASYNC-GENERATOR-FUNCTION {'COMMON-LISP:T' if is_async_generator else 'COMMON-LISP:NIL'} :FN "
+        + f"(common-lisp:lambda ({params}) {arg_body_prefix}"
+        + f"(|CLAMP.__CLAMP_INTERNALS__|:{maker} {lisp_string(node.name)} "
         + f"(common-lisp:lambda () (common-lisp:block {node.name} "
     )
 
@@ -238,17 +363,116 @@ def codegen_async_function(node, context: Context):
     bod = codegen_block(node.body, body_context)
     body = f"(common-lisp:progn {bod} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)" if bod else "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
 
-    return hed + body + ")))))" + (")" if default_bindings else "") + "\n"
+    definition = hed + body + "))))))" + arg_body_suffix + ( ")" if default_bindings else "")
+    rebind = decorated_function_rebind(node, context)
+    if rebind:
+        return f"(common-lisp:progn {definition} {rebind})\n"
+    return definition + "\n"
+
+
+
+def codegen_function_lambda(node, context: Context, async_function: bool = False):
+    child_context = context.child()
+    default_symbols = [
+        f"__clamp_default_{id(node)}_{index}"
+        for index, _ in enumerate(node.args.defaults)
+    ]
+    params, arg_body_prefix, arg_body_suffix = codegen_args_with_keyword_support(node.args, child_context, default_symbols, node.name)
+    default_bindings = ""
+    if node.args.defaults:
+        default_bindings = (
+            "(common-lisp:let ("
+            + " ".join(
+                f"({symbol} {codegen(default, child_context)})"
+                for symbol, default in zip(default_symbols, node.args.defaults)
+            )
+            + ") "
+        )
+    if async_function:
+        is_async_generator = node_contains_yield(node)
+        maker = "MAKE-PY-ASYNC-GENERATOR" if is_async_generator else "MAKE-PY-COROUTINE"
+        body_context = replace(child_context, block_name=node.name, in_async_function=True)
+        bod = codegen_block(node.body, body_context)
+        body = f"(common-lisp:progn {bod} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)" if bod else "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
+        expr = (
+            f"{default_bindings}(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-CALLABLE :NAME {lisp_string(node.name)} :COROUTINE-FUNCTION COMMON-LISP:T :ASYNC-GENERATOR-FUNCTION {'COMMON-LISP:T' if is_async_generator else 'COMMON-LISP:NIL'} :FN "
+            f"(common-lisp:lambda ({params}) {arg_body_prefix}"
+            f"(|CLAMP.__CLAMP_INTERNALS__|:{maker} {lisp_string(node.name)} "
+            f"(common-lisp:lambda () (common-lisp:block {node.name} {body}))))"
+            f"{arg_body_suffix})"
+            + (")" if default_bindings else "")
+        )
+    else:
+        body_context = replace(child_context, block_name=node.name)
+        bod = codegen_block(node.body, body_context)
+        body = f"(common-lisp:progn {bod} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)" if bod else "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
+        expr = (
+            f"{default_bindings}(common-lisp:lambda ({params}) {arg_body_prefix}"
+            f"(common-lisp:block {node.name} {body}))"
+            f"{arg_body_suffix}"
+            + (")" if default_bindings else "")
+        )
+    return expr
+
+
+def codegen_class(node, context: Context):
+    if node.bases:
+        raise Exception("TODO: class inheritance is not supported yet")
+    child_context = context.child()
+    class_symbol = map_name(node.name)
+    type_symbol = f"__clamp_class_{id(node)}"
+    forms = []
+    for stmt in node.body:
+        if isinstance(stmt, ast.Pass):
+            continue
+        if isinstance(stmt, ast.FunctionDef):
+            forms.append(
+                f"(common-lisp:setf (|CLAMP.__CLAMP_INTERNALS__|:PY-TYPE-ATTR {type_symbol} {lisp_string(stmt.name)}) "
+                f"{codegen_function_lambda(stmt, child_context, async_function=False)})"
+            )
+        elif isinstance(stmt, ast.AsyncFunctionDef):
+            forms.append(
+                f"(common-lisp:setf (|CLAMP.__CLAMP_INTERNALS__|:PY-TYPE-ATTR {type_symbol} {lisp_string(stmt.name)}) "
+                f"{codegen_function_lambda(stmt, child_context, async_function=True)})"
+            )
+        elif isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+            forms.append(
+                f"(common-lisp:setf (|CLAMP.__CLAMP_INTERNALS__|:PY-TYPE-ATTR {type_symbol} {lisp_string(stmt.targets[0].id)}) "
+                f"{codegen(stmt.value, child_context)})"
+            )
+        else:
+            raise Exception(f"TODO: unsupported class body node {type(stmt)}")
+    forms_code = " ".join(forms) if forms else "COMMON-LISP::nil"
+    make_type = (
+        f"(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-TYPE :TYPE |CLAMP.__CLAMP_INTERNALS__|:*PY-TYPE-TYPE* "
+        f":NAME {lisp_string(node.name)} :BASES (common-lisp:list |CLAMP.__CLAMP_INTERNALS__|:*PY-OBJECT-TYPE*) :BASICSIZE 1)"
+    )
+    if context.top_level_stmt:
+        return (
+            f"(common-lisp:let (({type_symbol} {make_type})) "
+            f"{forms_code} "
+            f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SET-GLOBAL {lisp_string(node.name)} {class_symbol} {type_symbol}))"
+        )
+    return (
+        f"(|CLAMP.__builtins__|:ASSIGN ({class_symbol} {make_type}) "
+        f"(common-lisp:let (({type_symbol} {class_symbol})) {forms_code} {class_symbol}))"
+    )
 
 
 def codegen_funcall(node, context : Context):
     child_context = context.child()
     args = [codegen(a, child_context) for a in node.args]
+    keyword_args = []
+    for keyword in node.keywords:
+        if keyword.arg is None:
+            raise Exception("TODO: **kwargs calls are not supported yet")
+        keyword_args.extend([f":{keyword.arg}", codegen(keyword.value, child_context)])
+    all_args = [*args, *keyword_args]
 
     if isinstance(node.func, ast.Attribute):
         owner = codegen(node.func.value, child_context)
         attr = codegen(node.func.attr, child_context)
-        args_str = " ".join(args)
+        args_str = " ".join(all_args)
         return (
             "(|CLAMP.__CLAMP_INTERNALS__|:PY-CALL-ATTR "
             f"{owner} {attr}"
@@ -257,11 +481,13 @@ def codegen_funcall(node, context : Context):
         )
 
     target = codegen(node.func, child_context)
-    args_str = " ".join(args)
+    args_str = " ".join(all_args)
     # Map builtins that must resolve before USE-PACKAGE takes effect.
-    if isinstance(node.func, ast.Name) and node.func.id.lower() in {"__import__", "print", "len", "bool", "callable", "isinstance", "repr", "ascii", "str", "type", "id", "iter", "next", "reversed", "min", "max", "sum", "sorted", "list", "tuple", "abs", "round", "hash", "pow", "divmod", "all", "any", "enumerate", "zip", "filter", "map", "range", "slice", "bin", "oct", "hex", "chr", "ord"}:
+    if isinstance(node.func, ast.Name) and node.func.id.lower() in {"__import__", "print", "len", "bool", "callable", "isinstance", "repr", "ascii", "str", "type", "id", "iter", "next", "aiter", "anext", "reversed", "min", "max", "sum", "sorted", "list", "tuple", "abs", "round", "hash", "pow", "divmod", "all", "any", "enumerate", "zip", "filter", "map", "range", "slice", "bin", "oct", "hex", "chr", "ord"}:
         target = f"|CLAMP.__builtins__|:{node.func.id.upper()}"
-    return f"(common-lisp:funcall {target} {args_str})"
+    if args_str:
+        return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-INVOKE-CALLABLE {target} {args_str})"
+    return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-INVOKE-CALLABLE {target})"
 
 
 
@@ -270,6 +496,15 @@ def codegen_await(node, context: Context):
         raise Exception("'await' outside async function")
     awaited = codegen(node.value, context.child())
     return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-AWAIT {awaited})"
+
+
+def codegen_yield(node, context: Context):
+    if not context.in_async_function:
+        raise Exception("TODO: synchronous generators are not supported yet")
+    if isinstance(node, ast.YieldFrom):
+        raise Exception("TODO: yield from is not supported in async generators")
+    value = codegen(node.value, context.child()) if node.value else "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
+    return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-ASYNC-GENERATOR-YIELD {value})"
 
 
 def lisp_string(value: str) -> str:
@@ -298,6 +533,60 @@ def codegen_return(node, context : Context):
         raise Exception("Trying to return but not inside a lexical scope.")
     retval = codegen(node.value, context.child())
     return f"(common-lisp:return-from {context.block_name} {retval})"
+
+
+def codegen_raise(node, context: Context):
+    if node.cause is not None:
+        raise Exception("TODO: raise ... from ... is not supported yet")
+    if node.exc is None:
+        raise Exception("TODO: bare raise is not supported yet")
+    exception = codegen(node.exc, context.child())
+    return f"(|CLAMP.__CLAMP_INTERNALS__|:PY-RAISE {exception})"
+
+
+def codegen_try_without_finally(node, context: Context):
+    child_context = context.child()
+    condition_symbol = f"__clamp_try_condition_{id(node)}"
+    exception_symbol = f"__clamp_try_exception_{id(node)}"
+    normal_body = [*node.body, *node.orelse]
+    body = codegen_block(normal_body, child_context) or "COMMON-LISP::nil"
+    if not node.handlers:
+        return f"(common-lisp:progn {body})"
+
+    clauses = []
+    bare_seen = False
+    for handler in node.handlers:
+        handler_body = codegen_block(handler.body, child_context) or "COMMON-LISP::nil"
+        if handler.name:
+            handler_body = f"(common-lisp:let (({map_name(handler.name)} {exception_symbol})) {handler_body})"
+        if handler.type is None:
+            bare_seen = True
+            clauses.append(f"(common-lisp:t {handler_body})")
+        else:
+            if bare_seen:
+                raise Exception("default 'except:' must be last")
+            handler_type = codegen(handler.type, child_context)
+            clauses.append(
+                f"((|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P "
+                f"(|CLAMP.__CLAMP_INTERNALS__|:PY-ISINSTANCE {exception_symbol} {handler_type})) "
+                f"{handler_body})"
+            )
+    clauses.append(f"(common-lisp:t (common-lisp:error {condition_symbol}))")
+    return (
+        f"(common-lisp:handler-case (common-lisp:progn {body}) "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION ({condition_symbol}) "
+        f"(common-lisp:let (({exception_symbol} "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION-VALUE {condition_symbol}))) "
+        f"(common-lisp:cond {' '.join(clauses)}))))"
+    )
+
+
+def codegen_try(node, context: Context):
+    if node.finalbody:
+        try_body = codegen_try_without_finally(node, context)
+        final_body = codegen_block(node.finalbody, context.child()) or "COMMON-LISP::nil"
+        return f"(common-lisp:unwind-protect {try_body} (common-lisp:progn {final_body}))"
+    return codegen_try_without_finally(node, context)
 
 
 def codegen_binary_operator(node, context : Context):
@@ -336,6 +625,86 @@ def codegen_compare(node, context: Context):
 
     left_symbol = f"{base}_left"
     return f"(common-lisp:let (({left_symbol} {operand_codes[0]})) {build(0, left_symbol)})"
+
+
+def codegen_comprehension_loop(node, context: Context, emit_body):
+    if not node.generators:
+        return emit_body()
+    if any(generator.is_async for generator in node.generators) and not context.in_async_function:
+        raise Exception("asynchronous comprehension outside async function")
+
+    child_context = context.child()
+
+    def truthy_filters(generator):
+        if not generator.ifs:
+            return None
+        checks = [
+            f"(|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P {codegen(condition, child_context)})"
+            for condition in generator.ifs
+        ]
+        return "(common-lisp:and " + " ".join(checks) + ")"
+
+    def build_generator(index: int) -> str:
+        if index == len(node.generators):
+            return emit_body()
+        generator = node.generators[index]
+        gen_id = f"{id(node)}_{index}"
+        iterator_symbol = f"__clamp_comp_iterator_{gen_id}"
+        item_symbol = f"__clamp_comp_item_{gen_id}"
+        found_symbol = f"__clamp_comp_found_{gen_id}"
+        target_bindings = codegen_target_bindings(generator.target, child_context)
+        target_store = codegen_store_target(generator.target, item_symbol, child_context)
+        body = build_generator(index + 1)
+        filter_code = truthy_filters(generator)
+        if filter_code:
+            body = f"(common-lisp:when {filter_code} {body})"
+        iter_fn = "PY-AITER" if generator.is_async else "PY-ITER"
+        next_fn = "PY-ANEXT-ITEM" if generator.is_async else "PY-NEXT-ITEM"
+        iterable = codegen(generator.iter, child_context)
+        return (
+            f"(common-lisp:let ({target_bindings}) "
+            f"(common-lisp:let (({iterator_symbol} (|CLAMP.__CLAMP_INTERNALS__|:{iter_fn} {iterable}))) "
+            f"(common-lisp:loop "
+            f"(common-lisp:multiple-value-bind ({item_symbol} {found_symbol}) "
+            f"(|CLAMP.__CLAMP_INTERNALS__|:{next_fn} {iterator_symbol}) "
+            f"(common-lisp:unless {found_symbol} (common-lisp:return)) "
+            f"{target_store} "
+            f"{body}))))"
+        )
+
+    return build_generator(0)
+
+
+def codegen_listcomp(node, context: Context):
+    result_symbol = f"__clamp_listcomp_result_{id(node)}"
+    child_context = context.child()
+
+    def emit_body():
+        return (
+            f"(|CLAMP.__CLAMP_INTERNALS__|:PY-APPEND {result_symbol} "
+            f"{codegen(node.elt, child_context)})"
+        )
+
+    return (
+        f"(common-lisp:let (({result_symbol} (|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-LIST))) "
+        f"{codegen_comprehension_loop(node, context, emit_body)} {result_symbol})"
+    )
+
+
+def codegen_dictcomp(node, context: Context):
+    result_symbol = f"__clamp_dictcomp_result_{id(node)}"
+    child_context = context.child()
+
+    def emit_body():
+        return (
+            f"(|CLAMP.__CLAMP_INTERNALS__|:PY-SETITEM {result_symbol} "
+            f"{codegen(node.key, child_context)} {codegen(node.value, child_context)})"
+        )
+
+    return (
+        f"(common-lisp:let (({result_symbol} (|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-DICT-FROM-PAIRS))) "
+        f"{codegen_comprehension_loop(node, context, emit_body)} {result_symbol})"
+    )
 
 
 def codegen_bool_operator(node, context: Context):
@@ -412,6 +781,11 @@ def codegen_augassign(node, context: Context):
             f"{target} {index} {value_code})"
         )
 
+    if isinstance(node.target, ast.Attribute):
+        current = codegen(node.target, child_context)
+        value_code = f"({op} {current} {rhs})"
+        return codegen_attribute_store(node.target, value_code, child_context)
+
     raise Exception("TODO: unsupported augmented assignment target")
 
 
@@ -426,8 +800,6 @@ def codegen_unary_operator(node, context: Context):
 def codegen_async_for(node, context: Context):
     if not context.in_async_function:
         raise Exception("'async for' outside async function")
-    if not isinstance(node.target, ast.Name):
-        raise Exception("TODO: unsupported async for loop target")
 
     child_context = context.child()
     loop_id = id(node)
@@ -437,7 +809,9 @@ def codegen_async_for(node, context: Context):
     loop_block_name = f"__clamp_async_loop_{loop_id}"
     loop_continue_name = f"__clamp_async_loop_continue_{loop_id}"
     loop_broke_name = f"__clamp_async_loop_broke_{loop_id}"
-    target = codegen(node.target, child_context)
+    target = codegen(node.target, child_context) if isinstance(node.target, ast.Name) else None
+    target_bindings = "" if context.mutation_context else codegen_target_bindings(node.target, child_context)
+    target_store = codegen_store_target(node.target, item_symbol, child_context)
     iterable = codegen(node.iter, child_context)
     body_context = replace(
         child_context,
@@ -449,14 +823,14 @@ def codegen_async_for(node, context: Context):
     body = codegen_block(node.body, body_context) or "COMMON-LISP::nil"
     loop_code = (
         f"(common-lisp:let (({loop_broke_name} COMMON-LISP::nil) "
-        f"({target} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)) "
+        f"{target_bindings}) "
         f"(common-lisp:let (({iterator_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-AITER {iterable}))) "
         f"(common-lisp:block {loop_block_name} "
         f"(common-lisp:loop "
         f"(common-lisp:multiple-value-bind ({item_symbol} {found_symbol}) "
         f"(|CLAMP.__CLAMP_INTERNALS__|:PY-ANEXT-ITEM {iterator_symbol}) "
         f"(common-lisp:unless {found_symbol} (common-lisp:return)) "
-        f"(common-lisp:setf {target} {item_symbol}) "
+        f"{target_store} "
         f"(common-lisp:block {loop_continue_name} "
         f"(common-lisp:progn {body}))))))"
     )
@@ -469,41 +843,124 @@ def codegen_async_for(node, context: Context):
     return loop_code + ")"
 
 
-def codegen_async_with(node, context: Context):
-    if not context.in_async_function:
-        raise Exception("'async with' outside async function")
-    if len(node.items) != 1:
-        raise Exception("TODO: multiple async with items are not supported yet")
+
+def codegen_with(node, context: Context):
+    if len(node.items) > 1:
+        nested = ast.With(
+            items=node.items[1:],
+            body=node.body,
+            type_comment=getattr(node, "type_comment", None),
+        )
+        ast.copy_location(nested, node)
+        outer = ast.With(
+            items=[node.items[0]],
+            body=[nested],
+            type_comment=getattr(node, "type_comment", None),
+        )
+        ast.copy_location(outer, node)
+        return codegen_with(outer, context)
     item = node.items[0]
-    if item.optional_vars and not isinstance(item.optional_vars, ast.Name):
-        raise Exception("TODO: unsupported async with target")
 
     child_context = context.child()
-    manager_symbol = f"__clamp_async_with_manager_{id(node)}"
-    exit_symbol = f"__clamp_async_with_exit_{id(node)}"
-    value_symbol = f"__clamp_async_with_value_{id(node)}"
+    with_id = id(node)
+    manager_symbol = f"__clamp_with_manager_{with_id}"
+    exit_symbol = f"__clamp_with_exit_{with_id}"
+    value_symbol = f"__clamp_with_value_{with_id}"
+    condition_symbol = f"__clamp_with_condition_{with_id}"
+    exception_symbol = f"__clamp_with_exception_{with_id}"
+    handled_symbol = f"__clamp_with_handled_{with_id}"
     manager = codegen(item.context_expr, child_context)
     body = codegen_block(node.body, child_context) or "COMMON-LISP::nil"
     if item.optional_vars:
-        target = codegen(item.optional_vars, child_context)
-        body = f"(common-lisp:let (({target} {value_symbol})) {body})"
+        target_bindings = codegen_target_bindings(item.optional_vars, child_context)
+        target_store = codegen_store_target(item.optional_vars, value_symbol, child_context)
+        if target_bindings and not context.mutation_context:
+            body = f"(common-lisp:let ({target_bindings}) {target_store} {body})"
+        else:
+            body = f"(common-lisp:progn {target_store} {body})"
+    none = "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
+    exit_call = f"(|CLAMP.__CLAMP_INTERNALS__|:PY-INVOKE-CALLABLE {exit_symbol} {manager_symbol}"
+    return (
+        f"(common-lisp:let* (({manager_symbol} {manager}) "
+        f"({exit_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-LOOKUP-ATTR {manager_symbol} \"__exit__\")) "
+        f"({value_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-CALL-ATTR {manager_symbol} \"__enter__\"))) "
+        f"(common-lisp:handler-case "
+        f"(common-lisp:prog1 (common-lisp:progn {body}) "
+        f"{exit_call} {none} {none} {none})) "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION ({condition_symbol}) "
+        f"(common-lisp:let* (({exception_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION-VALUE {condition_symbol})) "
+        f"({handled_symbol} {exit_call} (|CLAMP.__CLAMP_INTERNALS__|:PY-TYPE-OF {exception_symbol}) {exception_symbol} {condition_symbol}))) "
+        f"(common-lisp:if (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P {handled_symbol}) "
+        f"{none} (common-lisp:error {condition_symbol})))) "
+        f"(common-lisp:error ({condition_symbol}) "
+        f"(common-lisp:let (({handled_symbol} {exit_call} {none} {condition_symbol} {condition_symbol}))) "
+        f"(common-lisp:if (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P {handled_symbol}) "
+        f"{none} (common-lisp:error {condition_symbol}))))))"
+    )
+
+
+def codegen_async_with(node, context: Context):
+    if not context.in_async_function:
+        raise Exception("'async with' outside async function")
+    if len(node.items) > 1:
+        nested = ast.AsyncWith(
+            items=node.items[1:],
+            body=node.body,
+            type_comment=getattr(node, "type_comment", None),
+        )
+        ast.copy_location(nested, node)
+        outer = ast.AsyncWith(
+            items=[node.items[0]],
+            body=[nested],
+            type_comment=getattr(node, "type_comment", None),
+        )
+        ast.copy_location(outer, node)
+        return codegen_async_with(outer, context)
+    item = node.items[0]
+
+    child_context = context.child()
+    with_id = id(node)
+    manager_symbol = f"__clamp_async_with_manager_{with_id}"
+    exit_symbol = f"__clamp_async_with_exit_{with_id}"
+    value_symbol = f"__clamp_async_with_value_{with_id}"
+    condition_symbol = f"__clamp_async_with_condition_{with_id}"
+    exception_symbol = f"__clamp_async_with_exception_{with_id}"
+    handled_symbol = f"__clamp_async_with_handled_{with_id}"
+    manager = codegen(item.context_expr, child_context)
+    body = codegen_block(node.body, child_context) or "COMMON-LISP::nil"
+    if item.optional_vars:
+        target_bindings = codegen_target_bindings(item.optional_vars, child_context)
+        target_store = codegen_store_target(item.optional_vars, value_symbol, child_context)
+        if target_bindings and not context.mutation_context:
+            body = f"(common-lisp:let ({target_bindings}) {target_store} {body})"
+        else:
+            body = f"(common-lisp:progn {target_store} {body})"
+    none = "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
+    exit_call = (
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-AWAIT "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-INVOKE-CALLABLE {exit_symbol} {manager_symbol}"
+    )
     return (
         f"(common-lisp:let* (({manager_symbol} {manager}) "
         f"({exit_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-LOOKUP-ATTR {manager_symbol} \"__aexit__\")) "
         f"({value_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-AWAIT "
         f"(|CLAMP.__CLAMP_INTERNALS__|:PY-CALL-ATTR {manager_symbol} \"__aenter__\")))) "
-        f"(common-lisp:unwind-protect "
-        f"(common-lisp:progn {body}) "
-        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-AWAIT "
-        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-INVOKE-CALLABLE {exit_symbol} {manager_symbol} "
-        f"|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE* |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE* |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*))))"
+        f"(common-lisp:handler-case "
+        f"(common-lisp:prog1 (common-lisp:progn {body}) "
+        f"{exit_call} {none} {none} {none}))) "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION ({condition_symbol}) "
+        f"(common-lisp:let* (({exception_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION-VALUE {condition_symbol})) "
+        f"({handled_symbol} {exit_call} (|CLAMP.__CLAMP_INTERNALS__|:PY-TYPE-OF {exception_symbol}) {exception_symbol} {condition_symbol})))) "
+        f"(common-lisp:if (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P {handled_symbol}) "
+        f"{none} (common-lisp:error {condition_symbol})))) "
+        f"(common-lisp:error ({condition_symbol}) "
+        f"(common-lisp:let (({handled_symbol} {exit_call} {none} {condition_symbol} {condition_symbol})))) "
+        f"(common-lisp:if (|CLAMP.__CLAMP_INTERNALS__|:PY-TRUTHY-P {handled_symbol}) "
+        f"{none} (common-lisp:error {condition_symbol}))))))"
     )
 
 
 def codegen_for(node, context: Context):
-    if not isinstance(node.target, ast.Name):
-        raise Exception("TODO: unsupported for loop target")
-
     child_context = context.child()
     loop_id = id(node)
     iterator_symbol = f"__clamp_for_iterator_{loop_id}"
@@ -512,7 +969,9 @@ def codegen_for(node, context: Context):
     loop_block_name = f"__clamp_loop_{loop_id}"
     loop_continue_name = f"__clamp_loop_continue_{loop_id}"
     loop_broke_name = f"__clamp_loop_broke_{loop_id}"
-    target = codegen(node.target, child_context)
+    target = codegen(node.target, child_context) if isinstance(node.target, ast.Name) else None
+    target_bindings = "" if context.mutation_context else codegen_target_bindings(node.target, child_context)
+    target_store = codegen_store_target(node.target, item_symbol, child_context)
     iterable = codegen(node.iter, child_context)
     body_context = replace(
         child_context,
@@ -524,14 +983,14 @@ def codegen_for(node, context: Context):
     body = codegen_block(node.body, body_context) or "COMMON-LISP::nil"
     loop_code = (
         f"(common-lisp:let (({loop_broke_name} COMMON-LISP::nil) "
-        f"({target} |CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*)) "
+        f"{target_bindings}) "
         f"(common-lisp:let (({iterator_symbol} (|CLAMP.__CLAMP_INTERNALS__|:PY-ITER {iterable}))) "
         f"(common-lisp:block {loop_block_name} "
         f"(common-lisp:loop "
         f"(common-lisp:multiple-value-bind ({item_symbol} {found_symbol}) "
         f"(|CLAMP.__CLAMP_INTERNALS__|:PY-NEXT-ITEM {iterator_symbol}) "
         f"(common-lisp:unless {found_symbol} (common-lisp:return)) "
-        f"(common-lisp:setf {target} {item_symbol}) "
+        f"{target_store} "
         f"(common-lisp:block {loop_continue_name} "
         f"(common-lisp:progn {body}))))))"
     )
@@ -699,6 +1158,16 @@ def map_name(name: str) -> str:
     return name
 
 
+def codegen_bytes(value: bytes) -> str:
+    values = " ".join(str(byte) for byte in value)
+    return (
+        "(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-BYTES-FROM-VECTOR "
+        f"(common-lisp:make-array {len(value)} "
+        ":element-type '(common-lisp:unsigned-byte 8) "
+        f":initial-contents '({values})))"
+    )
+
+
 codegen_handlers[type(None)] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:*PY-NONE*"
 codegen_handlers[ast.Expr] = lambda node, context: codegen(node.value, context)
 codegen_handlers[ast.Assign] = codegen_assign
@@ -709,13 +1178,20 @@ codegen_handlers[ast.ImportFrom] = codegen_import_from
 codegen_handlers[ast.Pass] = lambda node, _: "COMMON-LISP::nil"
 codegen_handlers[ast.FunctionDef] = codegen_function
 codegen_handlers[ast.AsyncFunctionDef] = codegen_async_function
+codegen_handlers[ast.ClassDef] = codegen_class
 codegen_handlers[ast.Call] = codegen_funcall
 codegen_handlers[ast.Await] = codegen_await
+codegen_handlers[ast.Yield] = codegen_yield
+codegen_handlers[ast.YieldFrom] = codegen_yield
+codegen_handlers[ast.Raise] = codegen_raise
+codegen_handlers[ast.Try] = codegen_try
 codegen_handlers[ast.List] = lambda node, context: (
     "(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-LIST"
     + "".join(f" {codegen(elt, context.child())}" for elt in node.elts)
     + ")"
 )
+codegen_handlers[ast.ListComp] = codegen_listcomp
+codegen_handlers[ast.DictComp] = codegen_dictcomp
 codegen_handlers[ast.Tuple] = lambda node, context: (
     "(|CLAMP.__CLAMP_INTERNALS__|:MAKE-PY-TUPLE"
     + "".join(f" {codegen(elt, context.child())}" for elt in node.elts)
@@ -746,6 +1222,7 @@ codegen_handlers[ast.While] = codegen_while
 codegen_handlers[ast.For] = codegen_for
 codegen_handlers[ast.AsyncFor] = codegen_async_for
 codegen_handlers[ast.AsyncWith] = codegen_async_with
+codegen_handlers[ast.With] = codegen_with
 codegen_handlers[ast.Break] = codegen_break
 codegen_handlers[ast.Continue] = codegen_continue
 codegen_handlers[ast.Add] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-ADD"
@@ -780,6 +1257,7 @@ codegen_handlers[ast.And] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-AND"
 codegen_handlers[int] = lambda node, _: str(node)
 codegen_handlers[float] = lambda node, _: str(node)
 codegen_handlers[str] = lambda node, _: '"' + str(node) + '"' # TODO: escape nested quotes correctly
+codegen_handlers[bytes] = lambda node, _: codegen_bytes(node)
 codegen_handlers[bool] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:*PY-TRUE*" if node else "|CLAMP.__CLAMP_INTERNALS__|:*PY-FALSE*"
 
 # TODO:

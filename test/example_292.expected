@@ -1,0 +1,8 @@
+first
+second
+TypeError can't send non-None value to a just-started async generator
+first
+None
+closed
+ValueError ()
+thrown

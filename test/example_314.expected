@@ -1,0 +1,8 @@
+True
+True True True
+ClientConnectionError ClientConnectorError ServerTimeoutError
+True True
+200 GET data:text/plain,not-json
+Attempt to decode JSON with unexpected mimetype: text/plain
+True
+True

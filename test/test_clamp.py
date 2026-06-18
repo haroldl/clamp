@@ -1,5 +1,8 @@
 from pathlib import Path
+import socket
 import subprocess
+import sys
+import time
 
 import pytest
 
@@ -176,7 +179,7 @@ def test_verbose_run_shows_compiler_diagnostics():
 
 def test_compile_only_prints_generated_lisp_without_running_program():
     result = run_clamp(EXAMPLE_1, "--compile-only")
-    assert '(common-lisp:funcall |CLAMP.__builtins__|:PRINT "hello, clamp")' in result.stdout
+    assert '(|CLAMP.__CLAMP_INTERNALS__|:PY-INVOKE-CALLABLE |CLAMP.__builtins__|:PRINT "hello, clamp")' in result.stdout
     assert "hello, clamp\n\n" not in result.stdout
 
 
@@ -189,6 +192,736 @@ def test_example_matches_expected_output(sample):
     assert expected.exists(), f"missing expected output for {sample.name}"
     result = run_clamp(sample)
     assert result.stdout == expected.read_text()
+
+
+def test_aiohttp_plain_http_transport(tmp_path):
+    root = tmp_path / "http-root"
+    root.mkdir()
+    (root / "hello.json").write_text('{"source":"http","count":3}\n')
+    (root / "plain.txt").write_text("hello over http\n")
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "http.server",
+            str(port),
+            "--bind",
+            "127.0.0.1",
+            "--directory",
+            str(root),
+        ],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 5
+        while True:
+            if server.poll() is not None:
+                stdout, stderr = server.communicate()
+                raise AssertionError(f"http.server exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                if time.time() >= deadline:
+                    raise AssertionError("http.server did not start")
+                time.sleep(0.05)
+
+        sample = tmp_path / "aiohttp_http.py"
+        sample.write_text(
+            "import asyncio\n"
+            "import aiohttp\n"
+            "\n"
+            "async def main():\n"
+            "    async with aiohttp.ClientSession() as session:\n"
+            f"        async with session.get('http://127.0.0.1:{port}/hello.json') as resp:\n"
+            "            print(resp.status, resp.ok)\n"
+            "            print(resp.content_type)\n"
+            "            data = await resp.json()\n"
+            "            print(data['source'], data['count'])\n"
+            f"        async with session.get('http://127.0.0.1:{port}/plain.txt') as resp:\n"
+            "            print(await resp.text())\n"
+            "\n"
+            "asyncio.run(main())\n"
+        )
+        result = run_clamp(sample)
+        assert result.stdout == "200 True\napplication/json\nhttp 3\nhello over http\n\n"
+    finally:
+        server.terminate()
+        try:
+            server.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.communicate()
+
+
+
+def test_aiohttp_plain_http_json_and_params(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    server_script = tmp_path / "json_server.py"
+    server_script.write_text(
+        "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+        "import json\n"
+        "class Handler(BaseHTTPRequestHandler):\n"
+        "    def log_message(self, format, *args):\n"
+        "        pass\n"
+        "    def do_PATCH(self):\n"
+        "        size = int(self.headers.get('Content-Length', '0'))\n"
+        "        body = self.rfile.read(size).decode('utf-8')\n"
+        "        response = json.dumps({\n"
+        "            'method': self.command,\n"
+        "            'path': self.path,\n"
+        "            'content_type': self.headers.get('Content-Type'),\n"
+        "            'body': body,\n"
+        "        })\n"
+        "        encoded = response.encode('utf-8')\n"
+        "        self.send_response(202)\n"
+        "        self.send_header('Content-Type', 'application/json')\n"
+        "        self.send_header('Content-Length', str(len(encoded)))\n"
+        "        self.end_headers()\n"
+        "        self.wfile.write(encoded)\n"
+        "HTTPServer(('127.0.0.1', int(__import__('sys').argv[1])), Handler).serve_forever()\n"
+    )
+    server = subprocess.Popen(
+        [sys.executable, str(server_script), str(port)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 5
+        while True:
+            if server.poll() is not None:
+                stdout, stderr = server.communicate()
+                raise AssertionError(f"json server exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                if time.time() >= deadline:
+                    raise AssertionError("json server did not start")
+                time.sleep(0.05)
+
+        sample = tmp_path / "aiohttp_json_params.py"
+        sample.write_text(
+            "import asyncio\n"
+            "import aiohttp\n"
+            "\n"
+            "async def main():\n"
+            f"    async with aiohttp.patch('http://127.0.0.1:{port}/submit', params={{'q': 'hello world', 'n': 3}}, json={{'name': 'clamp', 'ok': True}}) as resp:\n"
+            "        print(resp.status)\n"
+            "        data = await resp.json()\n"
+            "        print(data['method'], data['path'])\n"
+            "        print(data['content_type'])\n"
+            "        print(data['body'])\n"
+            "\n"
+            "asyncio.run(main())\n"
+        )
+        result = run_clamp(sample)
+        assert result.stdout == '202\nPATCH /submit?q=hello+world&n=3\napplication/json\n{"name":"clamp","ok":true}\n'
+    finally:
+        server.terminate()
+        try:
+            server.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.communicate()
+
+
+def test_aiohttp_plain_http_headers_and_post(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    server_script = tmp_path / "echo_server.py"
+    server_script.write_text(
+        "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+        "import json\n"
+        "class Handler(BaseHTTPRequestHandler):\n"
+        "    def log_message(self, format, *args):\n"
+        "        pass\n"
+        "    def do_POST(self):\n"
+        "        size = int(self.headers.get('Content-Length', '0'))\n"
+        "        body = self.rfile.read(size).decode('utf-8')\n"
+        "        response = json.dumps({\n"
+        "            'method': self.command,\n"
+        "            'token': self.headers.get('X-Token'),\n"
+        "            'content_type': self.headers.get('Content-Type'),\n"
+        "            'body': body,\n"
+        "        })\n"
+        "        encoded = response.encode('utf-8')\n"
+        "        self.send_response(201)\n"
+        "        self.send_header('Content-Type', 'application/json')\n"
+        "        self.send_header('X-Server', 'clamp-test')\n"
+        "        self.send_header('Content-Length', str(len(encoded)))\n"
+        "        self.end_headers()\n"
+        "        self.wfile.write(encoded)\n"
+        "HTTPServer(('127.0.0.1', int(__import__('sys').argv[1])), Handler).serve_forever()\n"
+    )
+    server = subprocess.Popen(
+        [sys.executable, str(server_script), str(port)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 5
+        while True:
+            if server.poll() is not None:
+                stdout, stderr = server.communicate()
+                raise AssertionError(f"echo server exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                if time.time() >= deadline:
+                    raise AssertionError("echo server did not start")
+                time.sleep(0.05)
+
+        sample = tmp_path / "aiohttp_post.py"
+        sample.write_text(
+            "import asyncio\n"
+            "import aiohttp\n"
+            "\n"
+            "async def main():\n"
+            "    async with aiohttp.ClientSession() as session:\n"
+            f"        async with session.post('http://127.0.0.1:{port}/submit', data='payload', headers={{'X-Token': 'abc', 'Content-Type': 'text/plain'}}) as resp:\n"
+            "            print(resp.status, resp.headers['x-server'])\n"
+            "            data = await resp.json()\n"
+            "            print(data['method'], data['token'], data['content_type'], data['body'])\n"
+            "\n"
+            "asyncio.run(main())\n"
+        )
+        result = run_clamp(sample)
+        assert result.stdout == "201 clamp-test\nPOST abc text/plain payload\n"
+    finally:
+        server.terminate()
+        try:
+            server.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.communicate()
+
+
+def test_aiohttp_basic_auth_and_form_data(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    server_script = tmp_path / "form_server.py"
+    server_script.write_text(
+        "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+        "import json\n"
+        "class Handler(BaseHTTPRequestHandler):\n"
+        "    def log_message(self, format, *args):\n"
+        "        pass\n"
+        "    def do_POST(self):\n"
+        "        size = int(self.headers.get('Content-Length', '0'))\n"
+        "        body = self.rfile.read(size).decode('utf-8')\n"
+        "        response = json.dumps({\n"
+        "            'auth': self.headers.get('Authorization'),\n"
+        "            'content_type': self.headers.get('Content-Type'),\n"
+        "            'body': body,\n"
+        "        })\n"
+        "        encoded = response.encode('utf-8')\n"
+        "        self.send_response(200)\n"
+        "        self.send_header('Content-Type', 'application/json')\n"
+        "        self.send_header('Content-Length', str(len(encoded)))\n"
+        "        self.end_headers()\n"
+        "        self.wfile.write(encoded)\n"
+        "HTTPServer(('127.0.0.1', int(__import__('sys').argv[1])), Handler).serve_forever()\n"
+    )
+    server = subprocess.Popen(
+        [sys.executable, str(server_script), str(port)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 5
+        while True:
+            if server.poll() is not None:
+                stdout, stderr = server.communicate()
+                raise AssertionError(f"form server exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                if time.time() >= deadline:
+                    raise AssertionError("form server did not start")
+                time.sleep(0.05)
+
+        sample = tmp_path / "aiohttp_auth_form.py"
+        sample.write_text(
+            "import asyncio\n"
+            "from aiohttp.client import BasicAuth, ClientSession, FormData\n"
+            "\n"
+            "async def main():\n"
+            "    form = FormData({'name': 'clamp'})\n"
+            "    form.add_field('space', 'hello world')\n"
+            "    async with ClientSession() as session:\n"
+            f"        async with session.post('http://127.0.0.1:{port}/submit', data=form, auth=BasicAuth('user', 'pass')) as resp:\n"
+            "            data = await resp.json()\n"
+            "            print(data['auth'])\n"
+            "            print(data['content_type'])\n"
+            "            print(data['body'])\n"
+            "\n"
+            "asyncio.run(main())\n"
+        )
+        result = run_clamp(sample)
+        assert result.stdout == "Basic dXNlcjpwYXNz\napplication/x-www-form-urlencoded\nname=clamp&space=hello+world\n"
+    finally:
+        server.terminate()
+        try:
+            server.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.communicate()
+
+
+def test_aiohttp_session_defaults_base_url_headers_and_auth(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    server_script = tmp_path / "session_defaults_server.py"
+    server_script.write_text(
+        "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+        "import json\n"
+        "class Handler(BaseHTTPRequestHandler):\n"
+        "    def log_message(self, format, *args):\n"
+        "        pass\n"
+        "    def do_GET(self):\n"
+        "        response = json.dumps({\n"
+        "            'path': self.path,\n"
+        "            'auth': self.headers.get('Authorization'),\n"
+        "            'token': self.headers.get('X-Token'),\n"
+        "            'override': self.headers.get('X-Override'),\n"
+        "        })\n"
+        "        encoded = response.encode('utf-8')\n"
+        "        self.send_response(200)\n"
+        "        self.send_header('Content-Type', 'application/json')\n"
+        "        self.send_header('Content-Length', str(len(encoded)))\n"
+        "        self.end_headers()\n"
+        "        self.wfile.write(encoded)\n"
+        "HTTPServer(('127.0.0.1', int(__import__('sys').argv[1])), Handler).serve_forever()\n"
+    )
+    server = subprocess.Popen(
+        [sys.executable, str(server_script), str(port)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 5
+        while True:
+            if server.poll() is not None:
+                stdout, stderr = server.communicate()
+                raise AssertionError(f"session defaults server exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                if time.time() >= deadline:
+                    raise AssertionError("session defaults server did not start")
+                time.sleep(0.05)
+
+        sample = tmp_path / "aiohttp_session_defaults.py"
+        sample.write_text(
+            "import asyncio\n"
+            "import aiohttp\n"
+            "\n"
+            "async def main():\n"
+            f"    async with aiohttp.ClientSession(base_url='http://127.0.0.1:{port}/api', headers={{'X-Token': 'session', 'X-Override': 'session'}}, auth=aiohttp.BasicAuth('user', 'pass')) as session:\n"
+            "        async with session.get('/items', params={'q': 'hello world'}, headers={'X-Override': 'request'}) as resp:\n"
+            "            data = await resp.json()\n"
+            "            print(data['path'])\n"
+            "            print(data['auth'])\n"
+            "            print(data['token'])\n"
+            "            print(data['override'])\n"
+            "\n"
+            "asyncio.run(main())\n"
+        )
+        result = run_clamp(sample)
+        assert result.stdout == "/api/items?q=hello+world\nBasic dXNlcjpwYXNz\nsession\nrequest\n"
+    finally:
+        server.terminate()
+        try:
+            server.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.communicate()
+
+
+def test_aiohttp_cookie_jar_and_session_cookies(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    server_script = tmp_path / "cookie_server.py"
+    server_script.write_text(
+        "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+        "import json\n"
+        "class Handler(BaseHTTPRequestHandler):\n"
+        "    def log_message(self, format, *args):\n"
+        "        pass\n"
+        "    def do_GET(self):\n"
+        "        response = json.dumps({'path': self.path, 'cookie': self.headers.get('Cookie')})\n"
+        "        encoded = response.encode('utf-8')\n"
+        "        self.send_response(200)\n"
+        "        self.send_header('Content-Type', 'application/json')\n"
+        "        self.send_header('Content-Length', str(len(encoded)))\n"
+        "        if self.path.startswith('/login'):\n"
+        "            self.send_header('Set-Cookie', 'session=xyz; Path=/')\n"
+        "        self.end_headers()\n"
+        "        self.wfile.write(encoded)\n"
+        "HTTPServer(('127.0.0.1', int(__import__('sys').argv[1])), Handler).serve_forever()\n"
+    )
+    server = subprocess.Popen(
+        [sys.executable, str(server_script), str(port)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 5
+        while True:
+            if server.poll() is not None:
+                stdout, stderr = server.communicate()
+                raise AssertionError(f"cookie server exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                if time.time() >= deadline:
+                    raise AssertionError("cookie server did not start")
+                time.sleep(0.05)
+
+        sample = tmp_path / "aiohttp_cookies.py"
+        sample.write_text(
+            "import asyncio\n"
+            "import aiohttp\n"
+            "\n"
+            "async def main():\n"
+            "    jar = aiohttp.CookieJar()\n"
+            "    jar.update_cookies({'jar': 'one'})\n"
+            f"    async with aiohttp.ClientSession(base_url='http://127.0.0.1:{port}', cookie_jar=jar, cookies={{'initial': 'yes'}}) as session:\n"
+            "        async with session.get('/login', cookies={'request': 'only'}) as resp:\n"
+            "            data = await resp.json()\n"
+            "            print(data['cookie'])\n"
+            "        async with session.get('/next') as resp:\n"
+            "            data = await resp.json()\n"
+            "            print(data['cookie'])\n"
+            "        cookies = session.cookie_jar.filter_cookies('/')\n"
+            "        print(cookies['session'], cookies['initial'], cookies['jar'])\n"
+            "        print(session.cookie_jar.clear())\n"
+            "        async with session.get('/empty') as resp:\n"
+            "            data = await resp.json()\n"
+            "            print(data['cookie'])\n"
+            "\n"
+            "asyncio.run(main())\n"
+        )
+        result = run_clamp(sample)
+        assert result.stdout == "jar=one; initial=yes; request=only\njar=one; initial=yes; session=xyz\nxyz yes one\nNone\nNone\n"
+    finally:
+        server.terminate()
+        try:
+            server.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.communicate()
+
+
+def test_aiohttp_response_metadata_and_cookies(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    server_script = tmp_path / "metadata_server.py"
+    server_script.write_text(
+        "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+        "class Handler(BaseHTTPRequestHandler):\n"
+        "    def log_message(self, format, *args):\n"
+        "        pass\n"
+        "    def do_GET(self):\n"
+        "        encoded = b'metadata'\n"
+        "        self.send_response(200)\n"
+        "        self.send_header('Content-Type', 'text/plain; charset=iso-8859-1')\n"
+        "        self.send_header('Set-Cookie', 'token=abc; Path=/')\n"
+        "        self.send_header('Content-Length', str(len(encoded)))\n"
+        "        self.end_headers()\n"
+        "        self.wfile.write(encoded)\n"
+        "HTTPServer(('127.0.0.1', int(__import__('sys').argv[1])), Handler).serve_forever()\n"
+    )
+    server = subprocess.Popen(
+        [sys.executable, str(server_script), str(port)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 5
+        while True:
+            if server.poll() is not None:
+                stdout, stderr = server.communicate()
+                raise AssertionError(f"metadata server exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                if time.time() >= deadline:
+                    raise AssertionError("metadata server did not start")
+                time.sleep(0.05)
+
+        sample = tmp_path / "aiohttp_response_metadata.py"
+        sample.write_text(
+            "import asyncio\n"
+            "import aiohttp\n"
+            "\n"
+            "async def main():\n"
+            "    async with aiohttp.ClientSession() as session:\n"
+            f"        async with session.get('http://127.0.0.1:{port}/info', headers={{'X-Test': 'yes'}}) as resp:\n"
+            "            print(resp.real_url)\n"
+            "            print(resp.request_info['method'], resp.request_info['url'])\n"
+            "            print(resp.request_info['headers']['X-Test'])\n"
+            "            print(len(resp.history), resp.cookies['token'])\n"
+            "            print(resp.content_length, resp.charset, resp.get_encoding())\n"
+            "            print(await resp.text())\n"
+            "\n"
+            "asyncio.run(main())\n"
+        )
+        result = run_clamp(sample)
+        assert result.stdout == f"http://127.0.0.1:{port}/info\nGET http://127.0.0.1:{port}/info\nyes\n0 abc\n8 iso-8859-1 iso-8859-1\nmetadata\n"
+    finally:
+        server.terminate()
+        try:
+            server.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.communicate()
+
+
+def test_aiohttp_redirects_and_history(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    server_script = tmp_path / "redirect_server.py"
+    server_script.write_text(
+        "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+        "class Handler(BaseHTTPRequestHandler):\n"
+        "    def log_message(self, format, *args):\n"
+        "        pass\n"
+        "    def redirect(self, location):\n"
+        "        self.send_response(302)\n"
+        "        self.send_header('Location', location)\n"
+        "        self.send_header('Content-Length', '0')\n"
+        "        self.end_headers()\n"
+        "    def do_GET(self):\n"
+        "        if self.path == '/redirect':\n"
+        "            self.redirect('/final')\n"
+        "            return\n"
+        "        if self.path == '/loop':\n"
+        "            self.redirect('/loop')\n"
+        "            return\n"
+        "        encoded = ('final:' + self.path).encode('utf-8')\n"
+        "        self.send_response(200)\n"
+        "        self.send_header('Content-Type', 'text/plain')\n"
+        "        self.send_header('Content-Length', str(len(encoded)))\n"
+        "        self.end_headers()\n"
+        "        self.wfile.write(encoded)\n"
+        "HTTPServer(('127.0.0.1', int(__import__('sys').argv[1])), Handler).serve_forever()\n"
+    )
+    server = subprocess.Popen(
+        [sys.executable, str(server_script), str(port)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 5
+        while True:
+            if server.poll() is not None:
+                stdout, stderr = server.communicate()
+                raise AssertionError(f"redirect server exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                if time.time() >= deadline:
+                    raise AssertionError("redirect server did not start")
+                time.sleep(0.05)
+
+        sample = tmp_path / "aiohttp_redirects.py"
+        sample.write_text(
+            "import asyncio\n"
+            "import aiohttp\n"
+            "\n"
+            "async def main():\n"
+            f"    async with aiohttp.ClientSession(base_url='http://127.0.0.1:{port}') as session:\n"
+            "        async with session.get('/redirect') as resp:\n"
+            "            print(resp.status, resp.real_url, await resp.text())\n"
+            "            print(len(resp.history), resp.history[0].status, resp.history[0].headers['location'])\n"
+            "        async with session.get('/redirect', allow_redirects=False) as resp:\n"
+            "            print(resp.status, len(resp.history), resp.headers['location'])\n"
+            "        try:\n"
+            "            async with session.get('/loop', max_redirects=1) as resp:\n"
+            "                print('not reached', resp.status)\n"
+            "        except aiohttp.TooManyRedirects as err:\n"
+            "            print('too-many', err.status, err.message)\n"
+            "\n"
+            "asyncio.run(main())\n"
+        )
+        result = run_clamp(sample)
+        assert result.stdout == (
+            f"200 http://127.0.0.1:{port}/final final:/final\n"
+            "1 302 /final\n"
+            "302 0 /final\n"
+            "too-many 302 Too many redirects\n"
+        )
+    finally:
+        server.terminate()
+        try:
+            server.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.communicate()
+
+
+def test_asyncio_open_connection_streams(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    server_script = tmp_path / "stream_server.py"
+    ready_file = tmp_path / "stream-ready"
+    server_script.write_text(
+        "import socket\n"
+        "import sys\n"
+        "server = socket.socket()\n"
+        "server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+        "server.bind(('127.0.0.1', int(sys.argv[1])))\n"
+        "server.listen(1)\n"
+        "open(sys.argv[2], 'w').close()\n"
+        "conn, addr = server.accept()\n"
+        "with conn:\n"
+        "    data = b''\n"
+        "    while not data.endswith(b'\\n'):\n"
+        "        chunk = conn.recv(1024)\n"
+        "        if not chunk:\n"
+        "            break\n"
+        "        data += chunk\n"
+        "    conn.sendall(b'chunk|tail')\n"
+        "server.close()\n"
+    )
+    server = subprocess.Popen(
+        [sys.executable, str(server_script), str(port), str(ready_file)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.time() + 5
+        while True:
+            if server.poll() is not None:
+                stdout, stderr = server.communicate()
+                raise AssertionError(f"stream server exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
+            if ready_file.exists():
+                break
+            if time.time() >= deadline:
+                raise AssertionError("stream server did not start")
+            time.sleep(0.05)
+
+        sample = tmp_path / "asyncio_streams.py"
+        sample.write_text(
+            "import asyncio\n"
+            "from asyncio.streams import open_connection\n"
+            "\n"
+            "async def main():\n"
+            f"    reader, writer = await open_connection('127.0.0.1', {port})\n"
+            f"    print(writer.get_extra_info('peername')[1] == {port})\n"
+            "    print(writer.is_closing())\n"
+            "    print(writer.can_write_eof())\n"
+            "    writer.writelines([b'he', b'llo', b'\\n'])\n"
+            "    writer.write_eof()\n"
+            "    await writer.drain()\n"
+            "    print(await reader.readuntil(b'|'))\n"
+            "    try:\n"
+            "        print(await reader.readexactly(10))\n"
+            "    except asyncio.IncompleteReadError as err:\n"
+            "        print(err.partial, err.expected)\n"
+            "    print(reader.at_eof())\n"
+            "    writer.close()\n"
+            "    print(writer.is_closing())\n"
+            "    await writer.wait_closed()\n"
+            "    print(writer.is_closing())\n"
+            "\n"
+            "asyncio.run(main())\n"
+        )
+        result = run_clamp(sample)
+        assert result.stdout == "True\nFalse\nTrue\nb'chunk|'\nb'tail' 10\nTrue\nTrue\nTrue\n"
+    finally:
+        server.terminate()
+        try:
+            server.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.communicate()
+
+
+def test_asyncio_start_server_streams(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    sample = tmp_path / "asyncio_start_server.py"
+    sample.write_text(
+        "import asyncio\n"
+        "\n"
+        "async def handle(reader, writer):\n"
+        "    data = await reader.readline()\n"
+        "    writer.writelines([b'srv:', data])\n"
+        "    await writer.drain()\n"
+        "    writer.close()\n"
+        "    await writer.wait_closed()\n"
+        "\n"
+        "async def main():\n"
+        f"    server = await asyncio.start_server(handle, '127.0.0.1', {port})\n"
+        "    print(server.is_serving())\n"
+        f"    reader, writer = await asyncio.open_connection('127.0.0.1', {port})\n"
+        "    writer.write(b'ping\\n')\n"
+        "    await writer.drain()\n"
+        "    print(await reader.readline())\n"
+        "    writer.close()\n"
+        "    await writer.wait_closed()\n"
+        "    server.close()\n"
+        "    print(server.is_serving())\n"
+        "    await server.wait_closed()\n"
+        "\n"
+        "asyncio.run(main())\n"
+    )
+    result = run_clamp(sample)
+    assert result.stdout == "True\nb'srv:ping\\n'\nFalse\n"
+
+
 
 
 @pytest.mark.parametrize("sample", [EXAMPLE_12, EXAMPLE_13, EXAMPLE_14, EXAMPLE_15, EXAMPLE_16, EXAMPLE_17, EXAMPLE_18, EXAMPLE_20, EXAMPLE_21, EXAMPLE_22, EXAMPLE_23, EXAMPLE_24, EXAMPLE_25, EXAMPLE_26, EXAMPLE_27, EXAMPLE_28, EXAMPLE_29, EXAMPLE_30, EXAMPLE_31, EXAMPLE_32, EXAMPLE_33, EXAMPLE_34, EXAMPLE_35, EXAMPLE_36, EXAMPLE_37, EXAMPLE_38, EXAMPLE_39, EXAMPLE_41, EXAMPLE_42, EXAMPLE_43, EXAMPLE_44, EXAMPLE_45, EXAMPLE_46, EXAMPLE_47, EXAMPLE_49, EXAMPLE_50, EXAMPLE_51, EXAMPLE_52, EXAMPLE_54, EXAMPLE_55, EXAMPLE_56, EXAMPLE_57, EXAMPLE_58, EXAMPLE_59, EXAMPLE_60, EXAMPLE_61, EXAMPLE_62, EXAMPLE_63, EXAMPLE_65, EXAMPLE_66, EXAMPLE_67, EXAMPLE_68, EXAMPLE_70, EXAMPLE_71, EXAMPLE_72, EXAMPLE_73, EXAMPLE_74, EXAMPLE_75, EXAMPLE_77, EXAMPLE_78, EXAMPLE_79, EXAMPLE_80, EXAMPLE_81, EXAMPLE_82, EXAMPLE_84, EXAMPLE_85, EXAMPLE_86, EXAMPLE_88, EXAMPLE_89, EXAMPLE_90, EXAMPLE_91, EXAMPLE_92, EXAMPLE_93, EXAMPLE_94, EXAMPLE_96, EXAMPLE_97, EXAMPLE_98, EXAMPLE_99, EXAMPLE_100, EXAMPLE_102, EXAMPLE_121], ids=lambda path: path.stem)

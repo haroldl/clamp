@@ -1,0 +1,3 @@
+200 True GET application/json
+True None clamp
+b'{"ok":true,"items":[1,2,null],"name":"clamp"}'
