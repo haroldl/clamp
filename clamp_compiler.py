@@ -572,12 +572,17 @@ def codegen_try_without_finally(node, context: Context):
                 f"{handler_body})"
             )
     clauses.append(f"(common-lisp:t (common-lisp:error {condition_symbol}))")
+    clause_code = " ".join(clauses)
     return (
         f"(common-lisp:handler-case (common-lisp:progn {body}) "
         f"(|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION ({condition_symbol}) "
         f"(common-lisp:let (({exception_symbol} "
         f"(|CLAMP.__CLAMP_INTERNALS__|:PY-EXCEPTION-VALUE {condition_symbol}))) "
-        f"(common-lisp:cond {' '.join(clauses)}))))"
+        f"(common-lisp:cond {clause_code}))) "
+        f"(common-lisp:unbound-variable ({condition_symbol}) "
+        f"(common-lisp:let (({exception_symbol} "
+        f"(|CLAMP.__CLAMP_INTERNALS__|:PY-LISP-ERROR-TO-EXCEPTION {condition_symbol}))) "
+        f"(common-lisp:cond {clause_code}))))"
     )
 
 

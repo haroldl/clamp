@@ -74,6 +74,12 @@
    :*py-type-error-type*
    :*py-value-error-type*
    :*py-lookup-error-type*
+   :*py-import-error-type*
+   :*py-module-not-found-error-type*
+   :*py-attribute-error-type*
+   :*py-name-error-type*
+   :*py-os-error-type*
+   :*py-file-not-found-error-type*
    :*py-timeout-error-type*
    :py-bool
    :py-truthy-p
@@ -127,6 +133,7 @@
    :py-exception
    :py-exception-value
    :py-exception-object
+   :py-lisp-error-to-exception
    :py-raise
    :*py-stop-iteration*
    :*py-stop-iteration-type*
@@ -317,6 +324,42 @@
   (make-py-type :type *py-type-type*
                 :name "LookupError"
                 :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-import-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ImportError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-module-not-found-error-type*
+  (make-py-type :type *py-type-type*
+                :name "ModuleNotFoundError"
+                :bases (list *py-import-error-type*)
+                :basicsize 1))
+
+(defparameter *py-attribute-error-type*
+  (make-py-type :type *py-type-type*
+                :name "AttributeError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-name-error-type*
+  (make-py-type :type *py-type-type*
+                :name "NameError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-os-error-type*
+  (make-py-type :type *py-type-type*
+                :name "OSError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-file-not-found-error-type*
+  (make-py-type :type *py-type-type*
+                :name "FileNotFoundError"
+                :bases (list *py-os-error-type*)
                 :basicsize 1))
 
 (defparameter *py-timeout-error-type*
@@ -1514,6 +1557,30 @@
               args))
     exception))
 
+(defun py-make-import-error (type message &key name path)
+  (let ((exception (make-py-exception type message)))
+    (setf (py-object-attr exception "name") (or name *py-none*))
+    (setf (py-object-attr exception "path") (or path *py-none*))
+    exception))
+
+(defun py-raise-type (type message)
+  (py-raise (make-py-exception type message)))
+
+(defun py-raise-import-error (message &key name path (type *py-import-error-type*))
+  (py-raise (py-make-import-error type message :name name :path path)))
+
+(defun py-lisp-error-to-exception (condition)
+  (cond
+    ((typep condition 'unbound-variable)
+     (make-py-exception
+      *py-name-error-type*
+      (format nil "name '~A' is not defined"
+              (string-downcase (symbol-name (cell-error-name condition))))))
+    ((typep condition 'file-error)
+     (make-py-exception *py-file-not-found-error-type* (namestring (file-error-pathname condition))))
+    (t
+     (make-py-exception *py-runtime-error-type* (princ-to-string condition)))))
+
 (defparameter *py-stop-iteration*
   (make-py-exception *py-stop-iteration-type*))
 
@@ -1524,6 +1591,18 @@
                (if (py-exception-object-p value)
                    (princ (py-type-name (py-object-type value)) stream)
                    (princ value stream))))))
+
+(defun py-exception-message (exception)
+  (let ((args (py-exception-object-args exception)))
+    (if args
+        (with-output-to-string (stream)
+          (loop for arg in args
+                for first = t then nil
+                do (progn
+                     (unless first
+                       (princ " " stream))
+                     (py-display arg stream))))
+        "")))
 
 (defun py-raise (exception)
   (error 'py-exception :value exception))
@@ -1630,9 +1709,20 @@
 
 (defvar *py-current-module* nil)
 (defvar *py-module-search-paths* nil)
+(defvar *py-sys-path* nil)
 (defvar *py-module-loader* nil)
 (defvar *py-sys-modules* (make-hash-table :test #'equal))
 (defvar *py-builtin-module-builders* (make-hash-table :test #'equal))
+
+(defun py-ensure-sys-path ()
+  (or *py-sys-path*
+      (setf *py-sys-path*
+            (apply #'make-py-list
+                   (or *py-module-search-paths*
+                       (list (namestring (uiop:getcwd))))))))
+
+(defun py-current-module-search-paths ()
+  (py-list-values (py-ensure-sys-path)))
 
 (defstruct (py-module-spec-object (:include py-object))
   name
@@ -2052,7 +2142,7 @@
 (setf (py-type-attr *py-source-file-loader-type* "path_mtime")
       (lambda (loader path)
         (declare (ignore loader path))
-        (error "OSError")))
+        (py-raise (make-py-exception *py-os-error-type* "OSError"))))
 
 (setf (py-type-attr *py-source-file-loader-type* "set_data")
       (lambda (loader path data)
@@ -2492,7 +2582,7 @@
        (py-list-values (py-object-attr parent-module "__path__")))
       (py-find-module-source-in-roots
        name
-       (or *py-module-search-paths* (list (namestring (uiop:getcwd)))))))
+       (py-current-module-search-paths))))
 
 (defun py-ensure-module-package (module)
   (let* ((package-name (py-module-object-package-name module))
@@ -2554,15 +2644,19 @@
       (let ((parent (gethash parent-name *py-sys-modules*)))
         (unless (and parent
                      (nth-value 1 (gethash "__path__" (py-object-attrs parent))))
-          (error "No module named '~A'; '~A' is not a package"
-                 name
-                 parent-name)))))
+          (py-raise-import-error
+           (format nil "No module named '~A'; '~A' is not a package" name parent-name)
+           :name name
+           :type *py-module-not-found-error-type*)))))
   (multiple-value-bind (source-path package-p)
       (py-find-module-source name (and (py-module-parent-name name)
                                        (gethash (py-module-parent-name name)
                                                 *py-sys-modules*)))
     (unless source-path
-      (error "No module named '~A'" name))
+      (py-raise-import-error
+       (format nil "No module named '~A'" name)
+       :name name
+       :type *py-module-not-found-error-type*))
     (let ((module (make-clamp-module name :source-path source-path :package-p package-p)))
       (py-set-module-initializing module t)
       (setf (gethash name *py-sys-modules*) module)
@@ -2600,20 +2694,20 @@
 
 (defun py-current-package-name ()
   (unless *py-current-module*
-    (error "attempted relative import with no known parent package"))
+    (py-raise-import-error "attempted relative import with no known parent package"))
   (let ((package (py-object-attr *py-current-module* "__package__")))
     (unless (and (stringp package) (> (length package) 0))
-      (error "attempted relative import with no known parent package"))
+      (py-raise-import-error "attempted relative import with no known parent package"))
     package))
 
 (defun py-resolve-relative-import-name (name level &optional package)
   (let ((base (or package (py-current-package-name))))
     (unless (and (stringp base) (> (length base) 0))
-      (error "attempted relative import with no known parent package"))
+      (py-raise-import-error "attempted relative import with no known parent package"))
     (loop repeat (1- level)
           do (let ((pos (position #\. base :from-end t)))
                (unless pos
-                 (error "attempted relative import beyond top-level package"))
+                 (py-raise-import-error "attempted relative import beyond top-level package"))
                (setf base (subseq base 0 pos))))
     (if (> (length name) 0)
         (concatenate 'string base "." name)
@@ -2726,14 +2820,14 @@
                           (level 0))
   (declare (ignore globals locals))
   (unless (stringp name)
-    (error "module name must be a string"))
+    (py-raise-type *py-type-error-type* "module name must be a string"))
   (let* ((normalized-level (py-normalize-bool-number level)))
     (unless (integerp normalized-level)
-      (error "level must be an integer"))
+      (py-raise-type *py-type-error-type* "level must be an integer"))
     (when (< normalized-level 0)
-      (error "level must be >= 0"))
+      (py-raise-type *py-value-error-type* "level must be >= 0"))
     (when (and (= normalized-level 0) (= (length name) 0))
-      (error "Empty module name"))
+      (py-raise-type *py-value-error-type* "Empty module name"))
     (let* ((full-name (if (> normalized-level 0)
                           (py-resolve-relative-import-name name normalized-level)
                           name))
@@ -2754,8 +2848,10 @@
         (return-from py-import-from cached)))
     (handler-case
         (py-import-module full-name)
-      (error ()
-        (error "cannot import name '~A' from '~A'" name (py-module-object-name module))))))
+      (py-exception ()
+        (py-raise-import-error
+         (format nil "cannot import name '~A' from '~A'" name (py-module-object-name module))
+         :name name)))))
 
 (defun py-register-builtin-module (name builder)
   (setf (gethash name *py-builtin-module-builders*) builder))
@@ -2765,6 +2861,7 @@
   (let ((module (make-clamp-module "sys")))
     (setf (py-object-attr module "modules")
           (make-py-dict-for-storage *py-sys-modules*))
+    (setf (py-object-attr module "path") (py-ensure-sys-path))
     module))
 
 (defun py-importlib-resolve-name (name package)
@@ -2780,7 +2877,7 @@
 
 (defun py-importlib-import-module (name &optional (package *py-none*))
   (unless (stringp name)
-    (error "module name must be a string"))
+    (py-raise-type *py-type-error-type* "module name must be a string"))
   (let ((full-name (py-importlib-resolve-name
                     name
                     (unless (eq package *py-none*) package))))
@@ -2788,7 +2885,7 @@
 
 (defun py-importlib-reload (module)
   (unless (py-module-object-p module)
-    (error "reload() argument must be a module"))
+    (py-raise-type *py-type-error-type* "reload() argument must be a module"))
   (let ((name (py-module-object-name module)))
     (remhash name *py-sys-modules*)
     (py-import-module name)))
@@ -2824,7 +2921,7 @@
 
 (defun py-importlib-module-from-spec (spec)
   (unless (py-module-spec-object-p spec)
-    (error "spec must be a ModuleSpec object"))
+    (py-raise-type *py-type-error-type* "spec must be a ModuleSpec object"))
   (let* ((name (py-module-spec-object-name spec))
          (source-path (py-module-spec-object-origin spec))
          (package-p (not (eq (py-module-spec-object-submodule-search-locations spec)
@@ -7783,9 +7880,11 @@
   (multiple-value-bind (attr found) (py-find-type-attr (py-type-of obj) name)
     (when found
       (return-from py-lookup-attr attr)))
-  (error "Python object of type ~A has no attribute ~S"
-         (py-type-name (py-type-of obj))
-         name))
+  (py-raise-type
+   *py-attribute-error-type*
+   (format nil "Python object of type ~A has no attribute ~S"
+           (py-type-name (py-type-of obj))
+           name)))
 
 (defun py-instantiate-type (type &rest args)
   (when (py-type-subtype-p type *py-base-exception-type*)
@@ -8177,12 +8276,18 @@
                         :value storage))
 
 (defun py-read-file-bytes (path)
-  (with-open-file (stream (py-path-string path) :direction :input
-                               :element-type (quote (unsigned-byte 8)))
-    (let* ((size (file-length stream))
-           (storage (make-array size :element-type (quote (unsigned-byte 8)))))
-      (read-sequence storage stream)
-      (make-py-bytes-from-vector storage))))
+  (let ((path-string (py-path-string path)))
+    (handler-case
+        (with-open-file (stream path-string :direction :input
+                                     :element-type (quote (unsigned-byte 8)))
+          (let* ((size (file-length stream))
+                 (storage (make-array size :element-type (quote (unsigned-byte 8)))))
+            (read-sequence storage stream)
+            (make-py-bytes-from-vector storage)))
+      (file-error ()
+        (py-raise (make-py-exception *py-file-not-found-error-type* path-string)))
+      (sb-int:simple-file-error ()
+        (py-raise (make-py-exception *py-file-not-found-error-type* path-string))))))
 
 (defun py-write-file-bytes (path data)
   (let ((path-string (py-path-string path))
@@ -11016,6 +11121,7 @@
     ((floatp value) (princ (py-float-string value) stream))
     ((stringp value) (princ value stream))
     ((py-stop-iteration-p value) (princ "StopIteration" stream))
+    ((py-exception-object-p value) (princ (py-exception-message value) stream))
     ((py-forward-list-iterator-p value) (princ "<list_iterator>" stream))
     ((py-reverse-list-iterator-p value) (princ "<list_reverseiterator>" stream))
     ((py-string-iterator-p value) (princ "<str_iterator>" stream))

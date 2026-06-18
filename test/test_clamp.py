@@ -2687,16 +2687,10 @@ def test_import_module_spec_cached_suffixes_are_disabled_for_source_only_imports
     assert clamp_result.stdout == sample.with_suffix(".expected").read_text()
 
 
-def test_relative_import_beyond_top_level_fails():
+def test_relative_import_beyond_top_level_is_catchable_import_error():
     sample = TEST_DIR / "import_relative_beyond_top_attempt.py"
-    result = subprocess.run(
-        [str(CLAMP), str(sample)],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode != 0
-    assert "attempted relative import beyond top-level package" in result.stderr
+    result = run_clamp(sample)
+    assert result.stdout == "ImportError\nattempted relative import beyond top-level package\n"
 
 
 def test_pyc_only_module_is_ignored_by_source_importer():
@@ -2704,16 +2698,10 @@ def test_pyc_only_module_is_ignored_by_source_importer():
     pyc_path = TEST_DIR / "pyc_only.pyc"
     pyc_path.write_bytes(b"not real bytecode")
     try:
-        result = subprocess.run(
-            [str(CLAMP), str(sample)],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-        )
+        result = run_clamp(sample)
     finally:
         pyc_path.unlink(missing_ok=True)
-    assert result.returncode != 0
-    assert "No module named 'pyc_only'" in result.stderr
+    assert result.stdout == "ModuleNotFoundError\npyc_only\nNo module named 'pyc_only'\n"
 
 
 def test_import_file_reader_open_resource_context_methods_match_local_cpython_when_available():

@@ -1,7 +1,7 @@
 (defpackage "CLAMP.__builtins__"
   (:use :cl)
   (:shadow :print :min :max :sum :sorted :abs :round :filter :map :hash :list :tuple :slice :chr :hex :type :str)
-  (:export :test :dir :plus :times :__import__ :print :len :bool :callable :isinstance :repr :ascii :str :type :id :iter :next :aiter :anext :reversed :min :max :sum :sorted :list :tuple :abs :round :hash :pow :divmod :all :any :enumerate :zip :filter :map :range :slice :bin :oct :hex :chr :ord :assign :notimplemented :baseexception :exception :runtimeerror :typeerror :valueerror :lookuperror :timeouterror :stopiteration :stopasynciteration))
+  (:export :test :dir :plus :times :__import__ :print :len :bool :callable :isinstance :repr :ascii :str :type :id :iter :next :aiter :anext :reversed :min :max :sum :sorted :list :tuple :abs :round :hash :pow :divmod :all :any :enumerate :zip :filter :map :range :slice :bin :oct :hex :chr :ord :assign :notimplemented :baseexception :exception :runtimeerror :typeerror :valueerror :lookuperror :importerror :modulenotfounderror :attributeerror :nameerror :oserror :filenotfounderror :timeouterror :stopiteration :stopasynciteration))
 
 (in-package "CLAMP.__builtins__")
 
@@ -52,6 +52,24 @@
 
 (defvar LookupError
   |CLAMP.__CLAMP_INTERNALS__|:*PY-LOOKUP-ERROR-TYPE*)
+
+(defvar ImportError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-IMPORT-ERROR-TYPE*)
+
+(defvar ModuleNotFoundError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-MODULE-NOT-FOUND-ERROR-TYPE*)
+
+(defvar AttributeError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-ATTRIBUTE-ERROR-TYPE*)
+
+(defvar NameError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-NAME-ERROR-TYPE*)
+
+(defvar OSError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-OS-ERROR-TYPE*)
+
+(defvar FileNotFoundError
+  |CLAMP.__CLAMP_INTERNALS__|:*PY-FILE-NOT-FOUND-ERROR-TYPE*)
 
 (defvar TimeoutError
   |CLAMP.__CLAMP_INTERNALS__|:*PY-TIMEOUT-ERROR-TYPE*)
