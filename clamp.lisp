@@ -218,7 +218,9 @@
     (setf *verbose* (or (member "-v" raw-args :test #'string=)
 			(member "--verbose" raw-args :test #'string=)))
     (setf *compile-only* (or (member "-c" raw-args :test #'string=)
-			     (member "--compile-only" raw-args :test #'string=)))
+                             (member "--compile-only" raw-args :test #'string=)))
+    (setf |CLAMP.__CLAMP_INTERNALS__|:*PY-SYS-ARGV*
+          (if (> (length args) 0) args (list "")))
     (cond
       ((member "-h" args :test #'string=)
        (print-help))

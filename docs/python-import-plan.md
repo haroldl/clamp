@@ -18,12 +18,15 @@ Implement Python imports around first-class Clamp module objects and a `sys.modu
 - `from m import name` and `from m import name as alias`.
 - Package submodule imports when the package has `__init__.py`.
 
+## Current Status
+
+- Relative imports, star imports, `sys.path`, a user-visible `sys.modules`/`sys.path`/`sys.argv` module surface, function-local import bindings, and circular-import partial-initialization/cleanup behavior are covered by regression examples.
+- Remaining import work is now deeper compatibility: namespace packages, custom import hooks, bytecode caches, extension modules, and zip imports.
+
 ## Deferred Work
 
-- Relative imports, star imports, namespace packages, full `sys.path`, custom import hooks, bytecode caches, extension modules, and zip imports.
-- A user-visible `sys` module/dict API beyond the internal module cache.
-- More precise local-scope import binding inside functions; imports inside functions should follow Python local/global scoping rather than relying on the current top-level-oriented binding path.
-- Circular-import hardening, especially tests for partially initialized modules and `from ... import ...` during import cycles.
+- Namespace packages, custom import hooks, bytecode caches, extension modules, and zip imports.
+- More of the full `sys` module API beyond `modules`, `path`, and `argv`.
 
 ## Validation
 

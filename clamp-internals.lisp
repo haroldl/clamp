@@ -29,6 +29,7 @@
    :*py-current-module*
    :*py-module-search-paths*
    :*py-module-loader*
+   :*py-sys-argv*
    :py-enter-module
    :py-set-global
    :py-import-builtin
@@ -1715,6 +1716,7 @@
 (defvar *py-module-search-paths* nil)
 (defvar *py-sys-path* nil)
 (defvar *py-module-loader* nil)
+(defvar *py-sys-argv* nil)
 (defvar *py-sys-modules* (make-hash-table :test #'equal))
 (defvar *py-builtin-module-builders* (make-hash-table :test #'equal))
 
@@ -2866,6 +2868,8 @@
     (setf (py-object-attr module "modules")
           (make-py-dict-for-storage *py-sys-modules*))
     (setf (py-object-attr module "path") (py-ensure-sys-path))
+    (setf (py-object-attr module "argv")
+          (apply #'make-py-list (or *py-sys-argv* '())))
     module))
 
 (defun py-importlib-resolve-name (name package)

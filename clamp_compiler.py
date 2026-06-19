@@ -1262,7 +1262,7 @@ codegen_handlers[ast.Or] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-OR"
 codegen_handlers[ast.And] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:PY-AND"
 codegen_handlers[int] = lambda node, _: str(node)
 codegen_handlers[float] = lambda node, _: str(node)
-codegen_handlers[str] = lambda node, _: '"' + str(node) + '"' # TODO: escape nested quotes correctly
+codegen_handlers[str] = lambda node, _: lisp_string(node)
 codegen_handlers[bytes] = lambda node, _: codegen_bytes(node)
 codegen_handlers[bool] = lambda node, _: "|CLAMP.__CLAMP_INTERNALS__|:*PY-TRUE*" if node else "|CLAMP.__CLAMP_INTERNALS__|:*PY-FALSE*"
 
