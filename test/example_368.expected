@@ -1,0 +1,21 @@
+cpython
+cpython-312
+pkg/__pycache__/mod.cpython-312.pyc
+pkg/mod.py
+pkg/__pycache__/mod.cpython-312.pyc
+pkg/__pycache__/mod.cpython-312.opt-1.pyc
+True
+True
+test/__pycache__/import_value.cpython-312.pyc
+ValueError
+ValueError
+ValueError
+import_pkg.sub
+bytes 8
+LazyLoader lazy_value True
+LazyLoader lazy_value
+bytes 4
+value = 1
+import_value
+True True
+1 1 True

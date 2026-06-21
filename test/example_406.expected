@@ -1,0 +1,13 @@
+importlib.metadata str True
+PackagePath type True
+Prepared type True
+FastPath type True
+Lookup type True
+MetadataPathFinder ABCMeta True
+Distribution PackageNotFoundError str EntryPoints
+importlib.metadata._adapters
+importlib.metadata._collections
+importlib.metadata._functools
+importlib.metadata._itertools
+importlib.metadata._meta
+importlib.metadata._text

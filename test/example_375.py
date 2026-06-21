@@ -1,0 +1,6 @@
+print(isinstance({}, dict))
+print(isinstance([], list))
+print(isinstance((), tuple))
+print(isinstance(1, int))
+print(isinstance("x", str))
+print(dict([("a", 1)], b=2))

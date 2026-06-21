@@ -1,0 +1,126 @@
+_json
+False
+True
+3
+7
+int
+"a\nb"
+str
+"z"
+20
+6
+[1, 2]
+list
+(1, 2)
+tuple
+base
+int
+_UnionGenericAlias
+_GenericAlias
+['a', 'b']
+list
+b
+7
+[1, 2]
+[('items', [1, 2])]
+[1]
+[9, 8, 2]
+[9, 2]
+[2, 9]
+2
+9 1
+7
+native item done
+1
+datetime
+ExtensionFileLoader
+True
+_json
+ExtensionFileLoader
+True
+_json
+ExtensionFileLoader
+native false
+TypeError
+True
+Error
+True
+import_pkg.sub
+submodule value
+Callable
+True
+True
+GenericAlias
+GenericAlias
+set
+GenericAlias
+int
+CamelName
+camel
+Inner
+inner
+method
+marked
+method
+[0, 1, 2, 3, 4]
+(1, 2, 3, 4, 5)
+True
+9
+9
+11
+1
+2
+3
+BoundT
+MetaMade
+12
+seen
+True
+5
+6
+Built
+42
+1
+0
+True
+b
+True
+True
+FinalDemo
+FinalDemo
+3
+4
+True
+3
+1
+Field
+False
+managed
+True
+False
+MroBase
+MroBase
+frame_inner
+frame_outer
+frame_outer
+10
+20
+method
+importlib.metadata
+chain
+str True
+PathDistribution
+True
+PackageNotFoundError
+EntryPoints
+6
+3
+True
+True
+True
+native boom
+TEBound
+Sentinel
+OrderedDict
+True
+MetaValue

@@ -1,10 +1,10 @@
 module value
 import_value
-True
+False
 import_value
-True
+False
 direct_value
-True
+False
 True
 relative_pkg.sub
 True

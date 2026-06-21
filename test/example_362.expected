@@ -1,0 +1,15 @@
+True
+SourcelessFileLoader
+pkg.mod
+/tmp/pkg/mod.pyc
+/tmp/pkg/mod.pyc
+None
+False
+True
+get_code FileNotFoundError
+get_data FileNotFoundError
+clamp_dummy_sourceless
+SourcelessFileLoader
+True
+True
+True

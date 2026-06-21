@@ -5,3 +5,20 @@ PosixPath
 True
 resource.txt
 True
+PosixPath
+True
+True
+True
+True
+VALUE = "submodule value"
+VALUE = "submodule value"
+b'VALUE '
+PosixPath
+True
+True
+True
+True
+PosixPath
+True
+VALUE = "submodule value"
+b'VALUE '

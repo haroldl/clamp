@@ -1,0 +1,15 @@
+import _decimal
+
+a = _decimal.Decimal("10.5")
+b = _decimal.Decimal("2")
+print(a + b)
+print(a - b)
+print(a * b)
+print(a / b)
+print(-a)
+print(+a)
+print(abs(-a))
+print(a > b)
+print(a >= b)
+print(b < a)
+print(b <= a)

@@ -1,0 +1,7 @@
+importlib.resources
+ABCMeta True
+False False
+importlib.resources.abc
+['ResourceReader', 'Traversable', 'TraversableResources']
+ResourceReader Traversable TraversableResources
+True True True

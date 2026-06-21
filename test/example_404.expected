@@ -1,0 +1,14 @@
+pkgutil type
+FileFinder True
+manual manual False
+True
+pkgutil_404_pkg
+pkgutil_404_pkg
+True
+True
+True
+True
+SourceFileLoader
+SourceFileLoader
+b'pkgutil'
+False

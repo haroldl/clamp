@@ -115,6 +115,8 @@ EXAMPLE_135 = TEST_DIR / "example_135.py"
 EXAMPLE_137 = TEST_DIR / "example_137.py"
 EXAMPLE_144 = TEST_DIR / "example_144.py"
 CPYTHON_314 = Path.home() / "local" / "Python-3.14.5" / "python"
+PYDANTIC_MAIN = Path.home() / "local" / "pydantic-main"
+PYDANTIC_CORE_PYTHON = PYDANTIC_MAIN / "pydantic-core" / "python"
 
 
 def run_clamp(sample, *args):
@@ -3333,3 +3335,55 @@ def test_operator_length_hint_example_matches_local_cpython_when_available():
     )
     clamp_result = run_clamp(sample)
     assert clamp_result.stdout == cpython_result.stdout
+
+
+
+def test_cpython_extension_import_order_after_cryptography_when_available(tmp_path):
+    pytest.importorskip("cryptography.fernet")
+    pytest.importorskip("numpy")
+    pytest.importorskip("lxml.etree")
+
+    sample = tmp_path / "extension_order.py"
+    sample.write_text(
+        "from cryptography.fernet import Fernet\n"
+        "import socket\n"
+        "import ssl\n"
+        "import zlib\n"
+        "import numpy as np\n"
+        "from lxml import etree\n"
+        "\n"
+        "key = Fernet.generate_key()\n"
+        "print(Fernet(key).decrypt(Fernet(key).encrypt(b'abc')))\n"
+        "print(ssl.create_default_context().verify_mode)\n"
+        "s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n"
+        "try:\n"
+        "    print(s.family == socket.AF_INET, s.type == socket.SOCK_STREAM)\n"
+        "finally:\n"
+        "    s.close()\n"
+        "print(zlib.decompress(zlib.compress(b'abc')))\n"
+        "print(int(np.arange(6).reshape(2, 3)[:, 1].sum()))\n"
+        "root = etree.fromstring(b'<root><x id=\"1\">a</x><x id=\"2\">b</x></root>')\n"
+        "print(root.xpath('string(//x[@id=\"2\"])'))\n"
+    )
+
+    result = run_clamp(sample)
+    assert result.stdout == "b'abc'\n2\nTrue True\nb'abc'\n5\nb\n"
+
+def test_pydantic_v2_probe_when_local_checkout_available():
+    if not (PYDANTIC_MAIN / "pydantic").exists():
+        pytest.skip("local pydantic-main checkout is not available")
+    if not (PYDANTIC_CORE_PYTHON / "pydantic_core").exists():
+        pytest.skip("local pydantic-core checkout is not available")
+
+    result = run_clamp(TEST_DIR / "pydantic_v2_probe.py")
+    stdout = result.stdout
+    assert stdout.startswith("7 11 clamp clamp:7\n")
+    assert "Configured 7 ada\n" in stdout
+    assert "[3, 4]\n[3, 4]\n" in stdout
+    assert "True True 3 [1]\n{'count': '3', 'tags': [1]}\n" in stdout
+    assert "True True 4 5\n6\n" in stdout
+    assert "1 2 [3] token\nCopyDemo 4 2 [3] token\n" in stdout
+    assert "[3] [3, 5]\n[3] [3, 7]\n" in stdout
+    assert "CopyDemo 1 [3] token\n[3] [3, 9]\n" in stdout
+    assert stdout.count("ValidationError\n") == 4
+    assert "ValidationError\nTrue\n1 2 [3] token\n" in stdout

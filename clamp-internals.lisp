@@ -13,15 +13,25 @@
    :py-type-name
    :py-type-bases
    :py-type-attrs
+   :py-resolve-class-bases
+   :py-normalize-class-bases
    :py-type-basicsize
    :py-type-itemsize
    :py-type-flags
    :py-type-attr
    :py-object-attr
+   :py-setattr
+   :py-delattr
    :py-lookup-attr
    :py-call-attr
    :py-invoke-callable
+   :py-invoke-callable-expanded
+   :py-call-attr-expanded
+   :py-bind-context-exit-callable
+   :py-iterable-to-list
+   :py-dict-merge
    :py-bind-args
+   :py-bind-args-extended
    :py-module-object
    :py-module-object-name
    :py-module-object-source-path
@@ -30,8 +40,52 @@
    :*py-module-search-paths*
    :*py-module-loader*
    :*py-sys-argv*
+   :*py-cpython-import-module*
+   :*py-cpython-load-extension-module*
+   :*py-cpython-find-extension-origin*
+   :*py-cpython-find-spec*
+   :*py-cpython-exec-pyc-module*
+   :*py-cpython-generic-alias*
+   :*py-cpython-sync-module-globals*
+   :*py-cpython-dir*
+   :*py-cpython-get-attr*
+   :*py-cpython-set-attr*
+   :*py-cpython-del-attr*
+   :*py-cpython-call*
+   :*py-cpython-call-expanded*
+   :*py-cpython-display*
+   :*py-cpython-repr*
+   :*py-cpython-format*
+   :*py-cpython-identity*
+   :*py-cpython-truthy*
+   :*py-cpython-callable*
+   :*py-cpython-isinstance*
+   :*py-cpython-issubclass*
+   :*py-cpython-type-of*
+   :*py-cpython-getitem*
+   :*py-cpython-setitem*
+   :*py-cpython-delitem*
+   :*py-cpython-iter*
+   :*py-cpython-next*
+   :*py-cpython-contains*
+   :*py-cpython-add*
+   :*py-cpython-sub*
+   :*py-cpython-mul*
+   :*py-cpython-truediv*
+   :*py-cpython-floordiv*
+   :*py-cpython-mod*
+   :*py-cpython-divmod*
+   :*py-cpython-pow*
+   :*py-cpython-neg*
+   :*py-cpython-pos*
+   :*py-cpython-abs*
+   :*py-cpython-richcompare*
+   :*py-cpython-hash*
+   :*py-cpython-len*
    :py-enter-module
    :py-set-global
+   :py-del-global
+   :py-globals
    :py-import-builtin
    :py-import-name
    :py-import-from
@@ -66,15 +120,25 @@
    :*py-object-type*
    :*py-type-type*
    :*py-none*
+   :*py-ellipsis*
    :*py-false*
    :*py-true*
    :*py-not-implemented*
    :*py-base-exception-type*
    :*py-exception-type*
+   :*py-warning-type*
+   :*py-user-warning-type*
+   :*py-deprecation-warning-type*
+   :*py-runtime-warning-type*
+   :*py-memory-error-type*
    :*py-runtime-error-type*
+   :*py-recursion-error-type*
+   :*py-assertion-error-type*
    :*py-type-error-type*
    :*py-value-error-type*
    :*py-lookup-error-type*
+   :*py-key-error-type*
+   :*py-index-error-type*
    :*py-import-error-type*
    :*py-module-not-found-error-type*
    :*py-attribute-error-type*
@@ -97,6 +161,7 @@
    :py-sorted
    :py-list
    :py-tuple
+   :py-dict
    :py-round
    :py-bin
    :py-oct
@@ -104,8 +169,15 @@
    :py-chr
    :py-ord
    :py-add
+   :py-sub
+   :py-bitor
+   :py-bitand
+   :py-bitxor
+   :py-lshift
+   :py-rshift
    :py-iadd
    :py-mul
+   :py-matmul
    :py-imul
    :py-pow
    :py-truediv
@@ -130,10 +202,13 @@
    :py-str
    :py-ascii
    :py-repr
+   :py-format
    :py-display
    :py-exception
    :py-exception-value
    :py-exception-object
+   :make-py-exception
+   :py-raise-type
    :py-lisp-error-to-exception
    :py-raise
    :*py-stop-iteration*
@@ -141,6 +216,8 @@
    :*py-stop-async-iteration-type*
    :py-stop-iteration-p
    :make-py-coroutine
+   :make-py-generator
+   :py-generator-yield
    :make-py-async-generator
    :py-async-generator-yield
    :py-await
@@ -171,8 +248,13 @@
 
 (in-package "CLAMP.__CLAMP_INTERNALS__")
 
+(declaim (special *py-current-module* *py-cpython-generic-alias* *py-cpython-sync-module-globals* *py-cpython-find-spec* *py-cpython-exec-pyc-module* *py-cpython-dir* *py-cpython-call-expanded* *py-cpython-get-attr* *py-cpython-set-attr* *py-cpython-del-attr* *py-cpython-format* *py-cpython-identity* *py-cpython-truthy* *py-cpython-callable* *py-cpython-isinstance* *py-cpython-issubclass* *py-cpython-type-of* *py-cpython-getitem* *py-cpython-setitem* *py-cpython-delitem* *py-cpython-iter* *py-cpython-next* *py-cpython-contains* *py-cpython-add* *py-cpython-sub* *py-cpython-mul* *py-cpython-truediv* *py-cpython-floordiv* *py-cpython-mod* *py-cpython-divmod* *py-cpython-pow* *py-cpython-neg* *py-cpython-pos* *py-cpython-abs* *py-cpython-richcompare* *py-cpython-hash* *py-cpython-len* *py-dict-type* *py-list-type* *py-tuple-type* *py-none* *py-true* *py-type-error-type* *py-dataclasses-field-type* *py-dataclasses-field-marker*))
+(declaim (ftype function make-py-tuple py-call-attr-expanded py-make-typeddict-class py-typeddict-bases-p make-py-callable make-py-dict-from-pairs py-callable-attrs py-dict-merge py-dict-object-p py-dict-set-entry py-raise-type py-dataclasses-field-default py-find-type-attr))
 
 (require :sb-bsd-sockets)
+
+(defvar *py-cpython-sync-module-globals* nil)
+(defvar *py-pkgutil-module-info-type* nil)
 
 (sb-alien:load-shared-object "libm.so.6")
 (sb-alien:define-alien-routine ("cbrt" c-cbrt) sb-alien:double (x sb-alien:double))
@@ -197,6 +279,20 @@
   value
   (attrs (make-hash-table :test #'equal)))
 
+(defmethod print-object ((obj py-object) stream)
+  (print-unreadable-object (obj stream :type nil)
+    (format stream "~A object"
+            (if (and (py-object-type obj)
+                     (py-type-p (py-object-type obj)))
+                (py-type-name (py-object-type obj))
+                "Python"))))
+
+(defstruct (py-cpython-object (:include py-object))
+  pointer)
+
+(defmethod print-object ((obj py-cpython-object) stream)
+  (print-unreadable-object (obj stream :type t)
+    (format stream "~A" (py-cpython-object-pointer obj))))
 
 (defun make-py-instance (type &key value attrs size)
   (unless (py-type-p type)
@@ -207,6 +303,7 @@
                  (setf (gethash name (py-object-attrs obj)) attr))
                attrs))
     obj))
+
 
 ;; Internal representation of a Python type object. User-defined classes can be
 ;; modeled with this rather than relying on CLOS semantics.
@@ -220,6 +317,10 @@
   mapping-length-fn
   sequence-length-fn)
 
+(defmethod print-object ((obj py-type) stream)
+  (print-unreadable-object (obj stream :type t)
+    (format stream "~A" (py-type-name obj))))
+
 (defparameter *py-type-type*
   (make-py-type :name "type" :basicsize 1))
 
@@ -229,6 +330,402 @@
   (make-py-type :type *py-type-type* :name "object" :basicsize 1))
 
 (setf (py-type-bases *py-type-type*) (list *py-object-type*))
+
+(defun py-cpython-class-object-p (value)
+  (and (py-cpython-object-p value)
+       *py-cpython-type-of*
+       *py-cpython-issubclass*
+       (handler-case
+           (funcall *py-cpython-issubclass* (funcall *py-cpython-type-of* value) *py-type-type*)
+         (py-exception () nil)
+         (error () nil))))
+
+(defun py-cpython-metaclass-object-p (value)
+  (and (py-cpython-object-p value)
+       *py-cpython-issubclass*
+       (handler-case
+           (funcall *py-cpython-issubclass* value *py-type-type*)
+         (py-exception () nil)
+         (error () nil))))
+
+(defun py-cpython-plain-generic-class-p (value)
+  (and (py-cpython-object-p value)
+       (let ((display (with-output-to-string (stream) (py-display value stream))))
+         (or (string= display "typing.Generic")
+             (string= display "<class 'typing.Generic'>")))))
+
+(defun py-cpython-generic-base-p (value)
+  (and (py-cpython-object-p value)
+       (let ((display (with-output-to-string (stream) (py-display value stream))))
+         (or (string= display "typing.Generic")
+             (string= display "<class 'typing.Generic'>")
+             (search "typing.Generic[" display :test #'char=)))))
+
+(defun py-normalize-class-base (base)
+  (cond
+    ((py-type-p base) base)
+    ((and (py-callable-p base) (string= (py-callable-name base) "type")) *py-type-type*)
+    ((and (py-callable-p base) (string= (py-callable-name base) "object")) *py-object-type*)
+    ((py-cpython-class-object-p base)
+     (let ((display (with-output-to-string (stream) (py-display base stream))))
+       (cond
+         ((string= display "<class 'dict'>") *py-dict-type*)
+         ((string= display "<class 'list'>") *py-list-type*)
+         ((string= display "<class 'tuple'>") *py-tuple-type*)
+         ((string= display "<class 'object'>") *py-object-type*)
+         ((string= display "<class 'type'>") *py-type-type*)
+         (t base))))
+    ((py-cpython-metaclass-object-p base) *py-type-type*)
+    ((py-cpython-plain-generic-class-p base) nil)
+    (t nil)))
+
+(defun py-class-base-entry-supported-p (entry)
+  (or (py-normalize-class-base entry)
+      (and (py-cpython-object-p entry)
+           (search "TypedDict"
+                   (with-output-to-string (stream) (py-display entry stream))
+                   :test #'char=))))
+
+(defun py-class-base-mro-entries (base bases)
+  (let ((method (handler-case
+                    (py-lookup-attr base "__mro_entries__")
+                  (py-exception () nil)
+                  (error () nil))))
+    (when method
+      (let ((entries (py-invoke-callable method (apply #'make-py-tuple bases))))
+        (cond
+          ((py-tuple-object-p entries)
+           (values
+            (loop for entry in (py-iterable-to-list entries)
+                  for normalized-entry = (py-normalize-class-base entry)
+                  when (or normalized-entry
+                           (and (py-cpython-object-p entry)
+                                (search "TypedDict"
+                                        (with-output-to-string (stream) (py-display entry stream))
+                                        :test #'char=)))
+                    collect (or normalized-entry entry))
+            t))
+          (t
+           (py-raise-type *py-type-error-type* "__mro_entries__ must return a tuple")))))))
+
+(defun py-resolve-class-bases (bases)
+  (let ((resolved '())
+        (changed nil))
+    (dolist (base bases)
+      (cond
+        ((py-cpython-plain-generic-class-p base)
+         (setf changed t))
+        (t
+         (multiple-value-bind (entries resolved-p)
+             (unless (py-type-p base)
+               (py-class-base-mro-entries base bases))
+           (if resolved-p
+               (progn
+                 (setf changed t)
+                 (setf resolved (append (reverse entries) resolved)))
+               (push base resolved))))))
+    (if changed
+        (nreverse resolved)
+        bases)))
+
+(defun py-normalize-class-bases (bases)
+  (let ((normalized (loop for base in bases
+                          for normalized-base = (py-normalize-class-base base)
+                          when normalized-base
+                            collect normalized-base)))
+    (if normalized
+        normalized
+        (list *py-object-type*))))
+
+(defun py-copy-hash-table (table)
+  (let ((copy (make-hash-table :test (hash-table-test table))))
+    (maphash (lambda (key value) (setf (gethash key copy) value)) table)
+    copy))
+
+(defun py-class-namespace-from-template (template)
+  (make-py-dict-for-storage (py-copy-hash-table (py-type-attrs template))))
+
+(defun py-type-dict (type)
+  (let ((storage (py-copy-hash-table (py-type-attrs type))))
+    (maphash (lambda (key value)
+               (setf (gethash key storage) value))
+             (py-object-attrs type))
+    (make-py-dict-for-storage storage)))
+
+(defun py-select-class-metaclass (bases explicit-metaclass)
+  (cond
+    ((and explicit-metaclass (not (eq explicit-metaclass *py-none*)))
+     explicit-metaclass)
+    (t
+     (loop for base in bases
+           when (and (py-type-p base)
+                     (not (eq (py-object-type base) *py-type-type*)))
+             do (return (py-object-type base))
+           finally (return *py-type-type*)))))
+
+(defun py-class-bases-parameters (bases)
+  (let ((parameters '()))
+    (dolist (base bases)
+      (let ((base-parameters (handler-case
+                                 (py-lookup-attr base "__parameters__")
+                               (py-exception () nil)
+                               (error () nil))))
+        (when base-parameters
+          (dolist (parameter (py-iterable-to-list base-parameters))
+            (unless (member parameter parameters :test (lambda (left right) (py-truthy-p (py-eq left right))))
+              (push parameter parameters))))))
+    (nreverse parameters)))
+
+(defun py-prepare-class-template-generic-metadata (template bases)
+  (when bases
+    (let ((visible-bases (if (or (multiple-value-bind (value found)
+                                      (gethash "__pydantic_root_model__" (py-type-attrs template))
+                                    (declare (ignore value))
+                                    found)
+                                  (multiple-value-bind (value found)
+                                      (gethash "__pydantic_generic_metadata__" (py-type-attrs template))
+                                    (declare (ignore value))
+                                    found))
+                             (remove-if #'py-cpython-generic-base-p bases)
+                             bases)))
+      (when visible-bases
+        (setf (py-type-attr template "__orig_bases__") (apply #'make-py-tuple visible-bases))))
+    (let ((parameters (py-class-bases-parameters bases)))
+      (when parameters
+        (setf (py-type-attr template "__parameters__") (apply #'make-py-tuple parameters))))))
+
+(defun py-native-enum-base-p (base)
+  (and (py-cpython-object-p base)
+       (let ((display (with-output-to-string (stream) (py-display base stream))))
+         (or (search "enum.Enum" display :test #'char=)
+             (search "enum.IntEnum" display :test #'char=)
+             (search "enum.IntFlag" display :test #'char=)
+             (search "<enum 'Enum'>" display :test #'char=)
+             (search "<enum 'IntEnum'>" display :test #'char=)
+             (search "<flag 'IntFlag'>" display :test #'char=)))))
+
+(defun py-enum-class-p (base)
+  (or (py-native-enum-base-p base)
+      (and (py-type-p base)
+           (handler-case
+               (py-truthy-p (py-lookup-attr base "__clamp_enum_class__"))
+             (py-exception () nil)
+             (error () nil)))))
+
+(defun py-enum-member-candidate-p (name value)
+  (and (stringp name)
+       (> (length name) 0)
+       (not (char= (char name 0) #\_))
+       (not (py-callable-p value))))
+
+(defun py-finalize-enum-class (class bases)
+  (when (and (py-type-p class)
+             (loop for base in bases thereis (py-enum-class-p base)))
+    (let ((members '()))
+      (maphash
+       (lambda (member-name member-value)
+         (when (py-enum-member-candidate-p member-name member-value)
+           (let ((member (make-py-object :type class)))
+             (setf (py-object-attr member "_name_") member-name)
+             (setf (py-object-attr member "_value_") member-value)
+             (setf (py-object-attr member "name") member-name)
+             (setf (py-object-attr member "value") member-value)
+             (setf (py-type-attr class member-name) member)
+             (push member members))))
+       (py-type-attrs class))
+      (setf (py-type-attr class "__clamp_enum_class__") *py-true*)
+      (setf (py-type-attr class "__clamp_enum_members__")
+            (apply #'make-py-list (nreverse members)))))
+  class)
+
+(defun py-pydantic-rootmodel-base-arg (bases)
+  (dolist (base bases)
+    (let ((metadata (handler-case
+                        (py-lookup-attr base "__pydantic_generic_metadata__")
+                      (py-exception () nil)
+                      (error () nil))))
+      (when (py-dict-object-p metadata)
+        (let* ((storage (py-dict-storage metadata "__pydantic_generic_metadata__"))
+               (origin (gethash "origin" storage))
+               (args (gethash "args" storage)))
+          (when (and origin
+                     args
+                     (py-truthy-p args)
+                     (search "RootModel"
+                             (with-output-to-string (stream) (py-display origin stream))
+                             :test #'char=))
+            (return (first (py-iterable-to-list args)))))))))
+
+(defun py-pydantic-rootmodel-class-p (cls)
+  (handler-case
+      (py-truthy-p (py-lookup-attr cls "__pydantic_root_model__"))
+    (py-exception () nil)
+    (error () nil)))
+
+(defun py-pydantic-generic-model-type-p (cls)
+  (and (py-type-p cls)
+       (multiple-value-bind (metadata found) (gethash "__pydantic_generic_metadata__" (py-type-attrs cls))
+         (declare (ignore metadata))
+         found)))
+
+(defun py-pydantic-generic-submodel (cls args)
+  (let* ((arg-tuple (if (py-tuple-object-p args) args (make-py-tuple args)))
+         (name (concatenate 'string (py-type-name cls) "[...]") )
+         (submodel (make-py-type :type (py-object-type cls)
+                                 :name name
+                                 :bases (list cls)
+                                 :basicsize 1))
+         (metadata (make-py-dict-from-pairs
+                    (list "origin" cls)
+                    (list "args" arg-tuple)
+                    (list "parameters" (make-py-tuple)))))
+    (setf (py-type-attr submodel "__pydantic_generic_metadata__") metadata)
+    (setf (py-type-attr submodel "__parameters__") (make-py-tuple))
+    (setf (py-type-attr submodel "__module__") (py-lookup-attr-or-default cls "__module__" "pydantic"))
+    (when (py-pydantic-rootmodel-class-p cls)
+      (setf (py-type-attr submodel "__pydantic_root_model__") *py-true*))
+    submodel))
+
+(defun py-pydantic-fix-rootmodel-subclass (cls bases)
+  (let ((root-arg (py-pydantic-rootmodel-base-arg bases)))
+    (when (and root-arg (py-pydantic-rootmodel-class-p cls))
+      (let ((annotations (handler-case
+                             (py-lookup-attr cls "__annotations__")
+                           (py-exception () nil)
+                           (error () nil))))
+        (unless (py-dict-object-p annotations)
+          (setf annotations (make-py-dict-from-pairs)))
+        (py-dict-set-entry annotations "root" root-arg)
+        (if (py-type-p cls)
+            (setf (py-type-attr cls "__annotations__") annotations)
+            (py-setattr cls "__annotations__" annotations)))
+      (let ((fields (handler-case
+                        (py-lookup-attr cls "model_fields")
+                      (py-exception () nil)
+                      (error () nil))))
+        (when fields
+          (handler-case
+              (py-setattr (py-getitem fields "root") "annotation" root-arg)
+            (py-exception () nil)
+            (error () nil))))
+      (handler-case
+          (py-call-attr-expanded
+           cls
+           "model_rebuild"
+           nil
+           (make-py-dict-from-pairs
+            (list "force" *py-true*)
+            (list "_types_namespace"
+                  (make-py-dict-from-pairs (list "RootModelRootType" root-arg)))))
+        (py-exception () nil)
+        (error () nil))))
+  cls)
+
+(defun py-filter-class-metaclass-bases (bases)
+  (loop for base in bases
+        unless (py-cpython-plain-generic-class-p base)
+          collect base))
+
+(defun py-cpython-new-descriptor-p (metaclass)
+  (handler-case
+      (py-cpython-object-p (py-lookup-attr metaclass "__new__"))
+    (py-exception () nil)
+    (error () nil)))
+
+(defun py-call-set-name-descriptors (class)
+  (when (py-type-p class)
+    (let ((attrs (py-type-attrs class)))
+      (maphash (lambda (name attr)
+                 (when (stringp name)
+                   (handler-case
+                       (let ((set-name (py-lookup-attr attr "__set_name__")))
+                         (when (py-truthy-p (py-callable set-name))
+                           (py-invoke-callable set-name class name)))
+                     (py-exception () nil)
+                     (error () nil))))
+               attrs)))
+  class)
+
+(defun py-build-class-from-template (template name bases explicit-metaclass kwargs &optional original-bases)
+  (py-prepare-class-template-generic-metadata template (or original-bases bases))
+  (let* ((bases (py-filter-class-metaclass-bases bases))
+         (metaclass (py-select-class-metaclass bases explicit-metaclass)))
+    (let ((class
+           (cond
+             ((py-typeddict-bases-p bases)
+              (py-make-typeddict-class name template))
+             ((or (eq metaclass *py-type-type*) (eq metaclass *py-none*))
+              template)
+             (t
+              (let ((namespace (py-class-namespace-from-template template))
+                    (base-tuple (apply #'make-py-tuple bases)))
+                (py-call-attr-expanded metaclass "__new__"
+                                       (if (or (py-cpython-object-p metaclass)
+                                               (py-cpython-new-descriptor-p metaclass))
+                                           (list metaclass name base-tuple namespace)
+                                           (list name base-tuple namespace))
+                                       kwargs))))))
+      (py-call-set-name-descriptors class)
+      (py-finalize-enum-class class (or original-bases bases))
+      (py-pydantic-fix-rootmodel-subclass class (or original-bases bases)))))
+
+
+(defun py-cpython-display-contains-p (value needle)
+  (and (py-cpython-object-p value)
+       (search needle (with-output-to-string (stream) (py-display value stream)) :test #'char=)))
+
+(defun py-typeddict-bases-p (bases)
+  (loop for base in bases
+        thereis (or (py-cpython-display-contains-p base "TypedDict")
+                    (and (py-type-p base)
+                         (string= (py-type-name base) "TypedDict")))))
+
+(defun py-make-typeddict-class (name template)
+  (let ((callable (make-py-callable
+                   :name name
+                   :fn (lambda (&rest args)
+                         (let ((dict (make-py-dict-from-pairs)))
+                           (loop while args
+                                 for item = (pop args)
+                                 do (cond
+                                      ((keywordp item)
+                                       (unless args
+                                         (py-raise-type *py-type-error-type* "keyword argument has no value"))
+                                       (py-dict-set-entry dict (py-keyword-argument-name item) (pop args)))
+                                      ((py-dict-object-p item)
+                                       (py-dict-merge dict item))
+                                      (t
+                                       (py-raise-type *py-type-error-type* "TypedDict expected keyword arguments or dict"))))
+                           dict)))))
+    (maphash (lambda (key value)
+               (setf (gethash key (py-callable-attrs callable)) value))
+             (py-type-attrs template))
+    callable))
+
+(defun py-type-new (metaclass name bases namespace &rest args)
+  (declare (ignore args))
+  (when (and (py-callable-p metaclass) (string= (py-callable-name metaclass) "type"))
+    (setf metaclass *py-type-type*))
+  (let* ((base-list (if (py-tuple-object-p bases)
+                        (py-iterable-to-list bases)
+                        (py-normalize-class-bases (py-iterable-to-list bases))))
+         (new-type (make-py-type :type metaclass
+                                 :name name
+                                 :bases base-list
+                                 :basicsize 1)))
+    (when (py-dict-object-p namespace)
+      (let ((storage (py-dict-storage namespace "type.__new__"))
+            (keys (py-dict-object-keys namespace)))
+        (loop for index from 0 below (fill-pointer keys)
+              for key = (aref keys index)
+              do (setf (py-type-attr new-type key) (gethash key storage)))))
+    new-type))
+
+(defun py-object-new (cls &rest args)
+  (declare (ignore args))
+  (unless (py-type-p cls)
+    (py-raise-type *py-type-error-type* "object.__new__() argument must be a type"))
+  (make-py-instance cls))
 
 (defparameter *py-none-type*
   (make-py-type :type *py-type-type*
@@ -291,6 +788,36 @@
                 :bases (list *py-base-exception-type*)
                 :basicsize 1))
 
+(defparameter *py-warning-type*
+  (make-py-type :type *py-type-type*
+                :name "Warning"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-user-warning-type*
+  (make-py-type :type *py-type-type*
+                :name "UserWarning"
+                :bases (list *py-warning-type*)
+                :basicsize 1))
+
+(defparameter *py-deprecation-warning-type*
+  (make-py-type :type *py-type-type*
+                :name "DeprecationWarning"
+                :bases (list *py-warning-type*)
+                :basicsize 1))
+
+(defparameter *py-runtime-warning-type*
+  (make-py-type :type *py-type-type*
+                :name "RuntimeWarning"
+                :bases (list *py-warning-type*)
+                :basicsize 1))
+
+(defparameter *py-memory-error-type*
+  (make-py-type :type *py-type-type*
+                :name "MemoryError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
 (defparameter *py-stop-iteration-type*
   (make-py-type :type *py-type-type*
                 :name "StopIteration"
@@ -306,6 +833,18 @@
 (defparameter *py-runtime-error-type*
   (make-py-type :type *py-type-type*
                 :name "RuntimeError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-recursion-error-type*
+  (make-py-type :type *py-type-type*
+                :name "RecursionError"
+                :bases (list *py-runtime-error-type*)
+                :basicsize 1))
+
+(defparameter *py-assertion-error-type*
+  (make-py-type :type *py-type-type*
+                :name "AssertionError"
                 :bases (list *py-exception-type*)
                 :basicsize 1))
 
@@ -325,6 +864,18 @@
   (make-py-type :type *py-type-type*
                 :name "LookupError"
                 :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-key-error-type*
+  (make-py-type :type *py-type-type*
+                :name "KeyError"
+                :bases (list *py-lookup-error-type*)
+                :basicsize 1))
+
+(defparameter *py-index-error-type*
+  (make-py-type :type *py-type-type*
+                :name "IndexError"
+                :bases (list *py-lookup-error-type*)
                 :basicsize 1))
 
 (defparameter *py-import-error-type*
@@ -414,6 +965,12 @@
 (defparameter *py-coroutine-type*
   (make-py-type :type *py-type-type*
                 :name "coroutine"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-generator-type*
+  (make-py-type :type *py-type-type*
+                :name "generator"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -585,6 +1142,12 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+(defparameter *py-contextlib-generator-context-manager-type*
+  (make-py-type :type *py-type-type*
+                :name "_GeneratorContextManager"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
 (defparameter *py-contextlib-async-generator-context-manager-type*
   (make-py-type :type *py-type-type*
                 :name "_AsyncGeneratorContextManager"
@@ -594,6 +1157,12 @@
 (defparameter *py-contextlib-aclosing-type*
   (make-py-type :type *py-type-type*
                 :name "aclosing"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-contextlib-context-decorator-type*
+  (make-py-type :type *py-type-type*
+                :name "ContextDecorator"
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
@@ -759,6 +1328,44 @@
                 :bases (list *py-object-type*)
                 :basicsize 1))
 
+
+(defparameter *py-function-type*
+  (make-py-type :type *py-type-type*
+                :name "function"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-property-type*
+  (make-py-type :type *py-type-type*
+                :name "property"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-classmethod-type*
+  (make-py-type :type *py-type-type*
+                :name "classmethod"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-staticmethod-type*
+  (make-py-type :type *py-type-type*
+                :name "staticmethod"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-never-type*
+  (make-py-type :type *py-type-type*
+                :name "_Never"
+                :bases nil
+                :basicsize 1))
+
+(setf (gethash "__getitem__" (py-type-attrs *py-function-type*))
+      (lambda (obj item)
+        (declare (ignore item))
+        (if (py-callable-p obj)
+            (py-callable-name obj)
+            obj)))
+
 (defparameter *py-module-type*
   (make-py-type :type *py-type-type*
                 :name "module"
@@ -773,6 +1380,22 @@
 
 (setf (gethash "__module__" (py-object-attrs *py-module-spec-type*)) "_frozen_importlib")
 
+(defparameter *py-builtin-importer-type*
+  (make-py-type :type *py-type-type*
+                :name "BuiltinImporter"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-builtin-importer-type*)) "_frozen_importlib")
+
+(defparameter *py-frozen-importer-type*
+  (make-py-type :type *py-type-type*
+                :name "FrozenImporter"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-frozen-importer-type*)) "_frozen_importlib")
+
 (defparameter *py-source-file-loader-type*
   (make-py-type :type *py-type-type*
                 :name "SourceFileLoader"
@@ -781,6 +1404,62 @@
 
 (setf (gethash "__module__" (py-object-attrs *py-source-file-loader-type*)) "_frozen_importlib_external")
 
+(defparameter *py-extension-file-loader-type*
+  (make-py-type :type *py-type-type*
+                :name "ExtensionFileLoader"
+                :bases (list *py-source-file-loader-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-extension-file-loader-type*)) "_frozen_importlib_external")
+
+(defparameter *py-sourceless-file-loader-type*
+  (make-py-type :type *py-type-type*
+                :name "SourcelessFileLoader"
+                :bases (list *py-source-file-loader-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-sourceless-file-loader-type*)) "_frozen_importlib_external")
+
+(defparameter *py-lazy-loader-type*
+  (make-py-type :type *py-type-type*
+                :name "LazyLoader"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-lazy-loader-type*)) "importlib.util")
+
+(defparameter *py-namespace-loader-type*
+  (make-py-type :type *py-type-type*
+                :name "NamespaceLoader"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-namespace-loader-type*)) "_frozen_importlib_external")
+
+(defparameter *py-path-finder-type*
+  (make-py-type :type *py-type-type*
+                :name "PathFinder"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-path-finder-type*)) "_frozen_importlib_external")
+
+(defparameter *py-file-finder-type*
+  (make-py-type :type *py-type-type*
+                :name "FileFinder"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-file-finder-type*)) "_frozen_importlib_external")
+
+(defparameter *py-windows-registry-finder-type*
+  (make-py-type :type *py-type-type*
+                :name "WindowsRegistryFinder"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-windows-registry-finder-type*)) "_frozen_importlib_external")
+
 (defparameter *py-buffered-reader-type*
   (make-py-type :type *py-type-type*
                 :name "BufferedReader"
@@ -788,6 +1467,14 @@
                 :basicsize 1))
 
 (setf (gethash "__module__" (py-object-attrs *py-buffered-reader-type*)) "_io")
+
+(defparameter *py-text-reader-type*
+  (make-py-type :type *py-type-type*
+                :name "TextIOWrapper"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-text-reader-type*)) "_io")
 
 (defparameter *py-file-reader-type*
   (make-py-type :type *py-type-type*
@@ -811,6 +1498,8 @@
 (defparameter *py-not-implemented*
   (make-py-object :type *py-not-implemented-type* :value nil))
 
+(defvar *py-ellipsis* nil)
+
 (setf (gethash "__hash__" (py-type-attrs *py-module-spec-type*)) *py-none*)
 
 (defparameter *py-false*
@@ -827,6 +1516,14 @@
   result
   exception)
 
+(defstruct (py-generator-object (:include py-object))
+  name
+  thunk
+  (realized nil)
+  (items '())
+  (index 0)
+  (closed nil))
+
 (defstruct (py-async-generator-object (:include py-object))
   name
   thunk
@@ -835,6 +1532,7 @@
   (index 0)
   (closed nil))
 
+(defvar *py-generator-yields* nil)
 (defvar *py-async-generator-yields* nil)
 
 (defstruct (py-asyncio-future-object (:include py-object))
@@ -993,6 +1691,10 @@
   (cond
     ((eq value *py-true*) t)
     ((or (eq value *py-false*) (eq value *py-none*)) nil)
+    ((py-cpython-object-p value)
+     (if *py-cpython-truthy*
+         (funcall *py-cpython-truthy* value)
+         t))
     ((py-object-p value) (py-type-slot-truth (py-object-type value) value))
     ((numberp value) (not (zerop value)))
     ((stringp value) (py-type-slot-truth *py-str-type* value))
@@ -1000,6 +1702,8 @@
     (t t)))
 
 (defun py-len (value)
+  (when (and (py-cpython-object-p value) *py-cpython-len*)
+    (return-from py-len (funcall *py-cpython-len* value)))
   (let ((length
           (cond
             ((py-object-p value)
@@ -1009,10 +1713,16 @@
             (t nil))))
     (if length
         length
-        (error "Python object of type ~A has no len()"
-               (if (py-object-p value)
-                   (py-type-name (py-object-type value))
-                   (type-of value))))))
+        (if (py-object-p value)
+            (handler-case
+                (py-normalize-bool-number (py-call-attr value "__len__"))
+              (py-exception ()
+                (error "Python object of type ~A has no len()"
+                       (py-type-name (py-object-type value))))
+              (error ()
+                (error "Python object of type ~A has no len()"
+                       (py-type-name (py-object-type value)))))
+            (error "Python object of type ~A has no len()" (type-of value))))))
 
 (defun py-length-hint (value &optional (default 0))
   (let ((normalized-default (py-normalize-bool-number default)))
@@ -1028,6 +1738,21 @@
               (t nil))))
       (when length
         (return-from py-length-hint length)))
+    (when (py-cpython-object-p value)
+      (let ((result (handler-case
+                        (py-call-attr value "__length_hint__")
+                      (py-exception () normalized-default)
+                      (error () normalized-default))))
+        (unless (eq result normalized-default)
+          (when (eq result *py-not-implemented*)
+            (return-from py-length-hint normalized-default))
+          (let ((normalized-result (py-normalize-bool-number result)))
+            (unless (integerp normalized-result)
+              (error "__length_hint__ must be integer, not ~A"
+                     (py-type-name (py-type-of result))))
+            (when (< normalized-result 0)
+              (error "__length_hint__() should return >= 0"))
+            (return-from py-length-hint normalized-result)))))
     (let ((type (handler-case
                     (py-type-of value)
                   (error ()
@@ -1053,7 +1778,18 @@
 
 (defun py-type-of (value)
   (cond
+    ((or (null value) (eq value *py-none*)) *py-none-type*)
+    ((py-cpython-object-p value)
+     (if *py-cpython-type-of*
+         (funcall *py-cpython-type-of* value)
+         (py-object-type value)))
     ((py-module-object-p value) *py-module-type*)
+    ((py-callable-p value)
+     (case (py-callable-binding-kind value)
+       (:class-method *py-classmethod-type*)
+       (:static-method *py-staticmethod-type*)
+       (otherwise *py-function-type*)))
+    ((functionp value) *py-function-type*)
     ((py-object-p value) (py-object-type value))
     ((integerp value) *py-int-type*)
     ((floatp value) *py-float-type*)
@@ -1143,15 +1879,17 @@
        (py-range-hash value))
       ((py-source-file-loader-object-p value)
        (py-source-file-loader-hash value))
+      ((and (py-cpython-object-p value) *py-cpython-hash*)
+       (funcall *py-cpython-hash* value))
       ((py-module-spec-object-p value)
        (error "unhashable type: 'ModuleSpec'"))
       ((py-list-object-p value)
        (error "unhashable type: 'list'"))
+      ((py-object-p value)
+       (py-int-hash (py-id value)))
       (t
        (error "Python object of type ~A is not hashable by Clamp yet"
-              (if (py-object-p value)
-                  (py-type-name (py-object-type value))
-                  (type-of value)))))))
+              (type-of value))))))
 
 (defmacro py-or (&rest forms)
   (cond
@@ -1196,6 +1934,39 @@
     (unless (integerp normalized-value)
       (error "int.bit_count() expected an integer, got ~S" value))
     (logcount (abs normalized-value))))
+
+(defun py-int-to-bytes (value &key (length 1) (byteorder "big") (signed *py-false*))
+  (let ((normalized-value (py-normalize-bool-number value))
+        (normalized-length (py-normalize-bool-number length)))
+    (unless (integerp normalized-value)
+      (error "int.to_bytes() expected an integer, got ~S" value))
+    (unless (and (integerp normalized-length) (>= normalized-length 0))
+      (py-raise-type *py-value-error-type* "length argument must be non-negative"))
+    (when (and (< normalized-value 0) (not (py-truthy-p signed)))
+      (py-raise-type *py-value-error-type* "can't convert negative int to unsigned"))
+    (unless (or (string= byteorder "big") (string= byteorder "little"))
+      (py-raise-type *py-value-error-type* "byteorder must be either 'little' or 'big'"))
+    (let ((storage (make-array normalized-length :element-type '(unsigned-byte 8))))
+      (loop for index from 0 below normalized-length
+            for shift-index = (if (string= byteorder "big")
+                                  (- normalized-length index 1)
+                                  index)
+            do (setf (aref storage index)
+                     (ldb (byte 8 (* 8 shift-index)) normalized-value)))
+      (when (and (> normalized-value 0)
+                 (>= normalized-value (ash 1 (* 8 normalized-length))))
+        (py-raise-type *py-value-error-type* "int too big to convert"))
+      (make-py-bytes-from-vector storage))))
+
+(defun py-bytes-eq (left right)
+  (let ((left-size (or (py-object-size left) 0))
+        (right-size (or (py-object-size right) 0)))
+    (and (= left-size right-size)
+         (let ((left-storage (py-bytes-storage left "=="))
+               (right-storage (py-bytes-storage right "==")))
+           (loop for index from 0 below left-size
+                 always (= (aref left-storage index)
+                           (aref right-storage index)))))))
 
 (defun py-list-eq (left right)
   (let ((left-size (or (py-object-size left) 0))
@@ -1355,8 +2126,13 @@
         (py-list-eq left right))
        ((and (py-tuple-object-p left) (py-tuple-object-p right))
         (py-tuple-eq left right))
+       ((and (py-bytes-object-p left) (py-bytes-object-p right))
+        (py-bytes-eq left right))
        ((and (py-dict-object-p left) (py-dict-object-p right))
         (py-dict-eq left right))
+       ((and *py-cpython-richcompare*
+             (or (py-cpython-object-p left) (py-cpython-object-p right)))
+        (funcall *py-cpython-richcompare* left right :eq))
        ((and (py-range-object-p left) (py-range-object-p right))
         (py-range-eq left right))
        ((py-module-spec-object-p left)
@@ -1372,26 +2148,87 @@
 (defun py-ne (left right)
   (py-bool (not (py-truthy-p (py-eq left right)))))
 
+(defun py-canonical-identity-object (value)
+  (if (py-callable-p value)
+      (let ((name (py-callable-name value)))
+        (cond
+          ((string= name "bool") *py-bool-type*)
+          ((string= name "int") *py-int-type*)
+          ((string= name "float") *py-float-type*)
+          ((string= name "str") *py-str-type*)
+          ((string= name "bytes") *py-bytes-type*)
+          ((string= name "type") *py-type-type*)
+          ((string= name "list") *py-list-type*)
+          ((string= name "tuple") *py-tuple-type*)
+          (t value)))
+      value))
+
+(defun py-callable-type-identity-p (callable type)
+  (and (py-callable-p callable)
+       (py-type-p type)
+       (string= (py-callable-name callable) (py-type-name type))))
+
+(defun py-builtin-identity-name (value)
+  (let ((name (cond
+                ((py-type-p value)
+                 (py-type-name value))
+                ((py-callable-p value)
+                 (py-callable-name value))
+                ((py-cpython-object-p value)
+                 (and *py-cpython-get-attr*
+                      (handler-case
+                          (funcall *py-cpython-get-attr* value "__name__")
+                        (py-exception () nil)
+                        (error () nil))))
+                ((functionp value)
+                 nil)
+                ((py-object-p value)
+                 (multiple-value-bind (attr found) (gethash "__name__" (py-object-attrs value))
+                   (and found attr))))))
+    (if (member name '("bool" "int" "float" "str" "bytes") :test #'string=)
+        name
+        nil)))
+
+(defun py-identity-p (left right)
+  (or (eq left right)
+      (and *py-cpython-identity*
+           (py-cpython-object-p left)
+           (py-cpython-object-p right)
+           (funcall *py-cpython-identity* left right))
+      (eq (py-canonical-identity-object left)
+          (py-canonical-identity-object right))
+      (py-callable-type-identity-p left right)
+      (py-callable-type-identity-p right left)
+      (let ((left-name (py-builtin-identity-name left))
+            (right-name (py-builtin-identity-name right)))
+        (and left-name right-name (string= left-name right-name)))))
+
 (defun py-is (left right)
-  (py-bool (eq left right)))
+  (py-bool (py-identity-p left right)))
 
 (defun py-is-not (left right)
-  (py-bool (not (eq left right))))
+  (py-bool (not (py-identity-p left right))))
 
 (defun py-contains (item container)
   (cond
+    ((and (py-cpython-object-p container) *py-cpython-contains*)
+     (py-bool (funcall *py-cpython-contains* item container)))
     ((py-list-object-p container)
      (let ((storage (py-object-value container))
            (size (or (py-object-size container) 0)))
        (py-bool
         (loop for index from 0 below size
-              thereis (py-truthy-p (py-eq (aref storage index) item))))))
+              for value = (aref storage index)
+              thereis (or (py-identity-p value item)
+                          (py-truthy-p (py-eq value item)))))))
     ((py-tuple-object-p container)
      (let ((storage (py-object-value container))
            (size (or (py-object-size container) 0)))
        (py-bool
         (loop for index from 0 below size
-              thereis (py-truthy-p (py-eq (aref storage index) item))))))
+              for value = (aref storage index)
+              thereis (or (py-identity-p value item)
+                          (py-truthy-p (py-eq value item)))))))
     ((py-range-object-p container)
      (py-range-contains container item))
     ((py-dict-object-p container)
@@ -1410,6 +2247,15 @@
            (return *py-false*))
          (when (py-truthy-p (py-eq value item))
            (return *py-true*)))))
+    ((py-object-p container)
+     (handler-case
+         (py-bool (py-truthy-p (py-call-attr container "__contains__" item)))
+       (py-exception ()
+         (error "Python object of type ~A is not a container"
+                (py-type-name (py-object-type container))))
+       (error ()
+         (error "Python object of type ~A is not a container"
+                (py-type-name (py-object-type container))))))
     (t
      (error "Python object of type ~A is not a container"
             (if (py-object-p container)
@@ -1433,6 +2279,9 @@
 
 (defun py-lt (left right)
   (cond
+    ((and *py-cpython-richcompare*
+          (or (py-cpython-object-p left) (py-cpython-object-p right)))
+     (py-bool (funcall *py-cpython-richcompare* left right :lt)))
     ((and (py-list-object-p left) (py-list-object-p right))
      (py-list-compare left right :lt))
     ((and (py-tuple-object-p left) (py-tuple-object-p right))
@@ -1447,6 +2296,9 @@
 
 (defun py-le (left right)
   (cond
+    ((and *py-cpython-richcompare*
+          (or (py-cpython-object-p left) (py-cpython-object-p right)))
+     (py-bool (funcall *py-cpython-richcompare* left right :le)))
     ((and (py-list-object-p left) (py-list-object-p right))
      (py-list-compare left right :le))
     ((and (py-tuple-object-p left) (py-tuple-object-p right))
@@ -1462,6 +2314,9 @@
 
 (defun py-gt (left right)
   (cond
+    ((and *py-cpython-richcompare*
+          (or (py-cpython-object-p left) (py-cpython-object-p right)))
+     (py-bool (funcall *py-cpython-richcompare* left right :gt)))
     ((and (py-list-object-p left) (py-list-object-p right))
      (py-list-compare left right :gt))
     ((and (py-tuple-object-p left) (py-tuple-object-p right))
@@ -1476,6 +2331,9 @@
 
 (defun py-ge (left right)
   (cond
+    ((and *py-cpython-richcompare*
+          (or (py-cpython-object-p left) (py-cpython-object-p right)))
+     (py-bool (funcall *py-cpython-richcompare* left right :ge)))
     ((and (py-list-object-p left) (py-list-object-p right))
      (py-list-compare left right :ge))
     ((and (py-tuple-object-p left) (py-tuple-object-p right))
@@ -1491,26 +2349,35 @@
 
 (defun py-abs (value)
   (let ((normalized-value (py-normalize-bool-number value)))
-    (if (numberp normalized-value)
-        (abs normalized-value)
-        (error "bad operand type for abs(): ~S" value))))
+    (cond
+      ((numberp normalized-value) (abs normalized-value))
+      ((and (py-cpython-object-p value) *py-cpython-abs*)
+       (funcall *py-cpython-abs* value))
+      (t
+       (error "bad operand type for abs(): ~S" value)))))
 
 (defun py-round (value &optional (ndigits *py-none*))
   (if (eq ndigits *py-none*)
       (py-call-attr value "__round__")
-      (error "round() with ndigits is not supported by Clamp yet")))
+      (py-call-attr value "__round__" ndigits)))
 
 (defun py-pos (value)
   (let ((normalized-value (py-normalize-bool-number value)))
-    (if (numberp normalized-value)
-        normalized-value
-        (error "bad operand type for unary +: ~S" value))))
+    (cond
+      ((numberp normalized-value) normalized-value)
+      ((and (py-cpython-object-p value) *py-cpython-pos*)
+       (funcall *py-cpython-pos* value))
+      (t
+       (error "bad operand type for unary +: ~S" value)))))
 
 (defun py-neg (value)
   (let ((normalized-value (py-normalize-bool-number value)))
-    (if (numberp normalized-value)
-        (- normalized-value)
-        (error "bad operand type for unary -: ~S" value))))
+    (cond
+      ((numberp normalized-value) (- normalized-value))
+      ((and (py-cpython-object-p value) *py-cpython-neg*)
+       (funcall *py-cpython-neg* value))
+      (t
+       (error "bad operand type for unary -: ~S" value)))))
 
 (defun py-invert (value)
   (let ((normalized-value (py-normalize-bool-number value)))
@@ -1546,6 +2413,15 @@
     (with-output-to-string (stream)
       (loop for char across repr
             do (py-ascii-escape-char char stream)))))
+
+(defun py-format (value &optional (format-spec ""))
+  (cond
+    (*py-cpython-format*
+     (funcall *py-cpython-format* value format-spec))
+    ((or (null format-spec) (string= format-spec ""))
+     (py-str value))
+    (t
+     (error "unsupported format string ~S for object ~S" format-spec value))))
 
 (defstruct (py-exception-object (:include py-object))
   (args '()))
@@ -1590,8 +2466,15 @@
   (:report (lambda (condition stream)
              (let ((value (py-exception-value condition)))
                (if (py-exception-object-p value)
-                   (let ((message (py-exception-message value)))
-                     (princ (py-type-name (py-object-type value)) stream)
+                   (let ((message (py-exception-message value))
+                         (type (py-object-type value)))
+                     (cond
+                       ((py-type-p type)
+                        (princ (py-type-name type) stream))
+                       ((py-cpython-object-p type)
+                        (py-repr type stream))
+                       (t
+                        (princ "Exception" stream)))
                      (unless (string= message "")
                        (princ ": " stream)
                        (princ message stream)))
@@ -1634,18 +2517,141 @@
   (binding-kind :function)
   owner-type
   (coroutine-function nil)
-  (async-generator-function nil))
+  (async-generator-function nil)
+  (module (and (boundp '*py-current-module*) *py-current-module*))
+  (signature-param-names nil)
+  (signature-param-defaults nil)
+  (signature-kwonly-names nil)
+  (signature-kwonly-defaults nil)
+  signature-vararg-name
+  signature-kwarg-name
+  underlying
+  namespace-dict
+  (attrs (make-hash-table :test #'equal)))
+
+(defun py-set-callable-owner (value owner-type)
+  (cond
+    ((py-callable-p value)
+     (setf (py-callable-owner-type value) owner-type)
+     (when (py-callable-underlying value)
+       (py-set-callable-owner (py-callable-underlying value) owner-type)))
+    ((py-object-p value)
+     (multiple-value-bind (wrapped found) (gethash "wrapped" (py-object-attrs value))
+       (when found
+         (py-set-callable-owner wrapped owner-type)))))
+  value)
+
+(defun py-copy-callable (callable &key binding-kind)
+  (let ((copy (make-py-callable
+               :name (py-callable-name callable)
+               :fn (py-callable-fn callable)
+               :binding-kind (or binding-kind (py-callable-binding-kind callable))
+               :owner-type (py-callable-owner-type callable)
+               :coroutine-function (py-callable-coroutine-function callable)
+               :async-generator-function (py-callable-async-generator-function callable)
+               :module (py-callable-module callable)
+               :signature-param-names (py-callable-signature-param-names callable)
+               :signature-param-defaults (py-callable-signature-param-defaults callable)
+               :signature-kwonly-names (py-callable-signature-kwonly-names callable)
+               :signature-kwonly-defaults (py-callable-signature-kwonly-defaults callable)
+               :signature-vararg-name (py-callable-signature-vararg-name callable)
+               :signature-kwarg-name (py-callable-signature-kwarg-name callable)
+               :underlying (py-callable-underlying callable))))
+    (maphash (lambda (key value)
+               (setf (gethash key (py-callable-attrs copy)) value))
+             (py-callable-attrs callable))
+    copy))
+
+(defstruct (py-super-object (:include py-object))
+  start-type
+  bound-object)
 
 (defun py-type-attr (type name)
   (gethash name (py-type-attrs type)))
 
+(defun py-pydantic-generic-metadata-parameters (metadata)
+  (when (py-dict-object-p metadata)
+    (multiple-value-bind (parameters found)
+        (gethash "parameters" (py-dict-storage metadata "__pydantic_generic_metadata__"))
+      (when found parameters))))
+
 (defun (setf py-type-attr) (value type name)
-  (setf (gethash name (py-type-attrs type)) value))
+  (setf (gethash name (py-type-attrs type)) value)
+  (when (string= name "__pydantic_generic_metadata__")
+    (let ((parameters (py-pydantic-generic-metadata-parameters value)))
+      (when parameters
+        (setf (gethash "__parameters__" (py-type-attrs type)) parameters))))
+  value)
+
+(setf (py-type-attr *py-type-type* "__new__")
+      (make-py-callable
+       :name "type.__new__"
+       :binding-kind :static-method
+       :fn #'py-type-new))
+
+(setf (py-type-attr *py-object-type* "__new__")
+      (make-py-callable
+       :name "object.__new__"
+       :binding-kind :static-method
+       :fn #'py-object-new))
+
+(setf (py-type-attr *py-object-type* "__init__")
+      (make-py-callable
+       :name "object.__init__"
+       :fn (lambda (self &rest args)
+             (declare (ignore self args))
+             *py-none*)))
+
+(defun py-object-copy-method (self)
+  (cond
+    ((or (eq self *py-none*)
+         (eq self *py-true*)
+         (eq self *py-false*)
+         (eq self *py-ellipsis*)
+         (eq self *py-not-implemented*))
+     self)
+    ((or (py-type-p self)
+         (py-callable-p self)
+         (py-cpython-object-p self)
+         (py-module-object-p self)
+         (py-tuple-object-p self)
+         (py-bytes-object-p self))
+     self)
+    ((py-list-object-p self)
+     (py-invoke-callable (py-lookup-attr self "copy") self))
+    ((py-dict-object-p self)
+     (py-dict-copy self))
+    ((py-object-p self)
+     (make-py-instance (py-type-of self)
+                       :value (py-object-value self)
+                       :size (py-object-size self)
+                       :attrs (py-copy-hash-table (py-object-attrs self))))
+    (t self)))
+
+(setf (py-type-attr *py-object-type* "__copy__")
+      (make-py-callable
+       :name "object.__copy__"
+       :fn #'py-object-copy-method))
 
 (defun py-object-attr (obj name)
-  (gethash name (py-object-attrs obj)))
+  (if (py-callable-p obj)
+      (gethash name (py-callable-attrs obj))
+      (gethash name (py-object-attrs obj))))
+
+(defun py-namespace-owner-attrs (owner)
+  (cond
+    ((py-callable-p owner) (py-callable-attrs owner))
+    ((py-object-p owner) (py-object-attrs owner))
+    (t nil)))
 
 (defun py-sync-object-attr (obj name value)
+  (when (and (py-callable-p obj)
+             (not (string= name "__dict__")))
+    (let ((dict (py-callable-namespace-dict obj)))
+      (when (and dict
+                 (not (py-dict-has-key-p dict name)))
+        (vector-push-extend name (py-dict-object-keys dict))
+        (setf (py-object-size dict) (hash-table-count (py-callable-attrs obj))))))
   (when (py-module-spec-object-p obj)
     (cond
       ((string= name "name")
@@ -1705,18 +2711,108 @@
         (setf (py-object-size dict) (hash-table-count (py-object-attrs obj))))))
   (when (and (py-module-object-p obj)
              (not (string= name "__dict__")))
-    (py-module-dict-note-key obj name)))
+    (py-module-dict-note-key obj name)
+    (let ((symbol (py-module-local-symbol obj name)))
+      (setf (symbol-value symbol) value))))
 
 (defun (setf py-object-attr) (value obj name)
-  (setf (gethash name (py-object-attrs obj)) value)
-  (py-sync-object-attr obj name value)
+  (if (py-callable-p obj)
+      (progn
+        (setf (gethash name (py-callable-attrs obj)) value)
+        (py-sync-object-attr obj name value))
+      (progn
+        (setf (gethash name (py-object-attrs obj)) value)
+        (py-sync-object-attr obj name value)))
   value)
 
+(defun py-setattr (obj name value)
+  (cond
+    ((and (py-cpython-object-p obj) *py-cpython-set-attr*)
+     (funcall *py-cpython-set-attr* obj name value))
+    ((py-type-p obj)
+     (setf (py-type-attr obj name) value))
+    ((and (py-object-p obj)
+          (not (py-cpython-object-p obj))
+          (not (py-module-object-p obj))
+          (string= name "__dict__")
+          (py-dict-object-p value))
+     (clrhash (py-object-attrs obj))
+     (let ((keys (py-dict-object-keys value))
+           (storage (py-dict-storage value "__dict__ assignment")))
+       (loop for index from 0 below (fill-pointer keys)
+             for key = (aref keys index)
+             when (stringp key)
+               do (setf (gethash key (py-object-attrs obj)) (gethash key storage))))
+     value)
+    ((or (py-object-p obj) (py-callable-p obj))
+     (setf (py-object-attr obj name) value))
+    (t
+     (py-raise-type *py-type-error-type*
+                    (format nil "setattr() unsupported object ~S" obj))))
+  *py-none*)
+
+(defun py-delattr (obj name)
+  (cond
+    ((and (py-cpython-object-p obj) *py-cpython-del-attr*)
+     (funcall *py-cpython-del-attr* obj name))
+    ((py-type-p obj)
+     (remhash name (py-type-attrs obj)))
+    ((py-callable-p obj)
+     (remhash name (py-callable-attrs obj)))
+    ((py-object-p obj)
+     (remhash name (py-object-attrs obj)))
+    (t
+     (py-raise-type *py-type-error-type*
+                    (format nil "delattr() unsupported object ~S" obj))))
+  *py-none*)
+
 (defvar *py-current-module* nil)
+(defvar *py-frame-stack* nil)
 (defvar *py-module-search-paths* nil)
 (defvar *py-sys-path* nil)
 (defvar *py-module-loader* nil)
 (defvar *py-sys-argv* nil)
+(defvar *py-cpython-import-module* nil)
+(defvar *py-cpython-load-extension-module* nil)
+(defvar *py-cpython-find-extension-origin* nil)
+(defvar *py-cpython-find-spec* nil)
+(defvar *py-cpython-exec-pyc-module* nil)
+(defvar *py-cpython-generic-alias* nil)
+(defvar *py-cpython-dir* nil)
+(defvar *py-cpython-get-attr* nil)
+(defvar *py-cpython-set-attr* nil)
+(defvar *py-cpython-del-attr* nil)
+(defvar *py-cpython-call* nil)
+(defvar *py-cpython-call-expanded* nil)
+(defvar *py-cpython-display* nil)
+(defvar *py-cpython-repr* nil)
+(defvar *py-cpython-format* nil)
+(defvar *py-cpython-identity* nil)
+(defvar *py-cpython-truthy* nil)
+(defvar *py-cpython-callable* nil)
+(defvar *py-cpython-isinstance* nil)
+(defvar *py-cpython-issubclass* nil)
+(defvar *py-cpython-type-of* nil)
+(defvar *py-cpython-getitem* nil)
+(defvar *py-cpython-setitem* nil)
+(defvar *py-cpython-delitem* nil)
+(defvar *py-cpython-iter* nil)
+(defvar *py-cpython-next* nil)
+(defvar *py-cpython-contains* nil)
+(defvar *py-cpython-add* nil)
+(defvar *py-cpython-sub* nil)
+(defvar *py-cpython-mul* nil)
+(defvar *py-cpython-truediv* nil)
+(defvar *py-cpython-floordiv* nil)
+(defvar *py-cpython-mod* nil)
+(defvar *py-cpython-divmod* nil)
+(defvar *py-cpython-pow* nil)
+(defvar *py-cpython-neg* nil)
+(defvar *py-cpython-pos* nil)
+(defvar *py-cpython-abs* nil)
+(defvar *py-cpython-richcompare* nil)
+(defvar *py-cpython-hash* nil)
+(defvar *py-cpython-len* nil)
 (defvar *py-sys-modules* (make-hash-table :test #'equal))
 (defvar *py-builtin-module-builders* (make-hash-table :test #'equal))
 
@@ -1748,6 +2844,11 @@
   path
   namespace-dict)
 
+(defstruct (py-file-finder-object (:include py-object))
+  path
+  loader-details
+  namespace-dict)
+
 (defstruct (py-file-reader-object (:include py-object))
   path
   namespace-dict)
@@ -1756,9 +2857,24 @@
   path)
 
 (defun py-path-string (path)
-  (if (py-path-object-p path)
-      (py-path-object-path path)
-      path))
+  (cond
+    ((stringp path) path)
+    ((py-path-object-p path)
+     (py-path-object-path path))
+    ((py-object-p path)
+     (let ((fspath (handler-case
+                       (py-lookup-attr path "__fspath__")
+                     (py-exception () nil)
+                     (error () nil))))
+       (when fspath
+         (let ((value (py-invoke-callable fspath)))
+           (cond
+             ((stringp value)
+              (return-from py-path-string value))
+             ((py-path-object-p value)
+              (return-from py-path-string (py-path-object-path value))))))
+       (py-raise-type *py-type-error-type* "expected str, bytes or os.PathLike object")))
+    (t path)))
 
 (defun py-path-name (path)
   (py-directory-entry-name (py-path-string path)))
@@ -1868,6 +2984,11 @@
   (position 0)
   (closed nil))
 
+(defstruct (py-text-reader-object (:include py-object))
+  text
+  path
+  (closed nil))
+
 (defun py-module-spec-parent (spec)
   (let ((name (gethash "name" (py-object-attrs spec)))
         (submodule-search-locations
@@ -1891,6 +3012,33 @@
     (setf (py-object-attr loader "name") name)
     (setf (py-object-attr loader "path") source-path)
     loader))
+
+(defun make-clamp-extension-file-loader (name source-path)
+  (let ((loader (make-py-source-file-loader-object
+                 :type *py-extension-file-loader-type*
+                 :name name
+                 :path source-path)))
+    (setf (py-object-attr loader "name") name)
+    (setf (py-object-attr loader "path") source-path)
+    loader))
+
+(defun make-clamp-sourceless-file-loader (name source-path)
+  (let ((loader (make-py-source-file-loader-object
+                 :type *py-sourceless-file-loader-type*
+                 :name name
+                 :path source-path)))
+    (setf (py-object-attr loader "name") name)
+    (setf (py-object-attr loader "path") source-path)
+    loader))
+
+(defun make-clamp-file-finder (search-path loader-details)
+  (let ((finder (make-py-file-finder-object
+                 :type *py-file-finder-type*
+                 :path (py-path-string search-path)
+                 :loader-details loader-details)))
+    (setf (py-object-attr finder "path") (py-file-finder-object-path finder))
+    (setf (py-object-attr finder "_path") (py-file-finder-object-path finder))
+    finder))
 
 (defun py-file-reader-loader-directory (loader)
   (py-package-source-directory
@@ -1975,6 +3123,15 @@
                  :type *py-buffered-reader-type*
                  :path path
                  :data (py-read-file-bytes path))))
+    (setf (py-object-attr reader "closed") *py-false*)
+    (setf (py-object-attr reader "name") path)
+    reader))
+
+(defun make-clamp-text-reader (path &optional (encoding *py-none*))
+  (let ((reader (make-py-text-reader-object
+                 :type *py-text-reader-type*
+                 :path path
+                 :text (py-decode-text-bytes (py-read-file-bytes path) encoding))))
     (setf (py-object-attr reader "closed") *py-false*)
     (setf (py-object-attr reader "name") path)
     reader))
@@ -2114,9 +3271,11 @@
 (defun py-source-file-loader-check-name (loader fullname)
   (let ((name (or fullname (py-source-file-loader-object-name loader))))
     (unless (string= (py-source-file-loader-object-name loader) name)
-      (error "loader for ~A cannot handle ~A"
-             (py-source-file-loader-object-name loader)
-             name))
+      (py-raise-type
+       *py-import-error-type*
+       (format nil "loader for ~A cannot handle ~A"
+               (py-source-file-loader-object-name loader)
+               name)))
     name))
 
 (setf (py-type-attr *py-source-file-loader-type* "__init__")
@@ -2190,6 +3349,82 @@
                    (py-module-object-package-name module)))
         *py-none*))
 
+(setf (py-type-attr *py-lazy-loader-type* "__init__")
+      (lambda (lazy-loader loader)
+        (let ((exec-module (handler-case
+                               (py-lookup-attr loader "exec_module")
+                             (py-exception () nil)
+                             (error () nil))))
+          (unless (and exec-module (py-truthy-p (py-callable exec-module)))
+            (py-raise-type *py-type-error-type* "loader must define exec_module()")))
+        (setf (py-object-attr lazy-loader "loader") loader)
+        *py-none*))
+
+(setf (py-type-attr *py-lazy-loader-type* "factory")
+      (make-py-callable
+       :name "LazyLoader.factory"
+       :binding-kind :class-method
+       :fn (lambda (cls loader-class)
+             (lambda (&rest args)
+               (py-invoke-callable cls
+                                   (apply #'py-invoke-callable loader-class args))))))
+
+(setf (py-type-attr *py-lazy-loader-type* "create_module")
+      (lambda (lazy-loader spec)
+        (let ((loader (py-lookup-attr lazy-loader "loader")))
+          (handler-case
+              (py-call-attr loader "create_module" spec)
+            (py-exception () *py-none*)
+            (error () *py-none*)))))
+
+(setf (py-type-attr *py-lazy-loader-type* "exec_module")
+      (lambda (lazy-loader module)
+        (py-call-attr (py-lookup-attr lazy-loader "loader") "exec_module" module)))
+
+(setf (py-type-attr *py-lazy-loader-type* "load_module")
+      (lambda (lazy-loader &optional fullname)
+        (let ((loader (py-lookup-attr lazy-loader "loader")))
+          (if fullname
+              (py-call-attr loader "load_module" fullname)
+              (py-call-attr loader "load_module")))))
+
+(setf (py-type-attr *py-extension-file-loader-type* "create_module")
+      (lambda (loader spec)
+        (unless (py-module-spec-object-p spec)
+          (py-raise-type *py-type-error-type* "create_module() expected ModuleSpec"))
+        (let* ((name (py-module-spec-object-name spec))
+               (source-path (py-module-spec-object-origin spec))
+               (module (if (and source-path *py-cpython-load-extension-module*)
+                           (funcall *py-cpython-load-extension-module* name source-path)
+                           (py-load-cpython-extension-module name source-path))))
+          (unless module
+            (py-raise-type *py-import-error-type*
+                           (format nil "cannot load extension module ~A" name)))
+          (py-install-cpython-module-metadata name module)
+          (setf (gethash "__spec__" (py-object-attrs module)) *py-none*)
+          module)))
+
+(setf (py-type-attr *py-extension-file-loader-type* "exec_module")
+      (lambda (loader module)
+        (declare (ignore loader module))
+        *py-none*))
+
+(setf (py-type-attr *py-extension-file-loader-type* "get_code")
+      (lambda (loader fullname)
+        (py-source-file-loader-check-name loader fullname)
+        *py-none*))
+
+(setf (py-type-attr *py-extension-file-loader-type* "get_source")
+      (lambda (loader fullname)
+        (py-source-file-loader-check-name loader fullname)
+        *py-none*))
+
+(setf (py-type-attr *py-extension-file-loader-type* "is_package")
+      (lambda (loader fullname)
+        (py-source-file-loader-check-name loader fullname)
+        (py-bool (py-extension-loader-package-path-p
+                  (py-source-file-loader-object-path loader)))))
+
 (setf (py-type-attr *py-source-file-loader-type* "load_module")
       (lambda (loader &optional fullname)
         (py-source-file-loader-check-name loader fullname)
@@ -2203,6 +3438,37 @@
                (tail-name (if tail-pos (subseq name (1+ tail-pos)) name)))
           (py-bool (and (string= filename-base "__init__")
                         (not (string= tail-name "__init__")))))))
+
+(setf (py-type-attr *py-sourceless-file-loader-type* "get_source")
+      (lambda (loader fullname)
+        (py-source-file-loader-check-name loader fullname)
+        *py-none*))
+
+(setf (py-type-attr *py-sourceless-file-loader-type* "get_code")
+      (lambda (loader fullname)
+        (py-source-file-loader-check-name loader fullname)
+        (py-read-file-bytes (py-source-file-loader-object-path loader))
+        (py-raise-type *py-import-error-type* "sourceless bytecode code objects are not represented by Clamp")))
+
+(setf (py-type-attr *py-sourceless-file-loader-type* "exec_module")
+      (lambda (loader module)
+        (unless (py-module-object-p module)
+          (py-raise-type *py-type-error-type* "exec_module() argument must be a module"))
+        (let ((name (py-source-file-loader-check-name
+                     loader
+                     (py-object-attr module "__name__")))
+              (path (py-source-file-loader-object-path loader)))
+          (unless *py-cpython-exec-pyc-module*
+            (py-raise-type *py-import-error-type*
+                           "sourceless bytecode execution is not available"))
+          (funcall *py-cpython-exec-pyc-module* name path module))
+        *py-none*))
+
+(setf (py-type-attr *py-sourceless-file-loader-type* "is_package")
+      (lambda (loader fullname)
+        (py-source-file-loader-check-name loader fullname)
+        (py-bool (string= (pathname-name (py-source-file-loader-object-path loader))
+                          "__init__"))))
 
 (setf (py-type-attr *py-source-file-loader-type* "__repr__")
       (lambda (loader)
@@ -2309,6 +3575,29 @@
       (lambda (path &optional (encoding *py-none*))
         (py-decode-text-bytes (py-read-file-bytes (py-path-string path)) encoding)))
 
+(setf (py-type-attr *py-text-reader-type* "read")
+      (lambda (reader &optional size)
+        (declare (ignore size))
+        (when (py-text-reader-object-closed reader)
+          (error "read of closed file"))
+        (py-text-reader-object-text reader)))
+
+(setf (py-type-attr *py-text-reader-type* "__enter__")
+      (lambda (reader) reader))
+
+(setf (py-type-attr *py-text-reader-type* "__exit__")
+      (lambda (reader exc-type exc-value traceback)
+        (declare (ignore exc-type exc-value traceback))
+        (setf (py-text-reader-object-closed reader) t)
+        (setf (py-object-attr reader "closed") *py-true*)
+        *py-false*))
+
+(setf (py-type-attr *py-text-reader-type* "close")
+      (lambda (reader)
+        (setf (py-text-reader-object-closed reader) t)
+        (setf (py-object-attr reader "closed") *py-true*)
+        *py-none*))
+
 (setf (py-type-attr *py-buffered-reader-type* "read")
       (lambda (reader &optional size)
         (py-buffered-reader-read reader size)))
@@ -2391,7 +3680,9 @@
   (let* ((cached *py-none*)
          (submodule-search-locations
            (if package-p
-               (make-py-list (py-package-source-directory source-path))
+               (if source-path
+                   (make-py-list (py-package-source-directory source-path))
+                   (make-py-list))
                *py-none*))
          (uninitialized-submodules (make-py-list))
          (spec (make-py-module-spec-object
@@ -2460,6 +3751,121 @@
             (py-ne spec other)
             *py-not-implemented*)))
 
+(defparameter *py-source-suffixes* '(".py"))
+
+(defparameter *py-bytecode-suffixes* '(".pyc"))
+
+(defparameter *py-extension-suffixes*
+  '(".cpython-312-x86_64-linux-gnu.so" ".abi3.so" ".so"))
+
+(defparameter *py-cache-tag* "cpython-312")
+
+(defun py-extension-loader-package-path-p (path)
+  (loop for suffix in *py-extension-suffixes*
+        when (py-string-suffix-p path suffix)
+          do (let ((base (subseq path 0 (- (length path) (length suffix)))))
+               (return (string= (pathname-name base) "__init__")))
+        finally (return nil)))
+
+(defun py-importlib-all-suffixes ()
+  (apply #'make-py-list
+         (append *py-source-suffixes*
+                 *py-bytecode-suffixes*
+                 *py-extension-suffixes*)))
+
+(defun make-clamp-source-module-spec (name source-path package-p &optional loader)
+  (let ((spec (make-clamp-module-spec
+               name
+               source-path
+               package-p
+               (or loader (make-clamp-source-file-loader name source-path)))))
+    (py-set-module-spec-cache-path spec (py-source-cache-path source-path))))
+
+(defun make-clamp-extension-module-spec (name source-path &optional loader)
+  (make-clamp-module-spec
+   name
+   source-path
+   (py-extension-loader-package-path-p source-path)
+   (or loader (make-clamp-extension-file-loader name source-path))))
+
+(defun make-clamp-sourceless-module-spec (name source-path package-p &optional loader)
+  (let ((spec (make-clamp-module-spec
+               name
+               source-path
+               package-p
+               (or loader (make-clamp-sourceless-file-loader name source-path)))))
+    (py-set-module-spec-cache-path spec source-path)))
+
+(defun make-clamp-builtin-module-spec (name)
+  (let ((spec (make-clamp-module-spec name nil nil *py-builtin-importer-type*)))
+    (setf (py-module-spec-object-origin spec) "built-in")
+    (setf (py-module-spec-object-has-location spec) nil)
+    (setf (py-object-attr spec "origin") "built-in")
+    (setf (py-object-attr spec "has_location") *py-false*)
+    (setf (py-object-attr spec "_set_fileattr") *py-false*)
+    spec))
+
+(defun make-clamp-namespace-module-spec (name namespace-path &optional (loader *py-none*))
+  (let ((spec (make-clamp-module-spec name nil t loader))
+        (locations (make-py-list namespace-path)))
+    (setf (py-module-spec-object-submodule-search-locations spec) locations)
+    (setf (py-object-attr spec "submodule_search_locations") locations)
+    spec))
+
+(defun py-cpython-object-display-string (value)
+  (with-output-to-string (stream)
+    (py-display value stream)))
+
+(defun py-cpython-module-origin (module)
+  (handler-case
+      (let ((file (py-lookup-attr module "__file__")))
+        (let ((origin (py-cpython-object-display-string file)))
+          (unless (string= origin "")
+            origin)))
+    (error () nil)))
+
+(defun py-install-cpython-module-metadata (name module)
+  (let* ((origin (py-cpython-module-origin module))
+         (extension-p (and origin (py-extension-module-path-p origin)))
+         (loader (cond
+                   (extension-p
+                    (make-clamp-extension-file-loader name origin))
+                   (t
+                    (handler-case (py-lookup-attr module "__loader__")
+                      (error () nil)))))
+         (spec (cond
+                 (extension-p
+                  (make-clamp-extension-module-spec name origin loader))
+                 (t
+                  (handler-case (py-lookup-attr module "__spec__")
+                    (error () nil)))))
+         (package-p (cond
+                      ((py-module-spec-object-p spec)
+                       (not (eq (py-module-spec-object-submodule-search-locations spec)
+                                *py-none*)))
+                      (t
+                       (handler-case (py-truthy-p (py-lookup-attr module "__path__"))
+                         (error () nil)))))
+         (package (handler-case
+                      (py-lookup-attr module "__package__")
+                    (error ()
+                      (if package-p
+                          name
+                          (let ((pos (position #\. name :from-end t)))
+                            (if pos (subseq name 0 pos) "")))))))
+    (setf (gethash "__name__" (py-object-attrs module)) name)
+    (setf (gethash "__package__" (py-object-attrs module)) package)
+    (when origin
+      (setf (gethash "__file__" (py-object-attrs module)) origin))
+    (when loader
+      (setf (gethash "__loader__" (py-object-attrs module)) loader))
+    (when spec
+      (setf (gethash "__spec__" (py-object-attrs module)) spec))
+    (when (and package-p (py-module-spec-object-p spec))
+      (setf (gethash "__path__" (py-object-attrs module))
+            (py-module-spec-object-submodule-search-locations spec)))
+    module))
+
 (defun make-clamp-module (name &key source-path package-name package-p)
   (let ((module (make-py-module-object :type *py-module-type*
                                        :name name
@@ -2484,9 +3890,34 @@
     (when source-path
       (py-set-module-source-path module source-path))
     (unless (string= name "__main__")
-      (setf (py-object-attr module "__spec__")
-            (make-clamp-module-spec name source-path package-p loader)))
+      (let ((spec (make-clamp-module-spec name source-path package-p loader)))
+        (when (and source-path (not (py-extension-module-path-p source-path)))
+          (py-set-module-spec-cache-path spec (py-source-cache-path source-path)))
+        (setf (py-object-attr module "__spec__") spec)))
     module))
+
+(defun make-py-cpython-object-wrapper (pointer)
+  (make-py-cpython-object :type *py-object-type* :pointer pointer))
+
+(defun py-install-imported-child-module (name module)
+  (let ((parent-name (py-module-parent-name name)))
+    (when parent-name
+      (let ((parent (gethash parent-name *py-sys-modules*)))
+        (when (py-object-p parent)
+          (setf (py-object-attr parent (py-module-child-name name)) module))))))
+
+(defun py-load-cpython-extension-module (name &optional source-path)
+  (let ((module (cond
+                  ((and source-path *py-cpython-load-extension-module*)
+                   (funcall *py-cpython-load-extension-module* name source-path))
+                  (*py-cpython-import-module*
+                   (funcall *py-cpython-import-module* name))
+                  (t nil))))
+    (when module
+      (py-install-cpython-module-metadata name module)
+      (setf (gethash name *py-sys-modules*) module)
+      (py-install-imported-child-module name module)
+      module)))
 
 (defun py-enter-module (name source-path package-name)
   (let ((module (or (gethash name *py-sys-modules*)
@@ -2504,8 +3935,23 @@
   `(progn
      (setq ,symbol ,value)
      (when *py-current-module*
-       (setf (py-object-attr *py-current-module* ,name) ,symbol))
+       (setf (py-object-attr *py-current-module* ,name) ,symbol)
+       (when *py-cpython-sync-module-globals*
+         (funcall *py-cpython-sync-module-globals*
+                  (py-module-object-name *py-current-module*))))
      ,symbol))
+
+(defun py-del-global (name symbol)
+  (when *py-current-module*
+    (remhash name (py-object-attrs *py-current-module*)))
+  (when (boundp symbol)
+    (makunbound symbol))
+  *py-none*)
+
+(defun py-globals ()
+  (unless *py-current-module*
+    (py-raise-type *py-runtime-error-type* "globals() called without a current module"))
+  (make-py-dict-for-storage (py-object-attrs *py-current-module*) *py-current-module*))
 
 (defun py-module-root-name (name)
   (let ((pos (position #\. name)))
@@ -2518,6 +3964,21 @@
 (defun py-module-child-name (name)
   (let ((pos (position #\. name :from-end t)))
     (if pos (subseq name (1+ pos)) name)))
+
+(defun py-imported-module-name (module)
+  (cond
+    ((py-module-object-p module)
+     (py-module-object-name module))
+    ((or (py-cpython-object-p module) (py-object-p module))
+     (handler-case
+         (let ((name (py-lookup-attr module "__name__")))
+           (if (stringp name)
+               name
+               (py-raise-type *py-type-error-type* "expected module object")))
+       (error ()
+         (py-raise-type *py-type-error-type* "expected module object"))))
+    (t
+     (py-raise-type *py-type-error-type* "expected module object"))))
 
 (defun split-string-on-char (value char)
   (let ((parts '()) (start 0))
@@ -2551,27 +4012,130 @@
     (and (<= suffix-size value-size)
          (string= value suffix :start1 (- value-size suffix-size)))))
 
-(defun py-source-cache-path (source-path)
-  (declare (ignore source-path))
-  *py-none*)
+(defun py-set-module-spec-cache-path (spec cache-path)
+  (setf (py-module-spec-object-cached spec) cache-path)
+  (setf (py-object-attr spec "cached") cache-path)
+  (setf (py-object-attr spec "_cached") cache-path)
+  spec)
+
+(defun py-source-cache-path (source-path &optional optimization)
+  (unless (and (stringp source-path) (py-string-suffix-p source-path ".py"))
+    (py-raise-type *py-value-error-type* "source path must end in .py"))
+  (let* ((dir (namestring (uiop:pathname-directory-pathname source-path)))
+         (name (pathname-name source-path))
+         (opt (cond
+                ((or (null optimization)
+                     (eq optimization *py-none*)
+                     (string= (format nil "~A" optimization) ""))
+                 "")
+                (t
+                 (format nil ".opt-~A" optimization)))))
+    (concatenate 'string
+                 dir
+                 "__pycache__/"
+                 name
+                 "."
+                 *py-cache-tag*
+                 opt
+                 ".pyc")))
+
+(defun py-source-from-cache-path (cache-path)
+  (unless (stringp cache-path)
+    (py-raise-type *py-type-error-type* "path should be string"))
+  (let* ((directory (namestring (uiop:pathname-directory-pathname cache-path)))
+         (base (file-namestring cache-path)))
+    (unless (and (>= (length directory) 12)
+                 (string= (subseq directory (- (length directory) 12)) "__pycache__/"))
+      (py-raise-type *py-value-error-type*
+                     (format nil "__pycache__ not bottom-level directory in '~A'" cache-path)))
+    (unless (py-string-suffix-p base ".pyc")
+      (py-raise-type *py-value-error-type* "path must end in .pyc"))
+    (let* ((without-suffix (subseq base 0 (- (length base) 4)))
+           (parts (split-string-on-char without-suffix #\.))
+           (size (length parts)))
+      (unless (or (= size 2) (= size 3))
+        (py-raise-type *py-value-error-type*
+                       (format nil "expected only 2 or 3 dots in '~A'" base)))
+      (unless (string= (second parts) *py-cache-tag*)
+        (py-raise-type *py-value-error-type* "cache tag mismatch"))
+      (when (= size 3)
+        (unless (and (>= (length (third parts)) 4)
+                     (string= (subseq (third parts) 0 4) "opt-"))
+          (py-raise-type *py-value-error-type*
+                         "optimization portion of filename does not start with 'opt-'")))
+      (concatenate 'string
+                   (subseq directory 0 (- (length directory) 12))
+                   (first parts)
+                   ".py"))))
+
+(defun py-importlib-cache-from-source (path &rest args)
+  (multiple-value-bind (optimization optimization-supplied-p positional)
+      (py-asyncio-keyword-value args :optimization *py-none*)
+    (when positional
+      (setf optimization (first positional))
+      (setf optimization-supplied-p t))
+    (py-source-cache-path (py-path-string path)
+                          (when optimization-supplied-p optimization))))
+
+(defun py-importlib-source-from-cache (path)
+  (py-source-from-cache-path (py-path-string path)))
+
+(defun py-importlib-magic-number ()
+  (if *py-cpython-import-module*
+      (py-lookup-attr (funcall *py-cpython-import-module* "importlib.util") "MAGIC_NUMBER")
+      (make-py-bytes-from-vector
+       (make-array 4
+                   :element-type '(unsigned-byte 8)
+                   :initial-contents '(203 13 13 10)))))
+
+(defun py-importlib-private-find-spec (name &optional (path *py-none*) (target *py-none*))
+  (declare (ignore target))
+  (if (eq path *py-none*)
+      (py-importlib-find-spec name)
+      (py-pathfinder-spec-from-path name path)))
 
 (defun py-set-module-source-path (module source-path)
   (setf (py-module-object-source-path module) source-path)
   (setf (py-object-attr module "__file__") source-path)
-  (setf (py-object-attr module "__cached__") *py-none*))
+  (setf (py-object-attr module "__cached__") (py-source-cache-path source-path)))
 
 (defun py-find-module-source-in-roots (relative-name roots)
   (let* ((components (py-module-path-components relative-name))
          (relative-file (format nil "~{~A~^/~}.py" components))
-         (relative-init (format nil "~{~A~^/~}/__init__.py" components)))
+         (relative-extension-prefix (format nil "~{~A~^/~}" components))
+         (relative-init-prefix (format nil "~{~A~^/~}/__init__" components))
+         (relative-init (concatenate 'string relative-init-prefix ".py")))
     (loop for root in roots
-          for file-path = (merge-pathnames relative-file (uiop:ensure-directory-pathname root))
-          for init-path = (merge-pathnames relative-init (uiop:ensure-directory-pathname root))
+          for root-directory = (uiop:ensure-directory-pathname root)
+          for file-path = (merge-pathnames relative-file root-directory)
+          for init-path = (merge-pathnames relative-init root-directory)
+          for namespace-path = (merge-pathnames relative-extension-prefix root-directory)
           for file = (py-probe-file file-path)
           for init = (py-probe-file init-path)
-          when file do (return (values file nil))
-          when init do (return (values init t))
-          finally (return (values nil nil)))))
+          for namespace = (uiop:directory-exists-p (uiop:ensure-directory-pathname namespace-path))
+          for extension-init = (loop for suffix in *py-extension-suffixes*
+                                     for extension-path = (merge-pathnames
+                                                           (concatenate 'string relative-init-prefix suffix)
+                                                           root-directory)
+                                     for found = (py-probe-file extension-path)
+                                     when found do (return found))
+          for extension = (loop for suffix in *py-extension-suffixes*
+                                for extension-path = (merge-pathnames
+                                                      (concatenate 'string relative-extension-prefix suffix)
+                                                      root-directory)
+                                for found = (py-probe-file extension-path)
+                                when found do (return found))
+          when init do (return (values init t nil))
+          when extension-init do (return (values extension-init t nil))
+          when file do (return (values file nil nil))
+          when extension do (return (values extension nil nil))
+          when namespace do (return (values nil t (py-package-source-directory (namestring (uiop:ensure-directory-pathname namespace)))))
+          finally (return (values nil nil nil)))))
+
+(defun py-extension-module-path-p (source-path)
+  (and source-path
+       (loop for suffix in *py-extension-suffixes*
+             thereis (py-string-suffix-p source-path suffix))))
 
 (defun py-list-values (value)
   (cond
@@ -2581,11 +4145,19 @@
        (loop for index from 0 below size collect (aref storage index))))
     (t '())))
 
+(defun py-module-path-value (module)
+  (handler-case
+      (py-lookup-attr module "__path__")
+    (error () nil)))
+
+(defun py-module-package-object-p (module)
+  (not (null (py-module-path-value module))))
+
 (defun py-find-module-source (name &optional parent-module)
   (if parent-module
       (py-find-module-source-in-roots
        (py-module-child-name name)
-       (py-list-values (py-object-attr parent-module "__path__")))
+       (py-list-values (py-module-path-value parent-module)))
       (py-find-module-source-in-roots
        name
        (py-current-module-search-paths))))
@@ -2597,12 +4169,17 @@
     (setf (py-module-object-package-name module) (package-name package))
     package))
 
+(defun py-module-local-symbol (module name)
+  (let* ((package (py-ensure-module-package module))
+         (symbol-name name))
+    (shadow (list symbol-name) package)
+    (intern symbol-name package)))
+
 (defun py-bind-module-global-symbol (module name)
   (multiple-value-bind (value found)
       (gethash name (py-object-attrs module))
     (when found
-      (let* ((package (py-ensure-module-package module))
-             (symbol (intern (string-upcase name) package)))
+      (let ((symbol (py-module-local-symbol module name)))
         (setf (symbol-value symbol) value)))))
 
 (defun py-bind-module-metadata-globals (module)
@@ -2623,6 +4200,95 @@
              (spec (and parent (py-object-attr parent "__spec__"))))
         (when (py-module-spec-object-p spec)
           (py-module-spec-object-uninitialized-submodules spec))))))
+
+(defun py-default-meta-path-finder-p (finder)
+  (or (eq finder *py-builtin-importer-type*)
+      (eq finder *py-frozen-importer-type*)
+      (eq finder *py-path-finder-type*)))
+
+(defun py-current-meta-path ()
+  (let ((sys-module (gethash "sys" *py-sys-modules*)))
+    (when sys-module
+      (multiple-value-bind (meta-path found)
+          (gethash "meta_path" (py-object-attrs sys-module))
+        (when found meta-path)))))
+
+(defun py-custom-meta-path-find-spec (fullname &optional parent)
+  (let ((meta-path (py-current-meta-path))
+        (path (if parent
+                  (or (py-module-path-value parent) *py-none*)
+                  *py-none*)))
+    (if meta-path
+        (dolist (finder (py-list-values meta-path) *py-none*)
+          (unless (py-default-meta-path-finder-p finder)
+            (let ((spec (handler-case
+                            (py-call-attr finder "find_spec" fullname path *py-none*)
+                          (py-exception () *py-none*))))
+              (unless (eq spec *py-none*)
+                (return spec)))))
+        *py-none*)))
+
+(defun py-load-module-from-spec (spec)
+  (unless (py-module-spec-object-p spec)
+    (py-raise-type *py-type-error-type* "meta path finder returned a non-spec object"))
+  (let* ((name (py-module-spec-object-name spec))
+         (loader (py-module-spec-object-loader spec))
+         (module (py-importlib-module-from-spec spec)))
+    (when (py-module-object-p module)
+      (py-set-module-initializing module t))
+    (setf (gethash name *py-sys-modules*) module)
+    (handler-case
+        (progn
+          (unless (eq loader *py-none*)
+            (py-call-attr loader "exec_module" module))
+          (when (py-module-object-p module)
+            (py-set-module-initializing module nil)))
+      (error (condition)
+        (remhash name *py-sys-modules*)
+        (error condition)))
+    (py-install-imported-child-module name module)
+    module))
+
+(defun py-sys-import-state (name)
+  (let ((sys-module (gethash "sys" *py-sys-modules*)))
+    (when sys-module
+      (multiple-value-bind (value found) (gethash name (py-object-attrs sys-module))
+        (when found value)))))
+
+(defun py-path-entry-finder-for (entry)
+  (let* ((cache (py-sys-import-state "path_importer_cache"))
+         (hooks (py-sys-import-state "path_hooks")))
+    (unless (and (py-dict-object-p cache) hooks)
+      (return-from py-path-entry-finder-for *py-none*))
+    (handler-case
+        (return-from py-path-entry-finder-for (py-getitem cache entry))
+      (py-exception () nil)
+      (error () nil))
+    (dolist (hook (py-list-values hooks) *py-none*)
+      (let ((finder (handler-case
+                        (py-invoke-callable hook entry)
+                      (py-exception () *py-none*)
+                      (error () *py-none*))))
+        (unless (eq finder *py-none*)
+          (py-setitem cache entry finder)
+          (return finder))))))
+
+(defun py-path-hooks-find-spec-in-roots (fullname roots)
+  (dolist (entry roots *py-none*)
+    (let ((finder (py-path-entry-finder-for entry)))
+      (unless (eq finder *py-none*)
+        (let ((spec (handler-case
+                        (py-call-attr finder "find_spec" fullname)
+                      (py-exception () *py-none*)
+                      (error () *py-none*))))
+          (unless (eq spec *py-none*)
+            (return spec)))))))
+
+(defun py-path-hooks-find-spec (fullname &optional parent)
+  (let ((roots (if parent
+                   (py-list-values (py-module-path-value parent))
+                   (py-current-module-search-paths))))
+    (py-path-hooks-find-spec-in-roots fullname roots)))
 
 (defun py-load-module (name)
   (multiple-value-bind (cached found) (gethash name *py-sys-modules*)
@@ -2649,20 +4315,47 @@
           (return-from py-load-module cached)))
       (let ((parent (gethash parent-name *py-sys-modules*)))
         (unless (and parent
-                     (nth-value 1 (gethash "__path__" (py-object-attrs parent))))
+                     (py-module-package-object-p parent))
           (py-raise-import-error
            (format nil "No module named '~A'; '~A' is not a package" name parent-name)
            :name name
            :type *py-module-not-found-error-type*)))))
-  (multiple-value-bind (source-path package-p)
+  (let* ((parent-name (py-module-parent-name name))
+         (parent (and parent-name (gethash parent-name *py-sys-modules*)))
+         (meta-spec (py-custom-meta-path-find-spec name parent)))
+    (unless (eq meta-spec *py-none*)
+      (return-from py-load-module (py-load-module-from-spec meta-spec)))
+    (let ((path-spec (py-path-hooks-find-spec name parent)))
+      (unless (eq path-spec *py-none*)
+        (return-from py-load-module (py-load-module-from-spec path-spec)))))
+  (multiple-value-bind (source-path package-p namespace-path)
       (py-find-module-source name (and (py-module-parent-name name)
                                        (gethash (py-module-parent-name name)
                                                 *py-sys-modules*)))
+    (when namespace-path
+      (let* ((module (make-clamp-module name :package-p t))
+             (loader (make-py-instance *py-namespace-loader-type*))
+             (spec (make-clamp-namespace-module-spec name namespace-path loader)))
+        (setf (py-object-attr module "__loader__") loader)
+        (setf (py-object-attr module "__spec__") spec)
+        (setf (py-object-attr module "__path__")
+              (py-module-spec-object-submodule-search-locations spec))
+        (remhash "__file__" (py-object-attrs module))
+        (setf (gethash name *py-sys-modules*) module)
+        (py-install-imported-child-module name module)
+        (return-from py-load-module module)))
     (unless source-path
+      (let ((native-module (py-load-cpython-extension-module name)))
+        (when native-module
+          (return-from py-load-module native-module)))
       (py-raise-import-error
        (format nil "No module named '~A'" name)
        :name name
        :type *py-module-not-found-error-type*))
+    (when (py-extension-module-path-p source-path)
+      (let ((native-module (py-load-cpython-extension-module name source-path)))
+        (when native-module
+          (return-from py-load-module native-module))))
     (let ((module (make-clamp-module name :source-path source-path :package-p package-p)))
       (py-set-module-initializing module t)
       (setf (gethash name *py-sys-modules*) module)
@@ -2682,6 +4375,7 @@
                     (unless *py-module-loader*
                       (error "Clamp module loader is not installed"))
                     (funcall *py-module-loader* source-path name (py-module-object-package-name module))
+                    (py-patch-pydantic-internal-module module)
                     (py-set-module-initializing module nil))
                 (error (condition)
                   (remhash name *py-sys-modules*)
@@ -2696,7 +4390,9 @@
       module)))
 
 (defun py-import-module (name)
-  (py-load-module name))
+  (let ((module (py-load-module name)))
+    (py-patch-pydantic-internal-module module)
+    module))
 
 (defun py-current-package-name ()
   (unless *py-current-module*
@@ -2751,12 +4447,23 @@
          (error "'~A' object is not iterable" (py-type-name (py-type-of fromlist)))
          '()))))
 
+(defun py-missing-import-for-name-p (condition full-name)
+  (let ((value (py-exception-value condition)))
+    (and (py-exception-object-p value)
+         (eq (py-object-type value) *py-module-not-found-error-type*)
+         (handler-case
+             (let ((missing-name (py-lookup-attr value "name")))
+               (or (eq missing-name *py-none*)
+                   (string= missing-name full-name)))
+           (py-exception () nil)
+           (error () nil)))))
+
 (defun py-import-handle-fromlist (module fromlist &optional (recursive nil))
   (dolist (name fromlist)
     (unless (stringp name)
       (error "Item in ~A must be str, not ~A"
              (if recursive
-                 (concatenate 'string (py-module-object-name module) ".__all__")
+                 (concatenate 'string (py-imported-module-name module) ".__all__")
                  "``from list''")
              (py-type-name (py-type-of name))))
     (cond
@@ -2772,49 +4479,53 @@
          (declare (ignore attr))
          (unless found
            (let ((full-name (concatenate 'string
-                                         (py-module-object-name module)
+                                         (py-imported-module-name module)
                                          "."
                                          name)))
-             (multiple-value-bind (builder builtin-found) (gethash full-name *py-builtin-module-builders*)
-               (declare (ignore builder))
-               (if builtin-found
-                   (py-import-module full-name)
-                   (multiple-value-bind (source-path package-p)
-                       (py-find-module-source full-name module)
-                     (declare (ignore package-p))
-                     (when source-path
-                       (py-import-module full-name)))))))))))
+             (handler-case
+                 (py-import-module full-name)
+               (py-exception (condition)
+                 (unless (py-missing-import-for-name-p condition full-name)
+                   (error condition)))
+               (error () nil))))))))
   module)
 (defun py-import-star-bind (module name value)
   (when *py-current-module*
     (setf (py-object-attr *py-current-module* name) value)
-    (let* ((package (py-ensure-module-package *py-current-module*))
-           (symbol (intern (string-upcase name) package)))
+    (let ((symbol (py-module-local-symbol *py-current-module* name)))
       (setf (symbol-value symbol) value)))
   value)
 
 (defun py-import-star-names (module)
-  (multiple-value-bind (all found) (gethash "__all__" (py-object-attrs module))
-    (if found
+  (let ((all (handler-case
+                 (py-lookup-attr module "__all__")
+               (error () nil))))
+    (if all
         (progn
           (py-import-handle-fromlist module (list "*"))
           (py-import-fromlist-names all))
-        (let ((names (quote ())))
-          (maphash (lambda (name value)
-                     (declare (ignore value))
-                     (when (and (stringp name)
-                                (> (length name) 0)
-                                (not (char= (char name 0) #\_)))
-                       (push name names)))
-                   (py-object-attrs module))
-          names))))
+        (if (and (py-cpython-object-p module) *py-cpython-dir*)
+            (loop for name in (py-iterable-to-list (funcall *py-cpython-dir* module))
+                  when (and (stringp name)
+                            (> (length name) 0)
+                            (not (char= (char name 0) #\_)))
+                    collect name)
+            (let ((names (quote ())))
+              (maphash (lambda (name value)
+                         (declare (ignore value))
+                         (when (and (stringp name)
+                                    (> (length name) 0)
+                                    (not (char= (char name 0) #\_)))
+                           (push name names)))
+                       (py-object-attrs module))
+              names)))))
 
 (defun py-import-star (name &optional (level 0))
   (let ((module (py-import-name name (list "*") level)))
     (dolist (import-name (py-import-star-names module))
       (unless (stringp import-name)
         (error "Item in ~A.__all__ must be str, not ~A"
-               (py-module-object-name module)
+               (py-imported-module-name module)
                (py-type-name (py-type-of import-name))))
       (py-import-star-bind module import-name (py-import-from module import-name)))
     *py-none*))
@@ -2839,37 +4550,224 @@
                           name))
            (module (py-import-module full-name)))
       (if (py-truthy-p fromlist)
-          (if (nth-value 1 (gethash "__path__" (py-object-attrs module)))
+          (if (py-module-package-object-p module)
               (py-import-handle-fromlist module (py-import-fromlist-names fromlist))
               module)
           (py-import-module (py-module-root-name full-name))))))
 
 (defun py-import-from (module name)
+  (when (member (py-imported-module-name module) '("typing" "typing_extensions") :test #'string=)
+    (cond
+      ((string= name "final")
+       (return-from py-import-from (lambda (obj &rest args) (declare (ignore args)) obj)))
+      ((string= name "cast")
+       (return-from py-import-from (lambda (type value &rest args) (declare (ignore type args)) value)))))
   (multiple-value-bind (attr found) (gethash name (py-object-attrs module))
     (when found
       (return-from py-import-from attr)))
-  (let ((full-name (concatenate 'string (py-module-object-name module) "." name)))
+  (handler-case
+      (return-from py-import-from (py-lookup-attr module name))
+    (py-exception () nil)
+    (error () nil))
+  (let* ((module-name (py-imported-module-name module))
+         (leaf-start (position #\. module-name :from-end t))
+         (leaf-name (if leaf-start (subseq module-name (1+ leaf-start)) module-name)))
+    (multiple-value-bind (submodule found) (gethash leaf-name (py-object-attrs module))
+      (when (and found (py-module-object-p submodule))
+        (multiple-value-bind (attr attr-found) (gethash name (py-object-attrs submodule))
+          (when attr-found
+            (return-from py-import-from attr)))))
+    (multiple-value-bind (submodule found) (gethash (concatenate 'string module-name "." leaf-name) *py-sys-modules*)
+      (when (and found (py-module-object-p submodule))
+        (multiple-value-bind (attr attr-found) (gethash name (py-object-attrs submodule))
+          (when attr-found
+            (return-from py-import-from attr))))))
+  (when (string= (py-imported-module-name module) "numpy.linalg")
+    (return-from py-import-from
+      (make-py-callable
+       :name name
+       :fn (lambda (&rest args)
+             (let ((target (py-import-from (py-import-module "numpy.linalg.linalg") name)))
+               (apply #'py-invoke-callable target args))))))
+  (let ((full-name (concatenate 'string (py-imported-module-name module) "." name)))
     (multiple-value-bind (cached found) (gethash full-name *py-sys-modules*)
       (when found
         (return-from py-import-from cached)))
     (handler-case
-        (py-import-module full-name)
-      (py-exception ()
-        (py-raise-import-error
-         (format nil "cannot import name '~A' from '~A'" name (py-module-object-name module))
-         :name name)))))
+        (return-from py-import-from (py-import-module full-name))
+      (py-exception (condition)
+        (if (py-missing-import-for-name-p condition full-name)
+            (py-raise-import-error
+             (format nil "cannot import name '~A' from '~A'" name (py-imported-module-name module))
+             :name name)
+            (error condition))))))
 
 (defun py-register-builtin-module (name builder)
   (setf (gethash name *py-builtin-module-builders*) builder))
 
+
+(defun py-make-frame (module code-name &optional (back *py-none*))
+  (let* ((frame (make-py-object :type *py-object-type*))
+         (code (make-py-object :type *py-object-type*))
+         (locals (if (py-module-object-p module)
+                     (make-py-dict-for-storage (py-object-attrs module) module)
+                     (make-py-dict-from-pairs))))
+    (setf (py-object-attr code "co_name") code-name)
+    (setf (py-object-attr code "co_filename")
+          (if (and (py-module-object-p module)
+                   (py-module-object-source-path module))
+              (py-module-object-source-path module)
+              "<clamp>"))
+    (setf (py-object-attr frame "f_code") code)
+    (setf (py-object-attr frame "f_globals") locals)
+    (setf (py-object-attr frame "f_locals") locals)
+    (setf (py-object-attr frame "f_back") back)
+    frame))
+
+(defun py-current-module-frame ()
+  (py-make-frame *py-current-module* "<module>" *py-none*))
+
+(defun py-sys-getframe (&optional (depth 0))
+  (let ((normalized-depth (py-normalize-bool-number depth)))
+    (unless (and (integerp normalized-depth) (>= normalized-depth 0))
+      (py-raise-type *py-value-error-type* "call stack is not deep enough"))
+    (let ((frame (nth normalized-depth *py-frame-stack*)))
+      (or frame
+          (if (= normalized-depth (length *py-frame-stack*))
+              (py-current-module-frame)
+              (py-raise-type *py-value-error-type* "call stack is not deep enough"))))))
+
+(defun py-sys-builtin-module-names ()
+  (let ((names '()))
+    (maphash (lambda (name builder)
+               (declare (ignore builder))
+               (push name names))
+             *py-builtin-module-builders*)
+    (apply #'make-py-tuple (sort names #'string<))))
+
+(defun make-py-sys-stream (name stream &key readable)
+  (let ((obj (make-py-object :type *py-object-type*)))
+    (setf (py-object-attr obj "name") name)
+    (setf (py-object-attr obj "write")
+          (lambda (value)
+            (let ((text (py-str value)))
+              (write-string text stream)
+              (finish-output stream)
+              (length text))))
+    (setf (py-object-attr obj "flush")
+          (lambda ()
+            (finish-output stream)
+            *py-none*))
+    (setf (py-object-attr obj "isatty")
+          (lambda () *py-false*))
+    (setf (py-object-attr obj "read")
+          (lambda (&rest args)
+            (declare (ignore args))
+            (if readable "" *py-none*)))
+    obj))
+
+(defun py-sys-default-path-hook ()
+  (let ((loader-details
+          (list
+           (make-py-tuple *py-source-file-loader-type*
+                          (apply #'make-py-list *py-source-suffixes*))
+           (make-py-tuple *py-sourceless-file-loader-type*
+                          (apply #'make-py-list *py-bytecode-suffixes*))
+           (make-py-tuple *py-extension-file-loader-type*
+                          (apply #'make-py-list *py-extension-suffixes*)))))
+    (lambda (path)
+      (if (not (null (uiop:directory-exists-p
+                      (uiop:ensure-directory-pathname (py-path-string path)))))
+          (make-clamp-file-finder path loader-details)
+          (py-raise-type *py-import-error-type* "only directories are supported")))))
+
+(defun py-native-sys-attr-or-default (name default)
+  (if *py-cpython-import-module*
+      (let ((native-sys (handler-case
+                            (funcall *py-cpython-import-module* "sys")
+                          (py-exception () nil)
+                          (error () nil))))
+        (if native-sys
+            (handler-case
+                (py-lookup-attr native-sys name)
+              (py-exception () default)
+              (error () default))
+            default))
+      default))
+
+(defun py-make-version-info (major minor micro releaselevel serial)
+  (let ((info (make-py-tuple major minor micro releaselevel serial)))
+    (setf (py-object-attr info "major") major)
+    (setf (py-object-attr info "minor") minor)
+    (setf (py-object-attr info "micro") micro)
+    (setf (py-object-attr info "releaselevel") releaselevel)
+    (setf (py-object-attr info "serial") serial)
+    info))
 
 (defun make-clamp-sys-module ()
   (let ((module (make-clamp-module "sys")))
     (setf (py-object-attr module "modules")
           (make-py-dict-for-storage *py-sys-modules*))
     (setf (py-object-attr module "path") (py-ensure-sys-path))
+    (setf (py-object-attr module "meta_path")
+          (make-py-list *py-builtin-importer-type*
+                        *py-frozen-importer-type*
+                        *py-path-finder-type*))
+    (setf (py-object-attr module "path_hooks")
+          (make-py-list (py-sys-default-path-hook)))
+    (setf (py-object-attr module "path_importer_cache")
+          (make-py-dict-from-pairs))
+    (setf (py-object-attr module "builtin_module_names")
+          (py-sys-builtin-module-names))
     (setf (py-object-attr module "argv")
           (apply #'make-py-list (or *py-sys-argv* '())))
+    (let ((version-info (py-native-sys-attr-or-default
+                         "version_info"
+                         (py-make-version-info 3 12 0 "final" 0))))
+      (when (py-tuple-object-p version-info)
+        (let ((values (py-tuple-storage version-info)))
+          (when (>= (fill-pointer values) 5)
+            (setf (py-object-attr version-info "major") (aref values 0))
+            (setf (py-object-attr version-info "minor") (aref values 1))
+            (setf (py-object-attr version-info "micro") (aref values 2))
+            (setf (py-object-attr version-info "releaselevel") (aref values 3))
+            (setf (py-object-attr version-info "serial") (aref values 4)))))
+      (setf (py-object-attr module "version_info") version-info))
+    (setf (py-object-attr module "version")
+          (py-native-sys-attr-or-default "version" "3.12.0 (Clamp)"))
+    (setf (py-object-attr module "hexversion")
+          (py-native-sys-attr-or-default "hexversion" #x030c00f0))
+    (setf (py-object-attr module "api_version")
+          (py-native-sys-attr-or-default "api_version" 1013))
+    (setf (py-object-attr module "executable")
+          (py-native-sys-attr-or-default "executable" ""))
+    (setf (py-object-attr module "prefix")
+          (py-native-sys-attr-or-default "prefix" ""))
+    (setf (py-object-attr module "base_prefix")
+          (py-native-sys-attr-or-default "base_prefix" (py-object-attr module "prefix")))
+    (setf (py-object-attr module "exec_prefix")
+          (py-native-sys-attr-or-default "exec_prefix" (py-object-attr module "prefix")))
+    (setf (py-object-attr module "base_exec_prefix")
+          (py-native-sys-attr-or-default "base_exec_prefix" (py-object-attr module "exec_prefix")))
+    (setf (py-object-attr module "maxunicode") #x10ffff)
+    (setf (py-object-attr module "maxsize") most-positive-fixnum)
+    (setf (py-object-attr module "platform")
+          (py-native-sys-attr-or-default "platform" "linux"))
+    (setf (py-object-attr module "byteorder") "little")
+    (setf (py-object-attr module "is_finalizing") (lambda () *py-false*))
+    (setf (py-object-attr module "stdout")
+          (make-py-sys-stream "<stdout>" *standard-output*))
+    (setf (py-object-attr module "stderr")
+          (make-py-sys-stream "<stderr>" *error-output*))
+    (setf (py-object-attr module "stdin")
+          (make-py-sys-stream "<stdin>" *standard-input* :readable t))
+    (let ((implementation (make-py-object :type *py-object-type*)))
+      (setf (py-object-attr implementation "name") "cpython")
+      (setf (py-object-attr implementation "cache_tag") *py-cache-tag*)
+      (setf (py-object-attr implementation "version")
+            (py-object-attr module "version_info"))
+      (setf (py-object-attr module "implementation") implementation))
+    (setf (py-object-attr module "_getframe") #'py-sys-getframe)
     module))
 
 (defun py-importlib-resolve-name (name package)
@@ -2883,22 +4781,45 @@
         (py-resolve-relative-import-name (subseq name start) level package))
       name))
 
-(defun py-importlib-import-module (name &optional (package *py-none*))
-  (unless (stringp name)
-    (py-raise-type *py-type-error-type* "module name must be a string"))
-  (let ((full-name (py-importlib-resolve-name
-                    name
-                    (unless (eq package *py-none*) package))))
-    (py-import-module full-name)))
+(defun py-importlib-import-module (name &rest args)
+  (multiple-value-bind (package package-supplied-p positional)
+      (py-asyncio-keyword-value args :package *py-none*)
+    (declare (ignore package-supplied-p))
+    (unless (stringp name)
+      (py-raise-type *py-type-error-type* "module name must be a string"))
+    (when positional
+      (setf package (first positional)))
+    (let ((full-name (py-importlib-resolve-name
+                      name
+                      (unless (eq package *py-none*) package))))
+      (py-import-module full-name))))
+
+(defun py-importlib-source-hash (source-bytes)
+  (unless *py-cpython-import-module*
+    (py-raise-type *py-runtime-error-type*
+                   "importlib.util.source_hash is unavailable without the CPython bridge"))
+  (let* ((native-util (funcall *py-cpython-import-module* "importlib.util"))
+         (native-source-hash (py-lookup-attr native-util "source_hash")))
+    (py-invoke-callable native-source-hash source-bytes)))
 
 (defun py-importlib-reload (module)
-  (unless (py-module-object-p module)
-    (py-raise-type *py-type-error-type* "reload() argument must be a module"))
-  (let ((name (py-module-object-name module)))
-    (remhash name *py-sys-modules*)
-    (py-import-module name)))
+  (cond
+    ((py-module-object-p module)
+     (let ((name (py-module-object-name module)))
+       (remhash name *py-sys-modules*)
+       (py-import-module name)))
+    ((py-cpython-object-p module)
+     module)
+    (t
+     (py-raise-type *py-type-error-type* "reload() argument must be a module"))))
 
 (defun py-importlib-invalidate-caches ()
+  (let ((sys-module (gethash "sys" *py-sys-modules*)))
+    (when sys-module
+      (multiple-value-bind (cache found)
+          (gethash "path_importer_cache" (py-object-attrs sys-module))
+        (when (and found (py-dict-object-p cache))
+          (py-dict-clear cache)))))
   *py-none*)
 
 (defun py-importlib-find-spec (name &optional (package *py-none*))
@@ -2914,32 +4835,370 @@
         (return-from py-importlib-find-spec (py-object-attr cached "__spec__"))))
     (let* ((parent-name (py-module-parent-name full-name))
            (parent (and parent-name (py-import-module parent-name))))
+      (let ((meta-spec (py-custom-meta-path-find-spec full-name parent)))
+        (unless (eq meta-spec *py-none*)
+          (return-from py-importlib-find-spec meta-spec)))
+      (let ((path-spec (py-path-hooks-find-spec full-name parent)))
+        (unless (eq path-spec *py-none*)
+          (return-from py-importlib-find-spec path-spec)))
       (when (and parent-name
                  (not (nth-value 1 (gethash "__path__" (py-object-attrs parent)))))
         (return-from py-importlib-find-spec *py-none*))
-      (multiple-value-bind (source-path package-p)
+      (multiple-value-bind (source-path package-p namespace-path)
           (py-find-module-source full-name parent)
-        (if source-path
-            (make-clamp-module-spec
-             full-name
-             source-path
-             package-p
-             (make-clamp-source-file-loader full-name source-path))
-            *py-none*)))))
+        (cond
+          (namespace-path
+           (make-clamp-namespace-module-spec full-name namespace-path))
+          ((and source-path (py-extension-module-path-p source-path))
+           (make-clamp-extension-module-spec full-name source-path))
+          (source-path
+           (make-clamp-source-module-spec full-name source-path package-p))
+          (*py-cpython-find-extension-origin*
+           (let ((origin (funcall *py-cpython-find-extension-origin* full-name)))
+             (if (and origin (py-extension-module-path-p origin))
+                 (make-clamp-extension-module-spec full-name origin)
+                 *py-none*)))
+          (t *py-none*))))))
+
+(defun py-pathfinder-spec-from-path (full-name path)
+  (let ((hook-spec (py-path-hooks-find-spec-in-roots full-name (py-list-values path))))
+    (unless (eq hook-spec *py-none*)
+      (return-from py-pathfinder-spec-from-path hook-spec)))
+  (when *py-cpython-find-spec*
+    (let ((native-spec (funcall *py-cpython-find-spec* full-name path)))
+      (unless (eq native-spec *py-none*)
+        (return-from py-pathfinder-spec-from-path native-spec))))
+  (multiple-value-bind (source-path package-p namespace-path)
+      (py-find-module-source-in-roots (py-module-child-name full-name)
+                                      (py-list-values path))
+    (cond
+      (namespace-path
+       (make-clamp-namespace-module-spec full-name namespace-path))
+      ((and source-path (py-extension-module-path-p source-path))
+       (make-clamp-extension-module-spec full-name source-path))
+      (source-path
+       (make-clamp-source-module-spec full-name source-path package-p))
+      (t *py-none*))))
+
+(defun py-loader-detail-values (detail)
+  (cond
+    ((py-list-object-p detail) (py-list-values detail))
+    ((py-tuple-object-p detail)
+     (let ((storage (py-tuple-storage detail "FileFinder"))
+           (size (or (py-object-size detail) 0)))
+       (loop for index from 0 below size collect (aref storage index))))
+    (t
+     (py-raise-type *py-type-error-type* "loader details must be sequences"))))
+
+(defun py-file-finder-candidate-path (directory module-tail suffix)
+  (namestring
+   (merge-pathnames (concatenate 'string module-tail suffix)
+                    (uiop:ensure-directory-pathname directory))))
+
+(defun py-file-finder-loader-package-path-p (source-path loader-type)
+  (cond
+    ((eq loader-type *py-extension-file-loader-type*)
+     (py-extension-loader-package-path-p source-path))
+    ((or (eq loader-type *py-source-file-loader-type*)
+         (eq loader-type *py-sourceless-file-loader-type*))
+     (string= (pathname-name source-path) "__init__"))
+    (t nil)))
+
+(defun py-file-finder-spec-for-loader (fullname source-path loader-type)
+  (let ((loader (py-invoke-callable loader-type fullname source-path))
+        (package-p (py-file-finder-loader-package-path-p source-path loader-type)))
+    (cond
+      ((eq loader-type *py-extension-file-loader-type*)
+       (make-clamp-extension-module-spec fullname source-path loader))
+      ((eq loader-type *py-source-file-loader-type*)
+       (make-clamp-source-module-spec fullname source-path package-p loader))
+      ((eq loader-type *py-sourceless-file-loader-type*)
+       (make-clamp-sourceless-module-spec fullname source-path package-p loader))
+      (t
+       (make-clamp-module-spec fullname source-path package-p loader)))))
+
+(defun py-file-finder-find-spec (finder fullname &optional (target *py-none*))
+  (declare (ignore target))
+  (unless (stringp fullname)
+    (py-raise-type *py-type-error-type* "module name must be a string"))
+  (let ((module-tail (py-module-child-name fullname))
+        (directory (py-file-finder-object-path finder)))
+    (dolist (detail (py-file-finder-object-loader-details finder) *py-none*)
+      (let ((values (py-loader-detail-values detail)))
+        (when (>= (length values) 2)
+          (let ((loader-type (first values))
+                (suffixes (second values)))
+            (dolist (suffix (py-list-values suffixes))
+              (let* ((package-candidate
+                       (py-file-finder-candidate-path
+                        directory
+                        (concatenate 'string module-tail "/__init__")
+                        suffix))
+                     (package-found (py-probe-file package-candidate)))
+                (when package-found
+                  (return-from py-file-finder-find-spec
+                    (py-file-finder-spec-for-loader fullname package-found loader-type))))
+              (let* ((candidate (py-file-finder-candidate-path directory module-tail suffix))
+                     (found (py-probe-file candidate)))
+                (when found
+                  (return-from py-file-finder-find-spec
+                    (py-file-finder-spec-for-loader fullname found loader-type)))))))))))
+
+(defun py-file-finder-directory-p (path)
+  (not (null (uiop:directory-exists-p (uiop:ensure-directory-pathname (py-path-string path))))))
+
+(defun py-file-finder-path-hook (cls &rest loader-details)
+  (declare (ignore cls))
+  (lambda (path)
+    (if (py-file-finder-directory-p path)
+        (make-clamp-file-finder path loader-details)
+        (py-raise-type *py-import-error-type* "only directories are supported"))))
+
+(setf (py-type-attr *py-file-finder-type* "find_spec")
+      #'py-file-finder-find-spec)
+
+(setf (py-type-attr *py-file-finder-type* "invalidate_caches")
+      (lambda (finder)
+        (declare (ignore finder))
+        *py-none*))
+
+(setf (py-type-attr *py-file-finder-type* "path_hook")
+      (make-py-callable
+       :name "FileFinder.path_hook"
+       :binding-kind :class-method
+       :fn #'py-file-finder-path-hook))
+
+(defun py-importlib-pathfinder-find-spec (cls fullname &optional (path *py-none*) (target *py-none*))
+  (declare (ignore cls target))
+  (unless (stringp fullname)
+    (py-raise-type *py-type-error-type* "module name must be a string"))
+  (if (eq path *py-none*)
+      (py-importlib-find-spec fullname)
+      (py-pathfinder-spec-from-path fullname path)))
+
+(setf (py-type-attr *py-path-finder-type* "find_spec")
+      (make-py-callable
+       :name "PathFinder.find_spec"
+       :binding-kind :class-method
+       :fn #'py-importlib-pathfinder-find-spec))
+
+(setf (py-type-attr *py-path-finder-type* "invalidate_caches")
+      (make-py-callable
+       :name "PathFinder.invalidate_caches"
+       :binding-kind :class-method
+       :fn (lambda (cls)
+             (declare (ignore cls))
+             (py-importlib-invalidate-caches))))
+
+(setf (py-type-attr *py-windows-registry-finder-type* "find_spec")
+      (make-py-callable
+       :name "WindowsRegistryFinder.find_spec"
+       :binding-kind :class-method
+       :fn (lambda (cls fullname &optional (path *py-none*) (target *py-none*))
+             (declare (ignore cls fullname path target))
+             *py-none*)))
+
+(setf (py-type-attr *py-windows-registry-finder-type* "invalidate_caches")
+      (make-py-callable
+       :name "WindowsRegistryFinder.invalidate_caches"
+       :binding-kind :class-method
+       :fn (lambda (cls)
+             (declare (ignore cls))
+             *py-none*)))
+
+(defun py-importlib-builtin-find-spec (cls fullname &optional (path *py-none*) (target *py-none*))
+  (declare (ignore cls path target))
+  (unless (stringp fullname)
+    (py-raise-type *py-type-error-type* "module name must be a string"))
+  (if (nth-value 1 (gethash fullname *py-builtin-module-builders*))
+      (make-clamp-builtin-module-spec fullname)
+      *py-none*))
+
+(defun py-importlib-builtin-create-module (cls spec)
+  (declare (ignore cls))
+  (unless (py-module-spec-object-p spec)
+    (py-raise-type *py-type-error-type* "create_module() expected ModuleSpec"))
+  (py-load-module (py-module-spec-object-name spec)))
+
+(defun py-importlib-builtin-exec-module (cls module)
+  (declare (ignore cls module))
+  *py-none*)
+
+(defun py-importlib-builtin-load-module (cls fullname)
+  (declare (ignore cls))
+  (py-load-module fullname))
+
+(defun py-importlib-builtin-get-code (cls fullname)
+  (declare (ignore cls))
+  (if (nth-value 1 (gethash fullname *py-builtin-module-builders*))
+      *py-none*
+      (py-raise-type *py-import-error-type* (format nil "'~A' is not a built-in module" fullname))))
+
+(defun py-importlib-builtin-get-source (cls fullname)
+  (declare (ignore cls))
+  (if (nth-value 1 (gethash fullname *py-builtin-module-builders*))
+      *py-none*
+      (py-raise-type *py-import-error-type* (format nil "'~A' is not a built-in module" fullname))))
+
+(defun py-importlib-builtin-is-package (cls fullname)
+  (declare (ignore cls))
+  (if (nth-value 1 (gethash fullname *py-builtin-module-builders*))
+      *py-false*
+      (py-raise-type *py-import-error-type* (format nil "'~A' is not a built-in module" fullname))))
+
+(setf (py-type-attr *py-builtin-importer-type* "find_spec")
+      (make-py-callable
+       :name "BuiltinImporter.find_spec"
+       :binding-kind :class-method
+       :fn #'py-importlib-builtin-find-spec))
+
+(setf (py-type-attr *py-builtin-importer-type* "create_module")
+      (make-py-callable
+       :name "BuiltinImporter.create_module"
+       :binding-kind :class-method
+       :fn #'py-importlib-builtin-create-module))
+
+(setf (py-type-attr *py-builtin-importer-type* "exec_module")
+      (make-py-callable
+       :name "BuiltinImporter.exec_module"
+       :binding-kind :class-method
+       :fn #'py-importlib-builtin-exec-module))
+
+(setf (py-type-attr *py-builtin-importer-type* "load_module")
+      (make-py-callable
+       :name "BuiltinImporter.load_module"
+       :binding-kind :class-method
+       :fn #'py-importlib-builtin-load-module))
+
+(setf (py-type-attr *py-builtin-importer-type* "get_code")
+      (make-py-callable
+       :name "BuiltinImporter.get_code"
+       :binding-kind :class-method
+       :fn #'py-importlib-builtin-get-code))
+
+(setf (py-type-attr *py-builtin-importer-type* "get_source")
+      (make-py-callable
+       :name "BuiltinImporter.get_source"
+       :binding-kind :class-method
+       :fn #'py-importlib-builtin-get-source))
+
+(setf (py-type-attr *py-builtin-importer-type* "is_package")
+      (make-py-callable
+       :name "BuiltinImporter.is_package"
+       :binding-kind :class-method
+       :fn #'py-importlib-builtin-is-package))
+
+(defun py-importlib-frozen-find-spec (cls fullname &optional (path *py-none*) (target *py-none*))
+  (declare (ignore cls fullname path target))
+  *py-none*)
+
+(defun py-importlib-frozen-missing (cls fullname)
+  (declare (ignore cls))
+  (py-raise-type *py-import-error-type* (format nil "No such frozen object named ~A" fullname)))
+
+(defun py-importlib-frozen-create-module (cls spec)
+  (declare (ignore cls spec))
+  *py-none*)
+
+(defun py-importlib-frozen-exec-module (cls module)
+  (declare (ignore cls module))
+  *py-none*)
+
+(setf (py-type-attr *py-frozen-importer-type* "find_spec")
+      (make-py-callable
+       :name "FrozenImporter.find_spec"
+       :binding-kind :class-method
+       :fn #'py-importlib-frozen-find-spec))
+
+(setf (py-type-attr *py-frozen-importer-type* "create_module")
+      (make-py-callable
+       :name "FrozenImporter.create_module"
+       :binding-kind :class-method
+       :fn #'py-importlib-frozen-create-module))
+
+(setf (py-type-attr *py-frozen-importer-type* "exec_module")
+      (make-py-callable
+       :name "FrozenImporter.exec_module"
+       :binding-kind :class-method
+       :fn #'py-importlib-frozen-exec-module))
+
+(setf (py-type-attr *py-frozen-importer-type* "load_module")
+      (make-py-callable
+       :name "FrozenImporter.load_module"
+       :binding-kind :class-method
+       :fn #'py-importlib-frozen-missing))
+
+(setf (py-type-attr *py-frozen-importer-type* "get_code")
+      (make-py-callable
+       :name "FrozenImporter.get_code"
+       :binding-kind :class-method
+       :fn #'py-importlib-frozen-missing))
+
+(setf (py-type-attr *py-frozen-importer-type* "get_source")
+      (make-py-callable
+       :name "FrozenImporter.get_source"
+       :binding-kind :class-method
+       :fn #'py-importlib-frozen-missing))
+
+(setf (py-type-attr *py-frozen-importer-type* "is_package")
+      (make-py-callable
+       :name "FrozenImporter.is_package"
+       :binding-kind :class-method
+       :fn #'py-importlib-frozen-missing))
+
+(defun py-extension-file-loader-object-p (loader)
+  (and (py-source-file-loader-object-p loader)
+       (eq (py-object-type loader) *py-extension-file-loader-type*)))
+
+(defun py-loader-create-module (loader spec)
+  (handler-case
+      (let ((created (py-call-attr loader "create_module" spec)))
+        (if (eq created *py-none*) nil created))
+    (py-exception () nil)
+    (error () nil)))
 
 (defun py-importlib-module-from-spec (spec)
   (unless (py-module-spec-object-p spec)
     (py-raise-type *py-type-error-type* "spec must be a ModuleSpec object"))
   (let* ((name (py-module-spec-object-name spec))
          (source-path (py-module-spec-object-origin spec))
+         (loader (py-module-spec-object-loader spec))
          (package-p (not (eq (py-module-spec-object-submodule-search-locations spec)
                              *py-none*)))
-         (module (make-clamp-module name
-                                    :source-path source-path
-                                    :package-p package-p)))
-    (setf (py-object-attr module "__loader__")
-          (py-module-spec-object-loader spec))
+         (module (cond
+                   ((py-extension-file-loader-object-p loader)
+                    (py-call-attr loader "create_module" spec))
+                   ((eq loader *py-builtin-importer-type*)
+                    (py-call-attr loader "create_module" spec))
+                   ((and (py-source-file-loader-object-p loader)
+                         (eq (py-object-type loader) *py-sourceless-file-loader-type*))
+                    (make-clamp-module name
+                                       :package-p package-p))
+                   ((py-source-file-loader-object-p loader)
+                    (make-clamp-module name
+                                       :source-path source-path
+                                       :package-p package-p))
+                   ((not (eq loader *py-none*))
+                    (or (py-loader-create-module loader spec)
+                        (make-clamp-module name
+                                           :package-p package-p)))
+                   (t
+                    (make-clamp-module name
+                                       :source-path source-path
+                                       :package-p package-p)))))
+    (setf (py-object-attr module "__name__") name)
+    (setf (py-object-attr module "__loader__") loader)
     (setf (py-object-attr module "__spec__") spec)
+    (setf (py-object-attr module "__package__")
+          (if package-p
+              name
+              (let ((pos (position #\. name :from-end t)))
+                (if pos (subseq name 0 pos) ""))))
+    (when source-path
+      (setf (py-object-attr module "__file__") source-path))
+    (let ((cached (py-module-spec-object-cached spec)))
+      (unless (eq cached *py-none*)
+        (setf (py-object-attr module "__cached__") cached)))
     (when package-p
       (setf (py-object-attr module "__path__")
             (py-module-spec-object-submodule-search-locations spec)))
@@ -2947,32 +5206,277 @@
 
 (defun py-importlib-spec-from-file-location (name location)
   (let* ((path (py-path-string location))
-         (package-p (string= (pathname-name path) "__init__"))
-         (loader (make-clamp-source-file-loader name path)))
-    (make-clamp-module-spec name path package-p loader)))
+         (package-p (string= (pathname-name path) "__init__")))
+    (cond
+      ((py-extension-module-path-p path)
+       (make-clamp-extension-module-spec name path))
+      ((py-string-suffix-p path ".pyc")
+       (make-clamp-sourceless-module-spec name path package-p))
+      (t
+       (make-clamp-source-module-spec name path package-p)))))
+
+(defun py-importlib-spec-from-loader (name loader &rest args)
+  (multiple-value-bind (origin origin-supplied-p positional)
+      (py-asyncio-keyword-value args :origin *py-none*)
+    (multiple-value-bind (is-package is-package-supplied-p remaining)
+        (py-asyncio-keyword-value positional :is_package *py-none*)
+      (declare (ignore remaining))
+      (let* ((package-p (and is-package-supplied-p (py-truthy-p is-package)))
+             (spec (make-clamp-module-spec name nil package-p loader)))
+        (when origin-supplied-p
+          (setf (py-module-spec-object-origin spec) origin)
+          (setf (py-object-attr spec "origin") origin))
+        spec))))
 
 (defun make-clamp-importlib-module ()
-  (let ((module (make-clamp-module "importlib")))
+  (let ((module (make-clamp-module "importlib" :package-p t)))
+    (setf (py-object-attr module "__path__") (make-py-list))
     (setf (py-object-attr module "import_module") #'py-importlib-import-module)
     (setf (py-object-attr module "reload") #'py-importlib-reload)
     (setf (py-object-attr module "invalidate_caches") #'py-importlib-invalidate-caches)
+    (let ((util (make-clamp-importlib-util-module))
+          (machinery (make-clamp-importlib-machinery-module)))
+      (setf (gethash "importlib.util" *py-sys-modules*) util)
+      (setf (gethash "importlib.machinery" *py-sys-modules*) machinery)
+      (setf (py-object-attr module "util") util)
+      (setf (py-object-attr module "machinery") machinery))
     module))
+
+(defparameter *py-importlib-package-not-found-error-type*
+  (make-py-type :type *py-type-type*
+                :name "PackageNotFoundError"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(defparameter *py-importlib-resource-reader-type*
+  (make-py-type :type *py-type-type*
+                :name "ResourceReader"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-importlib-resource-reader-type*)) "importlib.resources.abc")
+
+(defparameter *py-importlib-traversable-type*
+  (make-py-type :type *py-type-type*
+                :name "Traversable"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-importlib-traversable-type*)) "importlib.resources.abc")
+
+(defparameter *py-importlib-traversable-resources-type*
+  (make-py-type :type *py-type-type*
+                :name "TraversableResources"
+                :bases (list *py-importlib-resource-reader-type*)
+                :basicsize 1))
+
+(setf (gethash "__module__" (py-object-attrs *py-importlib-traversable-resources-type*)) "importlib.resources.abc")
+
+(defun py-importlib-metadata-distributions (&rest args)
+  (declare (ignore args))
+  (make-py-list))
+
+(defun py-importlib-metadata-distribution (name)
+  (py-raise-type *py-importlib-package-not-found-error-type*
+                 (format nil "No package metadata was found for ~A" name)))
+
+(defun py-importlib-metadata-version (name)
+  (declare (ignore name))
+  "0")
+
+(defun py-copy-cpython-module-attrs (target source names)
+  (dolist (name names)
+    (let ((attr (handler-case
+                    (py-lookup-attr source name)
+                  (py-exception () nil)
+                  (error () nil))))
+      (when attr
+        (setf (py-object-attr target name) attr)))))
+
+(defun make-clamp-importlib-metadata-module ()
+  (let ((module (make-clamp-module "importlib.metadata" :package-p t)))
+    (setf (py-object-attr module "__path__") (make-py-list))
+    (setf (py-object-attr module "PackageNotFoundError") *py-importlib-package-not-found-error-type*)
+    (setf (py-object-attr module "distributions") #'py-importlib-metadata-distributions)
+    (setf (py-object-attr module "distribution") #'py-importlib-metadata-distribution)
+    (setf (py-object-attr module "version") #'py-importlib-metadata-version)
+    (when *py-cpython-import-module*
+      (let ((native (handler-case
+                        (funcall *py-cpython-import-module* "importlib.metadata")
+                      (py-exception () nil)
+                      (error () nil))))
+        (when native
+          (py-copy-cpython-module-attrs
+           module
+           native
+           '("__file__" "__path__" "__all__" "PackageNotFoundError"
+             "Distribution" "DistributionFinder" "EntryPoint" "EntryPoints"
+             "FastPath" "FileHash" "Lookup" "MetadataPathFinder"
+             "PackageMetadata" "PackagePath" "PathDistribution" "Prepared"
+             "SelectableGroups" "distribution" "distributions"
+             "entry_points" "files" "metadata" "packages_distributions"
+             "requires" "version")))))
+    module))
+
+(defun make-clamp-cpython-backed-module (name)
+  (if *py-cpython-import-module*
+      (let ((native (handler-case
+                        (funcall *py-cpython-import-module* name)
+                      (py-exception () nil)
+                      (error () nil))))
+        (or native (make-clamp-module name)))
+      (make-clamp-module name)))
 
 (defun make-clamp-importlib-util-module ()
   (let ((module (make-clamp-module "importlib.util")))
+    (setf (py-object-attr module "MAGIC_NUMBER") (py-importlib-magic-number))
+    (setf (py-object-attr module "LazyLoader") *py-lazy-loader-type*)
+    (setf (py-object-attr module "resolve_name") #'py-importlib-resolve-name)
     (setf (py-object-attr module "find_spec") #'py-importlib-find-spec)
+    (setf (py-object-attr module "_find_spec") #'py-importlib-private-find-spec)
     (setf (py-object-attr module "module_from_spec") #'py-importlib-module-from-spec)
     (setf (py-object-attr module "spec_from_file_location") #'py-importlib-spec-from-file-location)
+    (setf (py-object-attr module "spec_from_loader") #'py-importlib-spec-from-loader)
+    (setf (py-object-attr module "source_hash") #'py-importlib-source-hash)
+    (setf (py-object-attr module "decode_source") #'py-decode-source-bytes)
+    (setf (py-object-attr module "cache_from_source") #'py-importlib-cache-from-source)
+    (setf (py-object-attr module "source_from_cache") #'py-importlib-source-from-cache)
     module))
 
 (defun make-clamp-importlib-machinery-module ()
   (let ((module (make-clamp-module "importlib.machinery")))
     (setf (py-object-attr module "ModuleSpec") *py-module-spec-type*)
+    (setf (py-object-attr module "BuiltinImporter") *py-builtin-importer-type*)
+    (setf (py-object-attr module "FrozenImporter") *py-frozen-importer-type*)
     (setf (py-object-attr module "SourceFileLoader") *py-source-file-loader-type*)
+    (setf (py-object-attr module "ExtensionFileLoader") *py-extension-file-loader-type*)
+    (setf (py-object-attr module "SourcelessFileLoader") *py-sourceless-file-loader-type*)
+    (setf (py-object-attr module "NamespaceLoader") *py-namespace-loader-type*)
+    (setf (py-object-attr module "PathFinder") *py-path-finder-type*)
+    (setf (py-object-attr module "FileFinder") *py-file-finder-type*)
+    (setf (py-object-attr module "WindowsRegistryFinder") *py-windows-registry-finder-type*)
+    (setf (py-object-attr module "SOURCE_SUFFIXES")
+          (apply #'make-py-list *py-source-suffixes*))
+    (setf (py-object-attr module "BYTECODE_SUFFIXES")
+          (apply #'make-py-list *py-bytecode-suffixes*))
+    (setf (py-object-attr module "DEBUG_BYTECODE_SUFFIXES")
+          (apply #'make-py-list *py-bytecode-suffixes*))
+    (setf (py-object-attr module "OPTIMIZED_BYTECODE_SUFFIXES")
+          (apply #'make-py-list *py-bytecode-suffixes*))
+    (setf (py-object-attr module "EXTENSION_SUFFIXES")
+          (apply #'make-py-list *py-extension-suffixes*))
+    (setf (py-object-attr module "all_suffixes") #'py-importlib-all-suffixes)
+    module))
+
+(defun py-importlib-resources-files (anchor)
+  (let* ((module (if (stringp anchor)
+                     (py-import-module anchor)
+                     anchor))
+         (name (py-lookup-attr module "__name__"))
+         (loader (py-lookup-attr module "__loader__"))
+         (reader (py-call-attr loader "get_resource_reader" name)))
+    (when (or (null reader) (eq reader *py-none*))
+      (py-raise-type *py-type-error-type*
+                     (format nil "~A is not a package with resources" name)))
+    (py-call-attr reader "files")))
+
+(defun py-importlib-resources-resource-path (anchor resource)
+  (py-path-joinpath (py-importlib-resources-files anchor) resource))
+
+(defun py-importlib-resources-read-binary (anchor resource &rest args)
+  (declare (ignore args))
+  (py-call-attr (py-importlib-resources-resource-path anchor resource) "read_bytes"))
+
+(defun py-importlib-resources-read-text (anchor resource &rest args)
+  (let ((path (py-importlib-resources-resource-path anchor resource)))
+    (if args
+        (apply #'py-call-attr path "read_text" args)
+        (py-call-attr path "read_text"))))
+
+(defun py-importlib-resources-as-file (traversable)
+  (make-py-simple-context-manager
+   (lambda () traversable)
+   (lambda (exc-type exc-value traceback)
+     (declare (ignore exc-type exc-value traceback))
+     *py-false*)))
+
+(defun py-importlib-resources-open-binary (anchor resource &rest args)
+  (declare (ignore args))
+  (py-call-attr (py-importlib-resources-resource-path anchor resource) "open" "rb"))
+
+(defun py-importlib-resources-open-text (anchor resource &rest args)
+  (make-clamp-text-reader
+   (py-path-string (py-importlib-resources-resource-path anchor resource))
+   (if args (first args) *py-none*)))
+
+(defun py-importlib-resources-is-resource (anchor resource)
+  (py-call-attr (py-importlib-resources-resource-path anchor resource) "is_file"))
+
+(defun py-importlib-resources-contents (anchor)
+  (let* ((module (if (stringp anchor)
+                     (py-import-module anchor)
+                     anchor))
+         (name (py-lookup-attr module "__name__"))
+         (loader (py-lookup-attr module "__loader__"))
+         (reader (py-call-attr loader "get_resource_reader" name)))
+    (when (or (null reader) (eq reader *py-none*))
+      (py-raise-type *py-type-error-type*
+                     (format nil "~A is not a package with resources" name)))
+    (py-call-attr reader "contents")))
+
+(defun py-importlib-resources-path (anchor resource)
+  (py-importlib-resources-as-file
+   (py-importlib-resources-resource-path anchor resource)))
+
+(defun py-importlib-resources-abc-values ()
+  (let ((values (list *py-importlib-resource-reader-type*
+                      *py-importlib-traversable-type*
+                      *py-importlib-traversable-resources-type*)))
+    (when *py-cpython-import-module*
+      (let ((native (or (handler-case
+                            (funcall *py-cpython-import-module* "importlib.resources.abc")
+                          (py-exception () nil)
+                          (error () nil))
+                        (handler-case
+                            (funcall *py-cpython-import-module* "importlib.abc")
+                          (py-exception () nil)
+                          (error () nil)))))
+        (when native
+          (setf values
+                (list (py-lookup-attr-or-default native "ResourceReader" (first values))
+                      (py-lookup-attr-or-default native "Traversable" (second values))
+                      (py-lookup-attr-or-default native "TraversableResources" (third values)))))))
+    values))
+
+(defun py-install-importlib-resources-abc-attrs (module)
+  (destructuring-bind (resource-reader traversable traversable-resources)
+      (py-importlib-resources-abc-values)
+    (setf (py-object-attr module "ResourceReader") resource-reader)
+    (setf (py-object-attr module "Traversable") traversable)
+    (setf (py-object-attr module "TraversableResources") traversable-resources)
+    module))
+
+(defun make-clamp-importlib-resources-abc-module ()
+  (let ((module (make-clamp-module "importlib.resources.abc")))
+    (py-install-importlib-resources-abc-attrs module)
+    (setf (py-object-attr module "__all__")
+          (make-py-list "ResourceReader" "Traversable" "TraversableResources"))
     module))
 
 (defun make-clamp-importlib-resources-module ()
-  (let ((module (make-clamp-module "importlib.resources")))
+  (let ((module (make-clamp-module "importlib.resources" :package-p t)))
+    (setf (py-object-attr module "__path__") (make-py-list))
+    (setf (py-object-attr module "ResourceReader")
+          (first (py-importlib-resources-abc-values)))
+    (setf (py-object-attr module "files") #'py-importlib-resources-files)
+    (setf (py-object-attr module "read_binary") #'py-importlib-resources-read-binary)
+    (setf (py-object-attr module "read_text") #'py-importlib-resources-read-text)
+    (setf (py-object-attr module "as_file") #'py-importlib-resources-as-file)
+    (setf (py-object-attr module "open_binary") #'py-importlib-resources-open-binary)
+    (setf (py-object-attr module "open_text") #'py-importlib-resources-open-text)
+    (setf (py-object-attr module "is_resource") #'py-importlib-resources-is-resource)
+    (setf (py-object-attr module "contents") #'py-importlib-resources-contents)
+    (setf (py-object-attr module "path") #'py-importlib-resources-path)
     module))
 
 (defun make-clamp-importlib-resources-readers-module ()
@@ -2980,12 +5484,1037 @@
     (setf (py-object-attr module "FileReader") *py-file-reader-type*)
     module))
 
+
+(defun py-make-pkgutil-module-info (module-finder name ispkg)
+  (let* ((truth (py-bool (py-truthy-p ispkg)))
+         (info (make-py-tuple-object
+                :type *py-pkgutil-module-info-type*
+                :size 3
+                :value (vector module-finder name truth))))
+    (setf (py-object-attr info "module_finder") module-finder)
+    (setf (py-object-attr info "name") name)
+    (setf (py-object-attr info "ispkg") truth)
+    info))
+
+(defun py-pkgutil-get-importer (path-item)
+  (py-path-entry-finder-for path-item))
+
+(defun py-pkgutil-find-loader (fullname)
+  (when (and (stringp fullname)
+             (> (length fullname) 0)
+             (char= (char fullname 0) #\.))
+    (py-raise-type *py-import-error-type*
+                   (format nil "Relative module name ~S not supported" fullname)))
+  (let ((spec (py-importlib-find-spec fullname)))
+    (if (eq spec *py-none*)
+        *py-none*
+        (py-module-spec-object-loader spec))))
+
+(defun py-pkgutil-get-loader (module-or-name)
+  (let ((target module-or-name))
+    (when (stringp target)
+      (multiple-value-bind (cached found) (gethash target *py-sys-modules*)
+        (when found
+          (when (eq cached *py-none*)
+            (return-from py-pkgutil-get-loader *py-none*))
+          (setf target cached))))
+    (cond
+      ((py-module-object-p target)
+       (let ((loader (py-lookup-attr-or-default target "__loader__" *py-none*)))
+         (unless (eq loader *py-none*)
+           (return-from py-pkgutil-get-loader loader)))
+       (let ((spec (py-lookup-attr-or-default target "__spec__" *py-none*)))
+         (if (eq spec *py-none*)
+             *py-none*
+             (py-pkgutil-find-loader (py-module-object-name target)))))
+      ((py-cpython-object-p target)
+       (let ((loader (py-lookup-attr-or-default target "__loader__" *py-none*)))
+         (unless (eq loader *py-none*)
+           (return-from py-pkgutil-get-loader loader)))
+       (let ((name (py-lookup-attr-or-default target "__name__" *py-none*)))
+         (if (eq name *py-none*) *py-none* (py-pkgutil-find-loader name))))
+      (t
+       (py-pkgutil-find-loader target)))))
+
+(defun py-pkgutil-path-values (path)
+  (cond
+    ((or (null path) (eq path *py-none*)) (py-current-module-search-paths))
+    ((py-list-object-p path) (py-list-values path))
+    ((py-tuple-object-p path)
+     (loop for index from 0 below (or (py-object-size path) 0)
+           collect (aref (py-tuple-storage path "pkgutil path") index)))
+    ((stringp path) (list path))
+    (t '())))
+
+(defun py-pkgutil-directory-package-p (directory name suffixes)
+  (loop for suffix in suffixes
+        for candidate = (namestring
+                         (merge-pathnames (concatenate 'string name "/__init__" suffix)
+                                          (uiop:ensure-directory-pathname directory)))
+        thereis (py-probe-file candidate)))
+
+(defun py-pkgutil-module-basename-for-suffix (filename suffixes)
+  (loop for suffix in suffixes
+        when (py-string-suffix-p filename suffix)
+          do (return (subseq filename 0 (- (length filename) (length suffix))))))
+
+(defun py-pkgutil-file-finder-module-infos (finder prefix seen)
+  (let* ((directory (uiop:ensure-directory-pathname (py-file-finder-object-path finder)))
+         (suffixes (append *py-source-suffixes* *py-bytecode-suffixes* *py-extension-suffixes*))
+         (entries (handler-case
+                      (append (uiop:directory-files directory)
+                              (uiop:subdirectories directory))
+                    (error () '())))
+         (infos '()))
+    (dolist (entry entries)
+      (let* ((entry-name (py-directory-entry-name entry))
+             (entry-path (namestring entry)))
+        (cond
+          ((uiop:directory-pathname-p entry)
+           (when (and (> (length entry-name) 0)
+                      (not (gethash entry-name seen))
+                      (py-pkgutil-directory-package-p directory entry-name suffixes))
+             (setf (gethash entry-name seen) t)
+             (push (py-make-pkgutil-module-info
+                    finder
+                    (concatenate 'string prefix entry-name)
+                    *py-true*)
+                   infos)))
+          (t
+           (let ((base (py-pkgutil-module-basename-for-suffix entry-name suffixes)))
+             (when (and base
+                        (not (string= base "__init__"))
+                        (not (gethash base seen)))
+               (setf (gethash base seen) t)
+               (push (py-make-pkgutil-module-info
+                      finder
+                      (concatenate 'string prefix base)
+                      *py-false*)
+                     infos)))))))
+    (nreverse infos)))
+
+(defun py-pkgutil-iter-modules (&rest args)
+  (let ((path *py-none*)
+        (prefix ""))
+    (multiple-value-bind (prefix-value prefix-supplied-p positional)
+        (py-asyncio-keyword-value args :prefix *py-none*)
+      (when positional
+        (setf path (first positional))
+        (when (rest positional)
+          (setf prefix (second positional))))
+      (when prefix-supplied-p
+        (setf prefix prefix-value)))
+    (let ((seen (make-hash-table :test #'equal))
+          (infos '()))
+      (dolist (entry (py-pkgutil-path-values path))
+        (let ((finder (py-pkgutil-get-importer entry)))
+          (when (py-file-finder-object-p finder)
+            (setf infos
+                  (append infos
+                          (py-pkgutil-file-finder-module-infos finder prefix seen))))))
+      (apply #'make-py-list infos))))
+
+(defun py-pkgutil-walk-packages (&rest args)
+  (let ((path *py-none*)
+        (prefix "")
+        (onerror *py-none*))
+    (multiple-value-bind (prefix-value prefix-supplied-p without-prefix)
+        (py-asyncio-keyword-value args :prefix *py-none*)
+      (multiple-value-bind (onerror-value onerror-supplied-p positional)
+          (py-asyncio-keyword-value without-prefix :onerror *py-none*)
+        (when positional
+          (setf path (first positional))
+          (when (rest positional)
+            (setf prefix (second positional)))
+          (when (cddr positional)
+            (setf onerror (third positional))))
+        (when prefix-supplied-p
+          (setf prefix prefix-value))
+        (when onerror-supplied-p
+          (setf onerror onerror-value))))
+    (let ((results '()))
+      (declare (ignore onerror))
+      (dolist (info (py-list-values (py-pkgutil-iter-modules path prefix)))
+      (push info results)
+      (when (py-truthy-p (py-lookup-attr info "ispkg"))
+        (let ((module (handler-case
+                          (py-import-module (py-lookup-attr info "name"))
+                        (py-exception () nil)
+                        (error () nil))))
+          (when module
+            (let ((subpath (py-lookup-attr-or-default module "__path__" *py-none*)))
+              (unless (eq subpath *py-none*)
+                (dolist (child (py-list-values
+                                (py-pkgutil-walk-packages
+                                 subpath
+                                 (concatenate 'string (py-lookup-attr info "name") ".")
+                                 *py-none*)))
+                  (push child results))))))))
+      (apply #'make-py-list (nreverse results)))))
+
+(defun py-pkgutil-get-data (package resource)
+  (let* ((module (py-import-module package))
+         (loader (py-lookup-attr-or-default module "__loader__" *py-none*))
+         (file (py-lookup-attr-or-default module "__file__" *py-none*)))
+    (when (or (eq loader *py-none*) (eq file *py-none*))
+      (return-from py-pkgutil-get-data *py-none*))
+    (let ((path (namestring
+                 (merge-pathnames resource
+                                  (uiop:pathname-directory-pathname file)))))
+      (py-call-attr loader "get_data" path))))
+
+(defun py-pkgutil-extend-path (path name)
+  (let ((items (py-pkgutil-path-values path))
+        (seen (make-hash-table :test #'equal)))
+    (dolist (item items)
+      (setf (gethash item seen) t))
+    (dolist (entry (py-current-module-search-paths))
+      (let ((candidate (namestring
+                        (merge-pathnames name
+                                         (uiop:ensure-directory-pathname entry)))))
+        (when (and (not (gethash candidate seen))
+                   (uiop:directory-exists-p
+                    (uiop:ensure-directory-pathname candidate)))
+          (setf (gethash candidate seen) t)
+          (setf items (append items (list candidate))))))
+    (apply #'make-py-list items)))
+
+(defun make-clamp-pkgutil-module ()
+  (let ((module (make-clamp-module "pkgutil")))
+    (setf (py-object-attr module "importlib") (py-import-module "importlib"))
+    (setf (py-object-attr module "ModuleInfo") *py-pkgutil-module-info-type*)
+    (setf (py-object-attr module "ImpImporter") *py-none*)
+    (setf (py-object-attr module "ImpLoader") *py-none*)
+    (setf (py-object-attr module "get_importer") #'py-pkgutil-get-importer)
+    (setf (py-object-attr module "find_loader") #'py-pkgutil-find-loader)
+    (setf (py-object-attr module "get_loader") #'py-pkgutil-get-loader)
+    (setf (py-object-attr module "iter_modules") #'py-pkgutil-iter-modules)
+    (setf (py-object-attr module "walk_packages") #'py-pkgutil-walk-packages)
+    (setf (py-object-attr module "get_data") #'py-pkgutil-get-data)
+    (setf (py-object-attr module "extend_path") #'py-pkgutil-extend-path)
+    module))
+
+
+(defun py-builtin-value (name)
+  (let ((symbol (find-symbol name "CLAMP.__builtins__")))
+    (and symbol (boundp symbol) (symbol-value symbol))))
+
+(defun py-filter-keyword-args (args ignored-names)
+  (let ((result '())
+        (remaining args))
+    (loop while remaining
+          for item = (pop remaining)
+          do (if (keywordp item)
+                 (let ((value (when remaining (pop remaining)))
+                       (name (py-keyword-argument-name item)))
+                   (unless (member name ignored-names :test #'string=)
+                     (push item result)
+                     (push value result)))
+                 (push item result)))
+    (nreverse result)))
+
+(defun py-typing-attr (name)
+  (py-lookup-attr (py-import-module "typing") name))
+
+(defun py-typing-call-filtered (name args ignored-names)
+  (apply #'py-invoke-callable
+         (py-typing-attr name)
+         (py-filter-keyword-args args ignored-names)))
+
+(defun py-typing-extensions-typevar (&rest args)
+  (py-typing-call-filtered "TypeVar" args '("default" "infer_variance")))
+
+(defun py-typing-extensions-paramspec (&rest args)
+  (py-typing-call-filtered "ParamSpec" args '("default")))
+
+(defun py-typing-extensions-typevartuple (&rest args)
+  (py-typing-call-filtered "TypeVarTuple" args '("default")))
+
+(defun py-identity-decorator-factory (&rest args)
+  (declare (ignore args))
+  (lambda (obj &rest decorator-args)
+    (declare (ignore decorator-args))
+    obj))
+
+(defun py-typing-extensions-assert-never (arg &rest args)
+  (declare (ignore args))
+  (py-raise-type *py-assertion-error-type*
+                 (format nil "Expected code to be unreachable, but got: ~A" arg)))
+
+(defparameter *py-type-alias-type-type*
+  (make-py-type :type *py-type-type*
+                :name "TypeAliasType"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (py-type-attr *py-type-alias-type-type* "__init__")
+      (lambda (self name value &rest args)
+        (setf (py-object-attr self "__name__") name)
+        (setf (py-object-attr self "__value__") value)
+        (let ((type-params (or (loop while args
+                                     for item = (pop args)
+                                     when (and (keywordp item)
+                                               (string= (py-keyword-argument-name item) "type_params")
+                                               args)
+                                       do (return (pop args)))
+                               (make-py-tuple))))
+          (setf (py-object-attr self "__type_params__") type-params))
+        *py-none*))
+
+(defparameter *py-sentinel-type*
+  (make-py-type :type *py-type-type*
+                :name "Sentinel"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (py-type-attr *py-sentinel-type* "__init__")
+      (lambda (self name)
+        (setf (py-object-attr self "name") name)
+        *py-none*))
+(setf (py-type-attr *py-sentinel-type* "__repr__")
+      (lambda (self)
+        (concatenate 'string "<" (py-lookup-attr self "name") ">")))
+
+(defparameter *py-generic-fallback-type*
+  (make-py-type :type *py-type-type*
+                :name "_GenericFallback"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (py-type-attr *py-generic-fallback-type* "__class_getitem__")
+      (make-py-callable :name "__class_getitem__"
+                        :binding-kind :class-method
+                        :fn (lambda (cls item)
+                              (declare (ignore item))
+                              cls)))
+
+(defun make-clamp-typing-extensions-module ()
+  (let ((module (make-clamp-module "typing_extensions")))
+    (dolist (name '("Any" "Annotated" "ClassVar" "Final" "Generic" "Literal" "Never"
+                    "NoReturn" "Optional" "OrderedDict" "Protocol" "TypeAlias" "Union" "Unpack"
+                    "get_args" "get_origin" "TypedDict"))
+      (handler-case
+          (setf (py-object-attr module name) (py-typing-attr name))
+        (error () nil)
+        (py-exception () nil)))
+    (setf (py-object-attr module "TypeVar") #'py-typing-extensions-typevar)
+    (setf (py-object-attr module "ParamSpec") #'py-typing-extensions-paramspec)
+    (setf (py-object-attr module "TypeVarTuple") #'py-typing-extensions-typevartuple)
+    (setf (py-object-attr module "assert_never") #'py-typing-extensions-assert-never)
+    (setf (py-object-attr module "TypeAliasType") *py-type-alias-type-type*)
+    (setf (py-object-attr module "Sentinel") *py-sentinel-type*)
+    (setf (py-object-attr module "deprecated") #'py-identity-decorator-factory)
+    (setf (py-object-attr module "dataclass_transform") #'py-identity-decorator-factory)
+    (setf (py-object-attr module "is_typeddict") (lambda (&rest args) (declare (ignore args)) *py-false*))
+    (setf (py-object-attr module "TypeIs") *py-generic-fallback-type*)
+    (setf (py-object-attr module "TypeGuard") *py-generic-fallback-type*)
+    (setf (py-object-attr module "LiteralString") (py-builtin-value "STR"))
+    (setf (py-object-attr module "Self") *py-generic-fallback-type*)
+    module))
+
+(defun make-clamp-typing-inspection-module ()
+  (let ((module (make-clamp-module "typing_inspection" :package-p t)))
+    (setf (py-object-attr module "__path__") (make-py-list))
+    module))
+
+(defparameter *py-typing-inspection-annotation-source-type*
+  (make-py-type :type *py-type-type*
+                :name "AnnotationSource"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(dolist (pair '(("ANY" "any") ("CLASS" "class") ("DATACLASS" "dataclass")
+                ("FUNCTION" "function") ("NAMED_TUPLE" "named_tuple")
+                ("TYPED_DICT" "typed_dict")))
+  (setf (py-type-attr *py-typing-inspection-annotation-source-type* (first pair)) (second pair)))
+
+(defparameter *py-typing-inspection-forbidden-qualifier-type*
+  (make-py-type :type *py-type-type*
+                :name "ForbiddenQualifier"
+                :bases (list *py-exception-type*)
+                :basicsize 1))
+
+(setf (py-type-attr *py-typing-inspection-forbidden-qualifier-type* "__init__")
+      (lambda (self qualifier)
+        (setf (py-object-attr self "qualifier") qualifier)
+        *py-none*))
+
+(defparameter *py-typing-inspection-inspected-annotation-type*
+  (make-py-type :type *py-type-type*
+                :name "InspectedAnnotation"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(setf (py-type-attr *py-typing-inspection-inspected-annotation-type* "__init__")
+      (lambda (self annotation &rest args)
+        (setf (py-object-attr self "type") annotation)
+        (setf (py-object-attr self "qualifiers") (make-py-list))
+        (setf (py-object-attr self "metadata") (make-py-list))
+        (loop while args
+              for item = (pop args)
+              do (when (keywordp item)
+                   (let ((value (when args (pop args)))
+                         (name (py-keyword-argument-name item)))
+                     (cond
+                       ((string= name "qualifiers")
+                        (setf (py-object-attr self "qualifiers") value))
+                       ((string= name "metadata")
+                        (setf (py-object-attr self "metadata") value))))))
+        *py-none*))
+
+(defun py-typing-inspection-inspect-annotation (annotation &rest args)
+  (declare (ignore args))
+  (py-invoke-callable *py-typing-inspection-inspected-annotation-type* annotation))
+
+(defun py-typing-inspection-get-literal-values (annotation &rest args)
+  (declare (ignore args))
+  (py-call-attr (py-import-module "typing") "get_args" annotation))
+
+(defun py-typing-inspection-is-union-origin (origin)
+  (let ((typing (py-import-module "typing")))
+    (py-bool (or (py-identity-p origin (py-lookup-attr typing "Union"))
+                 (search "UnionType" (with-output-to-string (stream) (py-repr origin stream)) :test #'char=)))))
+
+(defun make-clamp-typing-inspection-introspection-module ()
+  (let ((module (make-clamp-module "typing_inspection.introspection")))
+    (setf (py-object-attr module "UNKNOWN") (make-py-object :type *py-object-type*))
+    (setf (py-object-attr module "Qualifier") (py-builtin-value "STR"))
+    (setf (py-object-attr module "AnnotationSource") *py-typing-inspection-annotation-source-type*)
+    (setf (py-object-attr module "ForbiddenQualifier") *py-typing-inspection-forbidden-qualifier-type*)
+    (setf (py-object-attr module "InspectedAnnotation") *py-typing-inspection-inspected-annotation-type*)
+    (setf (py-object-attr module "inspect_annotation") #'py-typing-inspection-inspect-annotation)
+    (setf (py-object-attr module "get_literal_values") #'py-typing-inspection-get-literal-values)
+    (setf (py-object-attr module "is_union_origin") #'py-typing-inspection-is-union-origin)
+    module))
+
+(defun py-typing-object-attr-identity (obj module-name attr-name)
+  (handler-case
+      (py-identity-p obj (py-lookup-attr (py-import-module module-name) attr-name))
+    (error () nil)
+    (py-exception () nil)))
+
+(defun py-typing-objects-is-any (obj)
+  (py-bool (py-typing-object-attr-identity obj "typing" "Any")))
+
+(defun py-typing-objects-is-annotated (obj)
+  (py-bool (or (py-typing-object-attr-identity obj "typing" "Annotated")
+               (py-typing-object-attr-identity obj "typing_extensions" "Annotated"))))
+
+(defun py-typing-objects-is-classvar (obj)
+  (py-bool (or (py-typing-object-attr-identity obj "typing" "ClassVar")
+               (py-typing-object-attr-identity obj "typing_extensions" "ClassVar"))))
+
+(defun py-hasattr (obj name)
+  (handler-case
+      (progn
+        (py-lookup-attr obj name)
+        *py-true*)
+    (py-exception () *py-false*)
+    (error () *py-false*)))
+
+(defun py-typing-objects-is-literal (obj)
+  (py-bool (or (py-typing-object-attr-identity obj "typing" "Literal")
+               (py-typing-object-attr-identity obj "typing_extensions" "Literal"))))
+
+(defun py-typing-objects-is-never (obj)
+  (py-bool (or (py-typing-object-attr-identity obj "typing" "Never")
+               (py-typing-object-attr-identity obj "typing_extensions" "Never"))))
+
+(defun py-typing-objects-is-noreturn (obj)
+  (py-bool (py-typing-object-attr-identity obj "typing" "NoReturn")))
+
+(defun py-typing-objects-is-self (obj)
+  (py-bool (or (py-typing-object-attr-identity obj "typing" "Self")
+               (py-typing-object-attr-identity obj "typing_extensions" "Self"))))
+
+(defun py-typing-objects-is-typealiastype (obj)
+  (py-bool (and (py-truthy-p (py-hasattr obj "__value__"))
+                (py-truthy-p (py-hasattr obj "__type_params__")))))
+
+(defun py-typing-objects-is-typevar (obj)
+  (py-bool (search "TypeVar" (with-output-to-string (stream) (py-repr obj stream)) :test #'char=)))
+
+(defun py-typing-objects-is-union (obj)
+  (py-typing-inspection-is-union-origin obj))
+
+(defun py-typing-objects-is-unpack (obj)
+  (py-bool (or (py-typing-object-attr-identity obj "typing" "Unpack")
+               (py-typing-object-attr-identity obj "typing_extensions" "Unpack"))))
+
+(defun make-clamp-typing-inspection-typing-objects-module ()
+  (let ((module (make-clamp-module "typing_inspection.typing_objects")))
+    (setf (py-object-attr module "is_any") #'py-typing-objects-is-any)
+    (setf (py-object-attr module "is_annotated") #'py-typing-objects-is-annotated)
+    (setf (py-object-attr module "is_classvar") #'py-typing-objects-is-classvar)
+    (setf (py-object-attr module "is_deprecated") (lambda (&rest args) (declare (ignore args)) *py-false*))
+    (setf (py-object-attr module "is_literal") #'py-typing-objects-is-literal)
+    (setf (py-object-attr module "is_never") #'py-typing-objects-is-never)
+    (setf (py-object-attr module "is_newtype") (lambda (obj) (py-hasattr obj "__supertype__")))
+    (setf (py-object-attr module "is_noextraitems") (lambda (&rest args) (declare (ignore args)) *py-false*))
+    (setf (py-object-attr module "is_noreturn") #'py-typing-objects-is-noreturn)
+    (setf (py-object-attr module "is_self") #'py-typing-objects-is-self)
+    (setf (py-object-attr module "is_typealiastype") #'py-typing-objects-is-typealiastype)
+    (setf (py-object-attr module "is_typevar") #'py-typing-objects-is-typevar)
+    (setf (py-object-attr module "is_union") #'py-typing-objects-is-union)
+    (setf (py-object-attr module "is_unpack") #'py-typing-objects-is-unpack)
+    module))
+
+(defparameter *py-annotated-types-base-metadata-type*
+  (make-py-type :type *py-type-type*
+                :name "BaseMetadata"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-annotated-types-grouped-metadata-type*
+  (make-py-type :type *py-type-type*
+                :name "GroupedMetadata"
+                :bases (list *py-annotated-types-base-metadata-type*)
+                :basicsize 1))
+
+(setf (py-type-attr *py-annotated-types-grouped-metadata-type* "__iter__")
+      (lambda (self)
+        (declare (ignore self))
+        (py-iter (make-py-list))))
+
+(defparameter *py-annotated-types-predicate-type*
+  (make-py-type :type *py-type-type*
+                :name "Predicate"
+                :bases (list *py-annotated-types-base-metadata-type*)
+                :basicsize 1))
+
+(setf (py-type-attr *py-annotated-types-predicate-type* "__init__")
+      (lambda (self func)
+        (setf (py-object-attr self "func") func)
+        *py-none*))
+
+(defparameter *py-annotated-types-not-type*
+  (make-py-type :type *py-type-type*
+                :name "Not"
+                :bases (list *py-annotated-types-base-metadata-type*)
+                :basicsize 1))
+
+(setf (py-type-attr *py-annotated-types-not-type* "__init__")
+      (lambda (self func)
+        (setf (py-object-attr self "func") func)
+        *py-none*))
+
+(defparameter *py-annotated-types-meta-value-type*
+  (make-py-type :type *py-type-type*
+                :name "MetaValue"
+                :bases (list *py-annotated-types-base-metadata-type*)
+                :basicsize 1))
+
+(defun py-annotated-types-meta (&rest args)
+  (let ((value (make-py-instance *py-annotated-types-meta-value-type*))
+        (names '("gt" "ge" "lt" "le" "multiple_of" "min_length" "max_length")))
+    (loop for item in args
+          for name in names
+          while (not (keywordp item))
+          do (setf (py-object-attr value name) item))
+    (loop while args
+          for item = (pop args)
+          do (when (keywordp item)
+               (when args
+                 (setf (py-object-attr value (py-keyword-argument-name item)) (pop args)))))
+    value))
+
+(defun make-clamp-annotated-types-module ()
+  (let ((module (make-clamp-module "annotated_types")))
+    (setf (py-object-attr module "BaseMetadata") *py-annotated-types-base-metadata-type*)
+    (setf (py-object-attr module "GroupedMetadata") *py-annotated-types-grouped-metadata-type*)
+    (setf (py-object-attr module "Predicate") *py-annotated-types-predicate-type*)
+    (setf (py-object-attr module "Not") *py-annotated-types-not-type*)
+    (setf (py-object-attr module "MetaValue") *py-annotated-types-meta-value-type*)
+    (dolist (name '("Gt" "Ge" "Lt" "Le" "MultipleOf" "MinLen" "MaxLen" "Len" "Interval"
+                    "Timezone" "Unit" "MinItems" "MaxItems"))
+      (setf (py-object-attr module name) #'py-annotated-types-meta))
+    (setf (py-object-attr module "__all__")
+          (make-py-list "BaseMetadata" "GroupedMetadata" "Predicate" "Not"
+                        "Gt" "Ge" "Lt" "Le" "MultipleOf" "MinLen" "MaxLen" "Len" "Interval"
+                        "Timezone" "Unit" "MinItems" "MaxItems"))
+    module))
+
+(defun py-dataclass-classvar-annotation-p (annotation)
+  (let ((text (with-output-to-string (stream)
+                (py-repr annotation stream))))
+    (or (search "ClassVar" text :test #'char=)
+        (search "typing.ClassVar" text :test #'char=))))
+
+(defun py-dataclass-annotation-names (cls)
+  (multiple-value-bind (annotations found) (py-find-type-attr cls "__annotations__")
+    (if (and found (py-dict-object-p annotations))
+        (let ((keys (py-dict-object-keys annotations))
+              (storage (py-dict-storage annotations "dataclass annotations")))
+          (loop for index from 0 below (fill-pointer keys)
+                for key = (aref keys index)
+                for annotation = (gethash key storage)
+                unless (py-dataclass-classvar-annotation-p annotation)
+                  collect key))
+        '())))
+
+(defun py-dataclass-keyword-name (keyword)
+  (py-keyword-argument-name keyword))
+
+(defun py-dataclass-init (self &rest args)
+  (let* ((cls (py-type-of self))
+         (names (py-dataclass-annotation-names cls))
+         (supplied (make-hash-table :test #'equal))
+         (position 0))
+    (loop while args
+          for item = (pop args)
+          do (cond
+               ((keywordp item)
+                (unless args
+                  (py-raise-type *py-type-error-type* "keyword argument has no value"))
+                (let ((name (py-dataclass-keyword-name item)))
+                  (setf (gethash name supplied) (pop args))))
+               (t
+                (when (>= position (length names))
+                  (py-raise-type *py-type-error-type* "too many positional arguments"))
+                (setf (gethash (nth position names) supplied) item)
+                (incf position))))
+    (dolist (name names)
+      (multiple-value-bind (value value-supplied-p) (gethash name supplied)
+        (cond
+          (value-supplied-p
+           (setf (py-object-attr self name) value))
+          ((nth-value 1 (py-find-type-attr cls name))
+           (let ((class-value (py-find-type-attr cls name)))
+             (when (and (py-object-p class-value)
+                        (eq (py-type-of class-value) *py-dataclasses-field-type*))
+               (setf (py-object-attr self name)
+                     (py-dataclasses-field-default class-value)))))
+          (t
+           (py-raise-type *py-type-error-type*
+                          (format nil "missing required argument: '~A'" name))))))
+    *py-none*))
+
+(defun py-dataclasses-apply-dataclass (cls)
+  (setf (py-type-attr cls "__dataclass_fields__")
+        (py-dataclasses-build-fields cls))
+  (setf (py-type-attr cls "__dataclass_params__")
+        (make-py-dict-from-pairs
+         (list "init" *py-true*)
+         (list "repr" *py-true*)
+         (list "eq" *py-true*)
+         (list "order" *py-false*)
+         (list "unsafe_hash" *py-false*)
+         (list "frozen" *py-false*)))
+  (setf (py-type-attr cls "__match_args__")
+        (apply #'make-py-tuple (py-dataclass-annotation-names cls)))
+  (setf (py-type-attr cls "__init__")
+        (make-py-callable
+         :name "__init__"
+         :fn #'py-dataclass-init))
+  cls)
+
+(defun py-dataclasses-dataclass (&rest args)
+  (let ((first (first args)))
+    (if (and first (not (keywordp first)))
+        (py-dataclasses-apply-dataclass first)
+        #'py-dataclasses-apply-dataclass)))
+
+(defun py-dataclasses-replace (obj &rest args)
+  (let ((copy (make-py-instance (py-type-of obj))))
+    (when (py-object-p obj)
+      (maphash (lambda (key value)
+                 (setf (py-object-attr copy key) value))
+               (py-object-attrs obj)))
+    (loop while args
+          for item = (pop args)
+          do (when (keywordp item)
+               (unless args
+                 (py-raise-type *py-type-error-type* "keyword argument has no value"))
+               (setf (py-object-attr copy (py-keyword-argument-name item)) (pop args))))
+    copy))
+
+(defparameter *py-dataclasses-field-type*
+  (make-py-type :type *py-type-type*
+                :name "Field"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-dataclasses-missing*
+  (let ((missing (make-py-object :type *py-object-type*)))
+    (setf (gethash "__name__" (py-object-attrs missing)) "MISSING")
+    missing))
+
+(defun make-py-dataclasses-field-object (&key default default-supplied-p default-factory default-factory-supplied-p)
+  (let ((field (make-py-object :type *py-dataclasses-field-type*)))
+    (setf (py-object-attr field "default")
+          (if default-supplied-p default *py-dataclasses-missing*))
+    (setf (py-object-attr field "default_supplied") (py-bool default-supplied-p))
+    (setf (py-object-attr field "default_factory")
+          (if default-factory-supplied-p default-factory *py-dataclasses-missing*))
+    (setf (py-object-attr field "default_factory_supplied") (py-bool default-factory-supplied-p))
+    (setf (py-object-attr field "init") *py-true*)
+    (setf (py-object-attr field "repr") *py-true*)
+    (setf (py-object-attr field "compare") *py-true*)
+    (setf (py-object-attr field "hash") *py-none*)
+    (setf (py-object-attr field "kw_only") *py-false*)
+    (setf (py-object-attr field "metadata") (make-py-dict-from-pairs))
+    field))
+
+(defun py-dataclasses-field-default (field)
+  (let ((default-factory-supplied (py-lookup-attr field "default_factory_supplied"))
+        (default-supplied (py-lookup-attr field "default_supplied")))
+    (cond
+      ((py-truthy-p default-factory-supplied)
+       (py-invoke-callable (py-lookup-attr field "default_factory")))
+      ((py-truthy-p default-supplied)
+       (py-lookup-attr field "default"))
+      (t *py-none*))))
+
+(defun py-dataclasses-field-for-class-attr (name annotation cls)
+  (multiple-value-bind (class-value found) (py-find-type-attr cls name)
+    (let ((field (cond
+                   ((and found
+                         (py-object-p class-value)
+                         (eq (py-type-of class-value) *py-dataclasses-field-type*))
+                    class-value)
+                   (found
+                    (make-py-dataclasses-field-object
+                     :default class-value
+                     :default-supplied-p t
+                     :default-factory *py-none*
+                     :default-factory-supplied-p nil))
+                   (t
+                    (make-py-dataclasses-field-object
+                     :default *py-none*
+                     :default-supplied-p nil
+                     :default-factory *py-none*
+                     :default-factory-supplied-p nil)))))
+      (setf (py-object-attr field "name") name)
+      (setf (py-object-attr field "type") annotation)
+      field)))
+
+(defun py-dataclasses-build-fields (cls)
+  (let ((fields (make-py-dict-from-pairs)))
+    (multiple-value-bind (annotations found) (py-find-type-attr cls "__annotations__")
+      (when (and found (py-dict-object-p annotations))
+        (let ((keys (py-dict-object-keys annotations))
+              (storage (py-dict-storage annotations "dataclass annotations")))
+          (loop for index from 0 below (fill-pointer keys)
+                for name = (aref keys index)
+                for annotation = (gethash name storage)
+                unless (py-dataclass-classvar-annotation-p annotation)
+                  do (py-dict-set-entry
+                      fields
+                      name
+                      (py-dataclasses-field-for-class-attr name annotation cls))))))
+    fields))
+
+(defun py-dataclasses-field (&rest args)
+  (let ((default *py-none*)
+        (default-supplied-p nil)
+        (default-factory *py-none*)
+        (default-factory-supplied-p nil))
+    (loop while args
+          for item = (pop args)
+          do (when (keywordp item)
+               (unless args
+                 (py-raise-type *py-type-error-type* "keyword argument has no value"))
+               (let ((value (pop args))
+                     (name (py-keyword-argument-name item)))
+                 (cond
+                   ((string= name "default")
+                    (setf default value
+                          default-supplied-p t))
+                   ((string= name "default_factory")
+                    (setf default-factory value
+                          default-factory-supplied-p t))))))
+    (cond
+      (default-factory-supplied-p
+       (make-py-dataclasses-field-object
+        :default *py-none*
+        :default-supplied-p nil
+        :default-factory default-factory
+        :default-factory-supplied-p t))
+      (default-supplied-p
+       (make-py-dataclasses-field-object
+        :default default
+        :default-supplied-p t
+        :default-factory *py-none*
+        :default-factory-supplied-p nil))
+      (t
+       (make-py-dataclasses-field-object
+        :default *py-none*
+        :default-supplied-p nil
+        :default-factory *py-none*
+        :default-factory-supplied-p nil)))))
+
+
+(defun py-dataclasses-target-class (obj)
+  (cond
+    ((py-type-p obj) obj)
+    ((py-cpython-object-p obj) nil)
+    ((py-object-p obj) (py-type-of obj))
+    (t nil)))
+
+(defun py-dataclasses-is-dataclass (obj)
+  (let ((cls (py-dataclasses-target-class obj)))
+    (if cls
+        (py-bool (nth-value 1 (py-find-type-attr cls "__dataclass_fields__")))
+        *py-false*)))
+
+(defun py-dataclasses-fields (obj)
+  (let ((cls (py-dataclasses-target-class obj)))
+    (unless cls
+      (py-raise-type *py-type-error-type* "must be called with a dataclass type or instance"))
+    (multiple-value-bind (fields found) (py-find-type-attr cls "__dataclass_fields__")
+      (unless (and found (py-dict-object-p fields))
+        (py-raise-type *py-type-error-type* "must be called with a dataclass type or instance"))
+      (let ((keys (py-dict-object-keys fields))
+            (storage (py-dict-storage fields "dataclasses.fields")))
+        (apply #'make-py-tuple
+               (loop for index from 0 below (fill-pointer keys)
+                     for key = (aref keys index)
+                     collect (gethash key storage)))))))
+
+(defun py-dataclasses-asdict (obj &rest args)
+  (declare (ignore args))
+  (let* ((result (make-py-dict-from-pairs))
+         (fields (py-dataclasses-fields obj))
+         (storage (py-object-value fields)))
+    (loop for index from 0 below (length storage)
+          for field = (aref storage index)
+          for name = (py-lookup-attr field "name")
+          do (py-dict-set-entry result name (py-lookup-attr obj name)))
+    result))
+
+(defun make-clamp-dataclasses-module ()
+  (let ((module (make-clamp-module "dataclasses")))
+    (setf (py-object-attr module "dataclass") #'py-dataclasses-dataclass)
+    (setf (py-object-attr module "field") #'py-dataclasses-field)
+    (setf (py-object-attr module "Field") *py-dataclasses-field-type*)
+    (setf (py-object-attr module "MISSING") *py-dataclasses-missing*)
+    (setf (py-object-attr module "replace") #'py-dataclasses-replace)
+    (setf (py-object-attr module "is_dataclass") #'py-dataclasses-is-dataclass)
+    (setf (py-object-attr module "fields") #'py-dataclasses-fields)
+    (setf (py-object-attr module "asdict") #'py-dataclasses-asdict)
+    module))
+
+(defun py-copy-copy (obj)
+  (py-object-copy-method obj))
+
+(defun py-copy-deepcopy (obj &rest args)
+  (declare (ignore args))
+  (cond
+    ((or (eq obj *py-none*)
+         (eq obj *py-true*)
+         (eq obj *py-false*)
+         (eq obj *py-ellipsis*)
+         (eq obj *py-not-implemented*)
+         (py-type-p obj)
+         (py-callable-p obj)
+         (py-cpython-object-p obj))
+     obj)
+    ((py-list-object-p obj)
+     (let ((items '())
+           (storage (py-object-value obj))
+           (size (or (py-object-size obj) 0)))
+       (loop for index from 0 below size
+             do (push (py-copy-deepcopy (aref storage index)) items))
+       (apply #'make-py-list (nreverse items))))
+    ((py-tuple-object-p obj)
+     (let ((items '())
+           (storage (py-object-value obj))
+           (size (or (py-object-size obj) 0)))
+       (loop for index from 0 below size
+             do (push (py-copy-deepcopy (aref storage index)) items))
+       (apply #'make-py-tuple (nreverse items))))
+    ((py-dict-object-p obj)
+     (let ((copy (make-py-dict-from-pairs))
+           (keys (py-dict-object-keys obj))
+           (storage (py-dict-storage obj "deepcopy")))
+       (loop for index from 0 below (fill-pointer keys)
+             for key = (aref keys index)
+             do (py-dict-set-entry copy key (py-copy-deepcopy (gethash key storage))))
+       copy))
+    ((py-object-p obj)
+     (handler-case
+         (let ((method (py-lookup-attr obj "__deepcopy__")))
+           (return-from py-copy-deepcopy
+             (py-invoke-callable method *py-none*)))
+       (py-exception () nil)
+       (error () nil))
+     (py-object-copy-method obj))
+    (t obj)))
+
+(defun make-clamp-copy-module ()
+  (let ((module (make-clamp-module "copy")))
+    (setf (py-object-attr module "copy") #'py-copy-copy)
+    (setf (py-object-attr module "deepcopy") #'py-copy-deepcopy)
+    (setf (py-object-attr module "Error") *py-exception-type*)
+    (setf (py-object-attr module "error") *py-exception-type*)
+    (setf (py-object-attr module "__all__") (make-py-list "Error" "copy" "deepcopy"))
+    module))
+
+(defun py-property-default-doc (fget)
+  (if (or (null fget) (eq fget *py-none*))
+      *py-none*
+      (handler-case
+          (py-lookup-attr fget "__doc__")
+        (py-exception () *py-none*)
+        (error () *py-none*))))
+
+(defun py-make-property-object (fget &optional (fset *py-none*) (fdel *py-none*) (doc *py-none*) (type *py-property-type*))
+  (let ((obj (make-py-object :type type))
+        (actual-doc (if (eq doc *py-none*) (py-property-default-doc fget) doc)))
+    (setf (py-object-attr obj "__property_fget__") fget)
+    (setf (py-object-attr obj "__property_fset__") fset)
+    (setf (py-object-attr obj "__property_fdel__") fdel)
+    (setf (py-object-attr obj "fget") fget)
+    (setf (py-object-attr obj "fset") fset)
+    (setf (py-object-attr obj "fdel") fdel)
+    (setf (py-object-attr obj "__doc__") actual-doc)
+    (setf (py-object-attr obj "getter")
+          (lambda (new-fget)
+            (py-make-property-object new-fget fset fdel actual-doc type)))
+    (setf (py-object-attr obj "setter")
+          (lambda (new-fset)
+            (py-make-property-object fget new-fset fdel actual-doc type)))
+    (setf (py-object-attr obj "deleter")
+          (lambda (new-fdel)
+            (py-make-property-object fget fset new-fdel actual-doc type)))
+    obj))
+
+(defun py-property-call-args (function-name call-args)
+  (py-bind-args-extended function-name
+                         '("fget" "fset" "fdel" "doc")
+                         0
+                         0
+                         (list *py-none* *py-none* *py-none* *py-none*)
+                         '()
+                         '()
+                         '()
+                         nil
+                         nil
+                         call-args))
+
+(defun py-property-call (&rest call-args)
+  (destructuring-bind (fget fset fdel doc)
+      (py-property-call-args "property" call-args)
+    (py-make-property-object fget fset fdel doc)))
+
+(defun py-property-type-call (type &rest call-args)
+  (destructuring-bind (fget fset fdel doc)
+      (py-property-call-args (py-type-name type) call-args)
+    (py-make-property-object fget fset fdel doc type)))
+
+(defun py-functools-identity-decorator (&rest args)
+  (let ((first (first args)))
+    (if (and first
+             (not (eq first *py-none*))
+             (not (keywordp first))
+             (py-truthy-p (py-callable first)))
+        first
+        (lambda (fn) fn))))
+
+(defun py-functools-cached-property (fn)
+  (py-make-property-object fn))
+
+(defun py-functools-wraps (wrapped &rest args)
+  (declare (ignore args))
+  (lambda (fn)
+    (setf (py-object-attr fn "__wrapped__") wrapped)
+    (dolist (name '("__name__" "__qualname__" "__module__" "__annotations__"))
+      (handler-case
+          (setf (py-object-attr fn name) (py-lookup-attr wrapped name))
+        (py-exception () nil)
+        (error () nil)))
+    fn))
+
+(defun py-split-positional-and-keyword-call-args (args)
+  (let ((positionals '())
+        (keywords '())
+        (remaining args)
+        (seen-keyword nil))
+    (loop while remaining
+          for item = (pop remaining)
+          do (if (keywordp item)
+                 (progn
+                   (setf seen-keyword t)
+                   (push item keywords)
+                   (when remaining
+                     (push (pop remaining) keywords)))
+                 (if seen-keyword
+                     (progn
+                       (push item keywords))
+                     (push item positionals))))
+    (values (nreverse positionals) (nreverse keywords))))
+
+(defun py-functools-partial (fn &rest bound-args)
+  (multiple-value-bind (bound-positionals bound-keywords)
+      (py-split-positional-and-keyword-call-args bound-args)
+    (lambda (&rest call-args)
+      (multiple-value-bind (call-positionals call-keywords)
+          (py-split-positional-and-keyword-call-args call-args)
+        (apply #'py-invoke-callable
+               fn
+               (append bound-positionals call-positionals bound-keywords call-keywords))))))
+
+(defun py-functools-reduce (fn iterable &optional (initializer *py-none* initializer-supplied-p))
+  (let ((iterator (py-iter iterable))
+        (accumulator initializer))
+    (unless initializer-supplied-p
+      (multiple-value-bind (first found) (py-next-item iterator)
+        (unless found
+          (py-raise-type *py-type-error-type* "reduce() of empty iterable with no initial value"))
+        (setf accumulator first)))
+    (loop
+      (multiple-value-bind (item found) (py-next-item iterator)
+        (unless found
+          (return accumulator))
+        (setf accumulator (py-invoke-callable fn accumulator item))))))
+
+(defun make-clamp-functools-module ()
+  (let ((module (make-clamp-module "functools")))
+    (setf (py-object-attr module "cache") #'py-functools-identity-decorator)
+    (setf (py-object-attr module "lru_cache") #'py-functools-identity-decorator)
+    (setf (py-object-attr module "cached_property") #'py-functools-cached-property)
+    (setf (py-object-attr module "wraps") #'py-functools-wraps)
+    (setf (py-object-attr module "partial") #'py-functools-partial)
+    (setf (py-object-attr module "partialmethod") #'py-functools-partial)
+    (setf (py-object-attr module "reduce") #'py-functools-reduce)
+    module))
+
+(defun py-warnings-warn (&rest args)
+  (declare (ignore args))
+  *py-none*)
+
+(defun make-clamp-warnings-module ()
+  (let ((module (make-clamp-module "warnings")))
+    (setf (py-object-attr module "warn") #'py-warnings-warn)
+    (setf (py-object-attr module "warn_explicit") #'py-warnings-warn)
+    (setf (py-object-attr module "filterwarnings") (lambda (&rest args) (declare (ignore args)) *py-none*))
+    (setf (py-object-attr module "simplefilter") (lambda (&rest args) (declare (ignore args)) *py-none*))
+    module))
+
 (py-register-builtin-module "sys" #'make-clamp-sys-module)
 (py-register-builtin-module "importlib" #'make-clamp-importlib-module)
+(py-register-builtin-module "importlib.metadata" #'make-clamp-importlib-metadata-module)
+(py-register-builtin-module "importlib.metadata._adapters" (lambda () (make-clamp-cpython-backed-module "importlib.metadata._adapters")))
+(py-register-builtin-module "importlib.metadata._collections" (lambda () (make-clamp-cpython-backed-module "importlib.metadata._collections")))
+(py-register-builtin-module "importlib.metadata._functools" (lambda () (make-clamp-cpython-backed-module "importlib.metadata._functools")))
+(py-register-builtin-module "importlib.metadata._itertools" (lambda () (make-clamp-cpython-backed-module "importlib.metadata._itertools")))
+(py-register-builtin-module "importlib.metadata._meta" (lambda () (make-clamp-cpython-backed-module "importlib.metadata._meta")))
+(py-register-builtin-module "importlib.metadata._text" (lambda () (make-clamp-cpython-backed-module "importlib.metadata._text")))
 (py-register-builtin-module "importlib.util" #'make-clamp-importlib-util-module)
 (py-register-builtin-module "importlib.machinery" #'make-clamp-importlib-machinery-module)
 (py-register-builtin-module "importlib.resources" #'make-clamp-importlib-resources-module)
+(py-register-builtin-module "importlib.resources.abc" #'make-clamp-importlib-resources-abc-module)
 (py-register-builtin-module "importlib.resources.readers" #'make-clamp-importlib-resources-readers-module)
+(py-register-builtin-module "pkgutil" #'make-clamp-pkgutil-module)
+(py-register-builtin-module "typing_extensions" #'make-clamp-typing-extensions-module)
+(py-register-builtin-module "typing_inspection" #'make-clamp-typing-inspection-module)
+(py-register-builtin-module "typing_inspection.introspection" #'make-clamp-typing-inspection-introspection-module)
+(py-register-builtin-module "typing_inspection.typing_objects" #'make-clamp-typing-inspection-typing-objects-module)
+(py-register-builtin-module "annotated_types" #'make-clamp-annotated-types-module)
+(py-register-builtin-module "dataclasses" #'make-clamp-dataclasses-module)
+(py-register-builtin-module "copy" #'make-clamp-copy-module)
+(py-register-builtin-module "functools" #'make-clamp-functools-module)
+(py-register-builtin-module "warnings" #'make-clamp-warnings-module)
 
 (defun py-math-number (value function-name)
   (let ((normalized-value (py-normalize-bool-number value)))
@@ -3465,11 +6994,317 @@
     (setf (py-object-attr module "ulp") #'py-math-ulp)
     module))
 
+(defparameter *py-inspect-empty*
+  (make-py-object :type *py-object-type*))
+
+(defparameter *py-inspect-parameter-type*
+  (make-py-type :type *py-type-type*
+                :name "Parameter"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defparameter *py-inspect-signature-type*
+  (make-py-type :type *py-type-type*
+                :name "Signature"
+                :bases (list *py-object-type*)
+                :basicsize 1))
+
+(defun py-inspect-parameter-object (name kind &key (annotation *py-inspect-empty*) (default *py-inspect-empty*))
+  (let ((obj (make-py-object :type *py-inspect-parameter-type*)))
+    (setf (py-object-attr obj "name") name)
+    (setf (py-object-attr obj "kind") kind)
+    (setf (py-object-attr obj "annotation") annotation)
+    (setf (py-object-attr obj "default") default)
+    (setf (py-object-attr obj "replace")
+          (lambda (&rest args)
+            (let ((copy (make-py-object :type *py-inspect-parameter-type*)))
+              (setf (py-object-attr copy "name") (py-object-attr obj "name"))
+              (setf (py-object-attr copy "kind") (py-object-attr obj "kind"))
+              (setf (py-object-attr copy "annotation") (py-object-attr obj "annotation"))
+              (setf (py-object-attr copy "default") (py-object-attr obj "default"))
+              (loop while args
+                    for item = (pop args)
+                    do (when (keywordp item)
+                         (let ((value (pop args)))
+                           (setf (py-object-attr copy (py-keyword-argument-name item)) value))))
+              copy)))
+    obj))
+
+(defun py-callable-annotations-dict (callable)
+  (multiple-value-bind (annotations found)
+      (gethash "__annotations__" (py-callable-attrs callable))
+    (if (and found (py-dict-object-p annotations))
+        annotations
+        nil)))
+
+(defun py-callable-annotation (callable name)
+  (let ((annotations (py-callable-annotations-dict callable)))
+    (if annotations
+        (multiple-value-bind (value found)
+            (gethash name (py-dict-storage annotations "callable annotations"))
+          (if found value *py-inspect-empty*))
+        *py-inspect-empty*)))
+
+(defun py-callable-visible-param-defaults (callable)
+  (let ((defaults (py-callable-signature-param-defaults callable))
+        (names (py-callable-signature-param-names callable)))
+    (if (and defaults
+             names
+             (string= (first names) "cls")
+             (or (py-callable-owner-type callable)
+                 (eq (py-callable-binding-kind callable) :class-method)))
+        (rest defaults)
+        defaults)))
+
+(defun py-callable-visible-param-names (callable)
+  (let ((names (py-callable-signature-param-names callable)))
+    (if (and names
+             (string= (first names) "cls")
+             (or (py-callable-owner-type callable)
+                 (eq (py-callable-binding-kind callable) :class-method)))
+        (rest names)
+        names)))
+
+(defun py-inspect-signature-parameters (callable)
+  (let ((pairs '()))
+    (when (py-callable-p callable)
+      (loop for name in (py-callable-visible-param-names callable)
+            for default in (or (py-callable-visible-param-defaults callable)
+                               (loop for _ in (py-callable-visible-param-names callable)
+                                     collect *py-inspect-empty*))
+            do (push (list name (py-inspect-parameter-object
+                                 name
+                                 "POSITIONAL_OR_KEYWORD"
+                                 :annotation (py-callable-annotation callable name)
+                                 :default default))
+                     pairs))
+      (when (py-callable-signature-vararg-name callable)
+        (let ((name (py-callable-signature-vararg-name callable)))
+          (push (list name (py-inspect-parameter-object
+                            name
+                            "VAR_POSITIONAL"
+                            :annotation (py-callable-annotation callable name)))
+                pairs)))
+      (loop for name in (py-callable-signature-kwonly-names callable)
+            for default in (or (py-callable-signature-kwonly-defaults callable)
+                               (loop for _ in (py-callable-signature-kwonly-names callable)
+                                     collect *py-inspect-empty*))
+            do (push (list name (py-inspect-parameter-object
+                                 name
+                                 "KEYWORD_ONLY"
+                                 :annotation (py-callable-annotation callable name)
+                                 :default default))
+                     pairs))
+      (when (py-callable-signature-kwarg-name callable)
+        (let ((name (py-callable-signature-kwarg-name callable)))
+          (push (list name (py-inspect-parameter-object
+                            name
+                            "VAR_KEYWORD"
+                            :annotation (py-callable-annotation callable name)))
+                pairs))))
+    (apply #'make-py-dict-from-pairs (nreverse pairs))))
+
+(defun py-inspect-signature (&rest args)
+  (let ((target (first args))
+        (obj (make-py-object :type *py-inspect-signature-type*)))
+    (setf (py-object-attr obj "parameters") (py-inspect-signature-parameters target))
+    (setf (py-object-attr obj "return_annotation")
+          (if (py-callable-p target)
+              (py-callable-annotation target "return")
+              *py-inspect-empty*))
+    obj))
+
+(defun py-inspect-getfullargspec (func)
+  (let* ((args (if (py-callable-p func)
+                   (or (py-callable-signature-param-names func) '())
+                   '()))
+         (defaults (when (py-callable-p func)
+                     (loop for default in (or (py-callable-signature-param-defaults func) '())
+                           unless (eq default *py-inspect-empty*)
+                             collect default)))
+         (kwonlyargs (if (py-callable-p func)
+                         (or (py-callable-signature-kwonly-names func) '())
+                         '()))
+         (kwdefaults (when (py-callable-p func)
+                       (let ((pairs '()))
+                         (loop for name in (or (py-callable-signature-kwonly-names func) '())
+                               for default in (or (py-callable-signature-kwonly-defaults func) '())
+                               do (unless (eq default *py-inspect-empty*)
+                                    (push (list name default) pairs)))
+                         (when pairs
+                           (apply #'make-py-dict-from-pairs (nreverse pairs))))))
+         (obj (make-py-object :type *py-object-type*)))
+    (setf (py-object-attr obj "args") (apply #'make-py-list args))
+    (setf (py-object-attr obj "varargs") (if (py-callable-p func)
+                                             (or (py-callable-signature-vararg-name func) *py-none*)
+                                             *py-none*))
+    (setf (py-object-attr obj "varkw") (if (py-callable-p func)
+                                           (or (py-callable-signature-kwarg-name func) *py-none*)
+                                           *py-none*))
+    (setf (py-object-attr obj "defaults") (if defaults
+                                              (apply #'make-py-tuple defaults)
+                                              *py-none*))
+    (setf (py-object-attr obj "kwonlyargs") (apply #'make-py-list kwonlyargs))
+    (setf (py-object-attr obj "kwonlydefaults") (or kwdefaults *py-none*))
+    (setf (py-object-attr obj "annotations") (make-py-dict-from-pairs))
+    obj))
+
+(defun py-inspect-unwrap (&rest args)
+  (let ((target (first args))
+        (remaining (rest args))
+        (stop nil))
+    (loop while remaining
+          for item = (pop remaining)
+          do (when (keywordp item)
+               (let ((value (pop remaining)))
+                 (when (string= (py-keyword-argument-name item) "stop")
+                   (setf stop value)))))
+    (loop for depth from 0 below 100
+          do (when (and stop (py-truthy-p (py-invoke-callable stop target)))
+               (return target))
+             (multiple-value-bind (wrapped found)
+                 (if (py-callable-p target)
+                     (gethash "__wrapped__" (py-callable-attrs target))
+                     (when (py-object-p target)
+                       (gethash "__wrapped__" (py-object-attrs target))))
+               (unless found
+                 (return target))
+               (setf target wrapped))
+          finally (return target))))
+
+(defun py-inspect-false-predicate (&rest args)
+  (declare (ignore args))
+  *py-false*)
+
+(defun py-inspect-isfunction (obj)
+  (py-bool (py-callable-p obj)))
+
+(defun py-inspect-ismethod (obj)
+  (py-bool (and (py-callable-p obj)
+                (py-callable-underlying obj))))
+
+(defun py-property-object-p (obj)
+  (and (py-object-p obj)
+       (multiple-value-bind (value found) (gethash "__property_fget__" (py-object-attrs obj))
+         (declare (ignore value))
+         found)))
+
+(defun py-property-accessor-abstract-p (accessor)
+  (and accessor
+       (not (eq accessor *py-none*))
+       (handler-case
+           (py-truthy-p (py-lookup-attr accessor "__isabstractmethod__"))
+         (py-exception () nil)
+         (error () nil))))
+
+(defun py-property-isabstractmethod (obj)
+  (py-bool
+   (loop for accessor-name in '("__property_fget__" "__property_fset__" "__property_fdel__")
+         thereis (multiple-value-bind (accessor found) (gethash accessor-name (py-object-attrs obj))
+                   (and found (py-property-accessor-abstract-p accessor))))))
+
+(defun py-inspect-isdatadescriptor (obj)
+  (py-bool (py-property-object-p obj)))
+
+(defun py-inspect-isclass (obj)
+  (py-bool (py-type-p obj)))
+
+(defun py-inspect-format-object ()
+  (let ((obj (make-py-object :type *py-object-type*)))
+    (setf (py-object-attr obj "FORWARDREF") "FORWARDREF")
+    (setf (py-object-attr obj "VALUE") "VALUE")
+    obj))
+
+(defun py-operator-get-dotted-attr (obj name)
+  (let ((value obj))
+    (dolist (part (split-string-on-char name #\.) value)
+      (setf value (py-lookup-attr value part)))))
+
+(defun py-operator-attrgetter (&rest names)
+  (lambda (obj)
+    (cond
+      ((null names)
+       (py-raise-type *py-type-error-type* "attrgetter expected at least one attribute name"))
+      ((null (rest names))
+       (py-operator-get-dotted-attr obj (first names)))
+      (t
+       (apply #'make-py-tuple
+              (mapcar (lambda (name) (py-operator-get-dotted-attr obj name)) names))))))
+
+(defun py-operator-itemgetter (&rest items)
+  (lambda (obj)
+    (cond
+      ((null items)
+       (py-raise-type *py-type-error-type* "itemgetter expected at least one item"))
+      ((null (rest items))
+       (py-getitem obj (first items)))
+      (t
+       (apply #'make-py-tuple
+              (mapcar (lambda (item) (py-getitem obj item)) items))))))
+
+(defun py-operator-index (obj)
+  (let ((value (py-normalize-bool-number obj)))
+    (if (integerp value)
+        value
+        (py-raise-type *py-type-error-type* "object cannot be interpreted as an integer"))))
+
+(defun py-operator-methodcaller (name &rest call-args)
+  (let ((positional '())
+        (keyword-pairs '()))
+    (loop while call-args
+          for item = (pop call-args)
+          do (if (keywordp item)
+                 (progn
+                   (unless call-args
+                     (py-raise-type *py-type-error-type* "keyword argument has no value"))
+                   (push (list (py-keyword-argument-name item) (pop call-args)) keyword-pairs))
+                 (push item positional)))
+    (let ((positional (nreverse positional))
+          (kwargs (apply #'make-py-dict-from-pairs (nreverse keyword-pairs))))
+      (lambda (obj)
+        (py-call-attr-expanded obj name positional kwargs)))))
+
+(defun py-operator-add (left right) (py-add left right))
+(defun py-operator-sub (left right) (py-sub left right))
+(defun py-operator-mul (left right) (py-mul left right))
+(defun py-operator-truediv (left right) (py-truediv left right))
+(defun py-operator-floordiv (left right) (py-floordiv left right))
+(defun py-operator-mod (left right) (py-mod left right))
+(defun py-operator-eq (left right) (py-eq left right))
+(defun py-operator-ne (left right) (py-ne left right))
+(defun py-operator-lt (left right) (py-lt left right))
+(defun py-operator-le (left right) (py-le left right))
+(defun py-operator-gt (left right) (py-gt left right))
+(defun py-operator-ge (left right) (py-ge left right))
+(defun py-operator-getitem (obj key) (py-getitem obj key))
+(defun py-operator-setitem (obj key value) (py-setitem obj key value))
+
 (defun make-clamp-operator-module ()
   (let ((module (make-clamp-module "operator")))
     (setf (py-object-attr module "__doc__") "Clamp built-in operator module")
     (setf (py-object-attr module "length_hint") #'py-length-hint)
+    (setf (py-object-attr module "attrgetter") #'py-operator-attrgetter)
+    (setf (py-object-attr module "itemgetter") #'py-operator-itemgetter)
+    (setf (py-object-attr module "methodcaller") #'py-operator-methodcaller)
+    (setf (py-object-attr module "index") #'py-operator-index)
+    (setf (py-object-attr module "add") #'py-operator-add)
+    (setf (py-object-attr module "sub") #'py-operator-sub)
+    (setf (py-object-attr module "mul") #'py-operator-mul)
+    (setf (py-object-attr module "truediv") #'py-operator-truediv)
+    (setf (py-object-attr module "floordiv") #'py-operator-floordiv)
+    (setf (py-object-attr module "mod") #'py-operator-mod)
+    (setf (py-object-attr module "eq") #'py-operator-eq)
+    (setf (py-object-attr module "__eq__") #'py-operator-eq)
+    (setf (py-object-attr module "ne") #'py-operator-ne)
+    (setf (py-object-attr module "__ne__") #'py-operator-ne)
+    (setf (py-object-attr module "lt") #'py-operator-lt)
+    (setf (py-object-attr module "le") #'py-operator-le)
+    (setf (py-object-attr module "gt") #'py-operator-gt)
+    (setf (py-object-attr module "ge") #'py-operator-ge)
+    (setf (py-object-attr module "getitem") #'py-operator-getitem)
+    (setf (py-object-attr module "setitem") #'py-operator-setitem)
     module))
+
 
 (py-register-builtin-module "operator" #'make-clamp-operator-module)
 
@@ -3483,6 +7318,25 @@
     (setf (py-object-attr module "isawaitable") #'py-inspect-isawaitable)
     (setf (py-object-attr module "isasyncgen") #'py-inspect-isasyncgen)
     (setf (py-object-attr module "isasyncgenfunction") #'py-inspect-isasyncgenfunction)
+    (setf (py-object-attr module "Parameter") *py-inspect-parameter-type*)
+    (setf (py-object-attr module "_ParameterKind") *py-inspect-parameter-type*)
+    (setf (py-object-attr module "Signature") *py-inspect-signature-type*)
+    (setf (py-object-attr *py-inspect-parameter-type* "empty") *py-inspect-empty*)
+    (setf (py-object-attr *py-inspect-parameter-type* "POSITIONAL_ONLY") "POSITIONAL_ONLY")
+    (setf (py-object-attr *py-inspect-parameter-type* "POSITIONAL_OR_KEYWORD") "POSITIONAL_OR_KEYWORD")
+    (setf (py-object-attr *py-inspect-parameter-type* "VAR_POSITIONAL") "VAR_POSITIONAL")
+    (setf (py-object-attr *py-inspect-parameter-type* "KEYWORD_ONLY") "KEYWORD_ONLY")
+    (setf (py-object-attr *py-inspect-parameter-type* "VAR_KEYWORD") "VAR_KEYWORD")
+    (setf (py-object-attr *py-inspect-signature-type* "empty") *py-inspect-empty*)
+    (setf (py-object-attr module "Format") (py-inspect-format-object))
+    (setf (py-object-attr module "signature") #'py-inspect-signature)
+    (setf (py-object-attr module "getfullargspec") #'py-inspect-getfullargspec)
+    (setf (py-object-attr module "unwrap") #'py-inspect-unwrap)
+    (setf (py-object-attr module "isclass") #'py-inspect-isclass)
+    (setf (py-object-attr module "isfunction") #'py-inspect-isfunction)
+    (setf (py-object-attr module "ismethod") #'py-inspect-ismethod)
+    (setf (py-object-attr module "isdatadescriptor") #'py-inspect-isdatadescriptor)
+    (setf (py-object-attr module "ismethoddescriptor") #'py-inspect-false-predicate)
     module))
 
 (py-register-builtin-module "inspect" #'make-clamp-inspect-module)
@@ -3494,6 +7348,37 @@
                             :name name
                             :thunk thunk
                             :state :created))
+
+(defun make-py-generator (name thunk)
+  (make-py-generator-object :type *py-generator-type*
+                            :name name
+                            :thunk thunk))
+
+(defun py-generator-yield (value)
+  (unless (consp *py-generator-yields*)
+    (error "yield outside generator"))
+  (push value (car *py-generator-yields*))
+  *py-none*)
+
+(defun py-generator-realize (generator)
+  (unless (py-generator-object-realized generator)
+    (let ((*py-generator-yields* (list '())))
+      (funcall (py-generator-object-thunk generator))
+      (setf (py-generator-object-items generator)
+            (nreverse (car *py-generator-yields*)))
+      (setf (py-generator-object-realized generator) t)))
+  generator)
+
+(defun py-generator-next (generator)
+  (when (py-generator-object-closed generator)
+    (py-raise *py-stop-iteration*))
+  (py-generator-realize generator)
+  (let ((index (py-generator-object-index generator))
+        (items (py-generator-object-items generator)))
+    (if (< index (length items))
+        (prog1 (nth index items)
+          (setf (py-generator-object-index generator) (1+ index)))
+        (py-raise *py-stop-iteration*))))
 
 (defun make-py-async-generator (name thunk)
   (make-py-async-generator-object :type *py-async-generator-type*
@@ -5006,6 +8891,37 @@
                          (py-contextlib-async-generator-context-manager-object-generator manager)))
                        *py-false*)))
 
+(defun py-contextlib-generator-context-manager (generator)
+  (make-py-contextlib-generator-context-manager-object
+   :type *py-contextlib-generator-context-manager-type*
+   :generator generator))
+
+(defun py-contextlib-generator-context-manager-enter (manager)
+  (multiple-value-bind (item found)
+      (py-next-item (py-contextlib-generator-context-manager-object-generator manager))
+    (unless found
+      (py-raise (make-py-exception *py-runtime-error-type* "generator didn't yield")))
+    item))
+
+(defun py-contextlib-generator-context-manager-exit (manager exc-type exc-value traceback)
+  (declare (ignore exc-type exc-value traceback))
+  (multiple-value-bind (item found)
+      (py-next-item (py-contextlib-generator-context-manager-object-generator manager))
+    (declare (ignore item))
+    (when found
+      (py-raise (make-py-exception *py-runtime-error-type* "generator didn't stop"))))
+  *py-false*)
+
+(defun py-contextlib-contextmanager (function)
+  (make-py-callable
+   :name "contextmanager"
+   :fn (lambda (&rest args)
+         (let ((generator (apply #'py-invoke-callable function args)))
+           (unless (py-generator-object-p generator)
+             (py-raise (make-py-exception *py-type-error-type*
+                                          "contextmanager function must return a generator")))
+           (py-contextlib-generator-context-manager generator)))))
+
 (defun py-contextlib-asynccontextmanager (function)
   (make-py-callable
    :name "asynccontextmanager"
@@ -5015,6 +8931,11 @@
              (py-raise (make-py-exception *py-type-error-type*
                                           "asynccontextmanager function must return an async generator")))
            (py-contextlib-async-generator-context-manager generator)))))
+
+(setf (py-type-attr *py-contextlib-generator-context-manager-type* "__enter__")
+      #'py-contextlib-generator-context-manager-enter)
+(setf (py-type-attr *py-contextlib-generator-context-manager-type* "__exit__")
+      #'py-contextlib-generator-context-manager-exit)
 
 (setf (py-type-attr *py-contextlib-async-generator-context-manager-type* "__aenter__")
       #'py-contextlib-async-generator-context-manager-aenter)
@@ -5111,9 +9032,17 @@
 (defun make-clamp-contextlib-module ()
   (let ((module (make-clamp-module "contextlib")))
     (setf (py-object-attr module "__doc__") "Clamp built-in contextlib compatibility module")
+    (setf (py-object-attr module "contextmanager") #'py-contextlib-contextmanager)
     (setf (py-object-attr module "asynccontextmanager") #'py-contextlib-asynccontextmanager)
     (setf (py-object-attr module "aclosing") #'py-contextlib-aclosing)
     (setf (py-object-attr module "nullcontext") #'py-contextlib-nullcontext)
+    (setf (py-object-attr module "ContextDecorator") *py-contextlib-context-decorator-type*)
+    (setf (py-object-attr module "GeneratorContextManager")
+          *py-contextlib-generator-context-manager-type*)
+    (setf (py-object-attr module "_GeneratorContextManager")
+          *py-contextlib-generator-context-manager-type*)
+    (setf (py-object-attr module "AsyncGeneratorContextManager")
+          *py-contextlib-async-generator-context-manager-type*)
     (setf (py-object-attr module "AsyncExitStack") #'py-contextlib-async-exit-stack)
     (setf (py-object-attr module "_AsyncGeneratorContextManager")
           *py-contextlib-async-generator-context-manager-type*)
@@ -5798,6 +9727,9 @@
 (defstruct (py-contextvars-context-object (:include py-object))
   values)
 
+(defstruct (py-contextlib-generator-context-manager-object (:include py-object))
+  generator)
+
 (defstruct (py-contextlib-async-generator-context-manager-object (:include py-object))
   generator)
 
@@ -5809,6 +9741,97 @@
 
 (defstruct (py-contextlib-async-exit-stack-object (:include py-object))
   (exit-callbacks '()))
+
+(defun make-py-simple-context-manager (enter-fn exit-fn)
+  (let ((manager (make-py-object :type *py-object-type*)))
+    (setf (py-object-attr manager "__enter__")
+          (lambda (&rest args)
+            (declare (ignore args))
+            (funcall enter-fn)))
+    (setf (py-object-attr manager "__exit__")
+          (lambda (&rest args)
+            (let ((exc-type (or (first args) *py-none*))
+                  (exc-value (or (second args) *py-none*))
+                  (traceback (or (third args) *py-none*)))
+              (funcall exit-fn exc-type exc-value traceback)
+              *py-false*)))
+    manager))
+
+(defun py-pydantic-pop-cached-types-namespace (obj)
+  (handler-case
+      (py-call-attr (py-lookup-attr obj "__dict__") "pop" "types_namespace" *py-none*)
+    (error () *py-none*)
+    (py-exception () *py-none*)))
+
+(defun py-pydantic-list-stack-push-manager (stack value &optional after-enter after-exit)
+  (make-py-simple-context-manager
+   (lambda ()
+     (py-call-attr stack "append" value)
+     (when after-enter (funcall after-enter))
+     *py-none*)
+   (lambda (exc-type exc-value traceback)
+     (declare (ignore exc-type exc-value traceback))
+     (py-pop stack)
+     (when after-exit (funcall after-exit))
+     *py-none*)))
+
+(defun py-pydantic-ns-resolver-push (self typ)
+  (py-pydantic-list-stack-push-manager
+   (py-lookup-attr self "_types_stack")
+   typ
+   (lambda () (py-pydantic-pop-cached-types-namespace self))
+   (lambda () (py-pydantic-pop-cached-types-namespace self))))
+
+(defun py-pydantic-config-wrapper-stack-tail (self)
+  (let ((items (py-iterable-to-list (py-lookup-attr self "_config_wrapper_stack"))))
+    (car (last items))))
+
+(defun py-pydantic-config-wrapper-stack-push (self config-wrapper)
+  (if (eq config-wrapper *py-none*)
+      (make-py-simple-context-manager
+       (lambda () *py-none*)
+       (lambda (exc-type exc-value traceback)
+         (declare (ignore exc-type exc-value traceback))
+         *py-none*))
+      (let ((wrapped-config-wrapper
+              (if (py-dict-object-p config-wrapper)
+                  (py-invoke-callable-expanded
+                   (py-type-of (py-pydantic-config-wrapper-stack-tail self))
+                   (list config-wrapper)
+                   (make-py-dict-from-pairs (list "check" *py-false*)))
+                  config-wrapper)))
+        (py-pydantic-list-stack-push-manager
+         (py-lookup-attr self "_config_wrapper_stack")
+         wrapped-config-wrapper))))
+
+(defun py-pydantic-generic-stack-push (self value)
+  (py-pydantic-list-stack-push-manager
+   (py-lookup-attr self "_stack")
+   value))
+
+(defun py-patch-pydantic-internal-module (module)
+  (let ((name (py-imported-module-name module)))
+    (cond
+      ((string= name "pydantic._internal._namespace_utils")
+       (handler-case
+           (let ((resolver-type (py-lookup-attr module "NsResolver")))
+             (setf (py-object-attr resolver-type "push") #'py-pydantic-ns-resolver-push))
+         (error () nil)
+         (py-exception () nil)))
+      ((string= name "pydantic._internal._config")
+       (handler-case
+           (let ((stack-type (py-lookup-attr module "ConfigWrapperStack")))
+             (setf (py-object-attr stack-type "push") #'py-pydantic-config-wrapper-stack-push))
+         (error () nil)
+         (py-exception () nil)))
+      ((string= name "pydantic._internal._generate_schema")
+       (handler-case
+           (progn
+             (setf (py-object-attr (py-lookup-attr module "_FieldNameStack") "push") #'py-pydantic-generic-stack-push)
+             (setf (py-object-attr (py-lookup-attr module "_ModelTypeStack") "push") #'py-pydantic-generic-stack-push))
+         (error () nil)
+         (py-exception () nil)))))
+  module)
 
 (defvar *py-contextvars-current-values* (make-hash-table :test #'eq))
 (defparameter *py-contextvars-token-missing*
@@ -7784,24 +11807,66 @@
 (py-register-builtin-module "aiohttp.helpers" #'make-clamp-aiohttp-helpers-module)
 
 
+(defun py-make-keyword-argument (name)
+  (let ((keyword (intern (format nil "CLAMP-PY-KW-~D-~A" (length name) name) "KEYWORD")))
+    (setf (get keyword :py-original-keyword-name) name)
+    keyword))
+
 (defun py-keyword-argument-name (keyword)
-  (string-downcase (symbol-name keyword)))
+  (or (get keyword :py-original-keyword-name)
+      (string-downcase (symbol-name keyword))))
 
 (defun py-bind-args (function-name param-names required-count defaults call-args)
+  (py-bind-args-extended function-name
+                         param-names
+                         required-count
+                         0
+                         defaults
+                         '()
+                         '()
+                         '()
+                         nil
+                         nil
+                         call-args))
+
+(defun py-bind-args-extended (function-name
+                              param-names
+                              required-count
+                              posonly-count
+                              defaults
+                              kwonly-names
+                              required-kwonly-names
+                              kwonly-defaults
+                              has-varargs
+                              has-kwargs
+                              call-args)
   (let* ((param-count (length param-names))
+         (kwonly-count (length kwonly-names))
          (values (make-array param-count :initial-element nil))
          (supplied (make-array param-count :initial-element nil))
+         (kw-values (make-array kwonly-count :initial-element nil))
+         (kw-supplied (make-array kwonly-count :initial-element nil))
+         (extra-positional '())
+         (extra-keyword-pairs '())
          (pos-index 0)
          (seen-keyword nil)
          (remaining call-args))
     (labels ((param-index (name)
                (position name param-names :test #'string=))
+             (kwonly-index (name)
+               (position name kwonly-names :test #'string=))
              (mark-value (index value source-name)
                (when (aref supplied index)
                  (error "~A() got multiple values for argument '~A'"
                         function-name source-name))
                (setf (aref values index) value)
-               (setf (aref supplied index) t)))
+               (setf (aref supplied index) t))
+             (mark-kwonly-value (index value source-name)
+               (when (aref kw-supplied index)
+                 (error "~A() got multiple values for argument '~A'"
+                        function-name source-name))
+               (setf (aref kw-values index) value)
+               (setf (aref kw-supplied index) t)))
       (loop while remaining
             do (let ((item (pop remaining)))
                  (cond
@@ -7811,42 +11876,300 @@
                       (error "~A() keyword argument ~A has no value"
                              function-name item))
                     (let* ((name (py-keyword-argument-name item))
-                           (index (param-index name)))
-                      (unless index
-                        (error "~A() got an unexpected keyword argument '~A'"
-                               function-name name))
-                      (mark-value index (pop remaining) name)))
+                           (value (pop remaining))
+                           (index (param-index name))
+                           (kw-index (kwonly-index name)))
+                      (cond
+                        ((and index (< index posonly-count))
+                         (if has-kwargs
+                             (push (list name value) extra-keyword-pairs)
+                             (error "~A() got some positional-only arguments passed as keyword arguments: '~A'"
+                                    function-name name)))
+                        (index
+                         (mark-value index value name))
+                        (kw-index
+                         (mark-kwonly-value kw-index value name))
+                        (has-kwargs
+                         (push (list name value) extra-keyword-pairs))
+                        (t
+                         (error "~A() got an unexpected keyword argument '~A'"
+                                function-name name)))))
                    (seen-keyword
                     (error "~A() positional argument follows keyword argument"
                            function-name))
                    (t
-                    (when (>= pos-index param-count)
-                      (error "~A() takes ~A positional arguments but more were given"
-                             function-name param-count))
-                    (mark-value pos-index item (nth pos-index param-names))
-                    (incf pos-index))))))
-    (loop for index from 0 below param-count
-          collect (cond
-                    ((aref supplied index)
-                     (aref values index))
-                    ((< index required-count)
-                     (error "~A() missing required argument: '~A'"
-                            function-name (nth index param-names)))
-                    (t
-                     (nth (- index required-count) defaults))))))
+                    (if (< pos-index param-count)
+                        (progn
+                          (mark-value pos-index item (nth pos-index param-names))
+                          (incf pos-index))
+                        (if has-varargs
+                            (push item extra-positional)
+                            (error "~A() takes ~A positional arguments but more were given"
+                                   function-name param-count))))))))
+    (append
+     (loop for index from 0 below param-count
+           collect (cond
+                     ((aref supplied index)
+                      (aref values index))
+                     ((< index required-count)
+                      (error "~A() missing required argument: '~A'"
+                             function-name (nth index param-names)))
+                     (t
+                      (nth (- index required-count) defaults))))
+     (loop for index from 0 below kwonly-count
+           for name in kwonly-names
+           collect (cond
+                     ((aref kw-supplied index)
+                      (aref kw-values index))
+                     ((member name required-kwonly-names :test #'string=)
+                      (error "~A() missing required keyword-only argument: '~A'"
+                             function-name name))
+                     (t
+                      (nth index kwonly-defaults))))
+     (when has-varargs
+       (list (apply #'make-py-tuple (nreverse extra-positional))))
+     (when has-kwargs
+       (list (apply #'make-py-dict-from-pairs (nreverse extra-keyword-pairs)))))))
 
 (defun py-find-type-attr (type name)
-  (multiple-value-bind (attr found) (gethash name (py-type-attrs type))
-    (if found
-        (values attr t)
-        (loop for base in (py-type-bases type)
-              do (multiple-value-bind (base-attr base-found)
-                     (py-find-type-attr base name)
-                   (when base-found
-                     (return (values base-attr t))))
-              finally (return (values nil nil))))))
+  (if (py-type-p type)
+      (multiple-value-bind (attr found) (gethash name (py-type-attrs type))
+        (if found
+            (values attr t)
+            (loop for base in (py-type-bases type)
+                  when (py-type-p base)
+                    do (multiple-value-bind (base-attr base-found)
+                           (py-find-type-attr base name)
+                         (when base-found
+                           (return (values base-attr t))))
+                  finally (return (values nil nil)))))
+      (values nil nil)))
+
+(defun py-type-mro-list (type)
+  (when (py-type-p type)
+    (cons type
+          (loop for base in (py-type-bases type)
+                if (py-type-p base)
+                  append (py-type-mro-list base)
+                else
+                  collect base))))
+
+(defun py-super-bound-type (super-obj)
+  (let ((bound (py-super-object-bound-object super-obj)))
+    (if (py-type-p bound)
+        bound
+        (py-type-of bound))))
+
+(defun py-bound-callable-wrapper (attr receiver)
+  (let* ((target (or (py-callable-underlying attr) attr))
+         (param-names (py-callable-signature-param-names target)))
+    (make-py-callable
+     :name (py-callable-name attr)
+     :binding-kind :static-method
+     :module (py-callable-module attr)
+     :signature-param-names (if param-names (rest param-names) nil)
+     :signature-param-defaults (let ((defaults (py-callable-signature-param-defaults target)))
+                                  (if defaults (rest defaults) nil))
+     :signature-kwonly-names (py-callable-signature-kwonly-names target)
+     :signature-kwonly-defaults (py-callable-signature-kwonly-defaults target)
+     :signature-vararg-name (py-callable-signature-vararg-name target)
+     :signature-kwarg-name (py-callable-signature-kwarg-name target)
+     :coroutine-function (py-callable-coroutine-function attr)
+     :async-generator-function (py-callable-async-generator-function attr)
+     :underlying target
+     :fn (lambda (&rest args)
+           (apply #'py-invoke-callable target receiver args)))))
+
+(defun py-bind-descriptor-attr (attr receiver &key class-access)
+  (cond
+    ((py-callable-p attr)
+     (case (py-callable-binding-kind attr)
+       (:static-method attr)
+       (:class-method
+        (py-bound-callable-wrapper attr (if (py-type-p receiver) receiver (py-type-of receiver))))
+       (otherwise
+        (if class-access
+            attr
+            (py-bound-callable-wrapper attr receiver)))))
+    ((py-cpython-object-p attr)
+     attr)
+    ((py-object-p attr)
+     (multiple-value-bind (getter found) (py-find-type-attr (py-type-of attr) "__get__")
+       (if found
+           (py-invoke-callable getter
+                               attr
+                               (if class-access *py-none* receiver)
+                               (if (py-type-p receiver) receiver (py-type-of receiver)))
+           attr)))
+    ((functionp attr) attr)
+    (t attr)))
+
+(defun py-bind-super-attr (attr bound-object)
+  (py-bind-descriptor-attr attr bound-object))
+
+(defun py-callable-defaults (callable)
+  (let ((values '())
+        (seen-default nil))
+    (dolist (default (py-callable-visible-param-defaults callable))
+      (if (eq default *py-inspect-empty*)
+          (when seen-default
+            (setf values '()
+                  seen-default nil))
+          (progn
+            (setf seen-default t)
+            (push default values))))
+    (if seen-default
+        (apply #'make-py-tuple (nreverse values))
+        *py-none*)))
+
+(defun py-callable-kwdefaults (callable)
+  (let ((pairs '()))
+    (loop for name in (py-callable-signature-kwonly-names callable)
+          for default in (py-callable-signature-kwonly-defaults callable)
+          do (unless (eq default *py-inspect-empty*)
+               (push (list name default) pairs)))
+    (if pairs
+        (apply #'make-py-dict-from-pairs (nreverse pairs))
+        *py-none*)))
+
+(defun py-callable-code-object (callable)
+  (or (multiple-value-bind (cached found) (gethash "__code__" (py-callable-attrs callable))
+        (and found cached))
+      (let* ((param-names (or (py-callable-signature-param-names callable) '()))
+             (kwonly-names (or (py-callable-signature-kwonly-names callable) '()))
+             (vararg-name (py-callable-signature-vararg-name callable))
+             (kwarg-name (py-callable-signature-kwarg-name callable))
+             (varnames (append param-names kwonly-names
+                               (if vararg-name (list vararg-name) '())
+                               (if kwarg-name (list kwarg-name) '())))
+             (flags (+ 3 (if vararg-name 4 0) (if kwarg-name 8 0)))
+             (code (make-py-object :type *py-object-type*)))
+        (setf (py-object-attr code "__clamp_code_object__") *py-true*)
+        (setf (py-object-attr code "co_argcount") (length param-names))
+        (setf (py-object-attr code "co_posonlyargcount") 0)
+        (setf (py-object-attr code "co_kwonlyargcount") (length kwonly-names))
+        (setf (py-object-attr code "co_varnames") (apply #'make-py-tuple varnames))
+        (setf (py-object-attr code "co_nlocals") (length varnames))
+        (setf (py-object-attr code "co_flags") flags)
+        (setf (py-object-attr code "co_name") (or (py-callable-name callable) "<lambda>"))
+        (setf (py-object-attr code "co_names") (make-py-tuple))
+        (setf (py-object-attr code "co_consts") (make-py-tuple))
+        (setf (py-object-attr code "co_code") "")
+        (setf (gethash "__code__" (py-callable-attrs callable)) code)
+        code)))
+
+(defun py-super-lookup-attr (super-obj name)
+  (let* ((start-type (py-super-object-start-type super-obj))
+         (bound-object (py-super-object-bound-object super-obj))
+         (mro (py-type-mro-list (py-super-bound-type super-obj)))
+         (after-start nil))
+    (loop for type in mro
+          do (cond
+               (after-start
+                (multiple-value-bind (attr found) (gethash name (py-type-attrs type))
+                  (when found
+                    (return-from py-super-lookup-attr
+                      (py-bind-super-attr attr bound-object)))))
+               ((eq type start-type)
+                (setf after-start t))))
+    (py-raise-type
+     *py-attribute-error-type*
+     (format nil "Python object of type super has no attribute ~S" name))))
 
 (defun py-lookup-attr (obj name)
+  (when (string= name "__class__")
+    (return-from py-lookup-attr (py-type-of obj)))
+  (when (py-super-object-p obj)
+    (return-from py-lookup-attr (py-super-lookup-attr obj name)))
+  (when (py-callable-p obj)
+    (when (string= name "__dict__")
+      (return-from py-lookup-attr (py-callable-dict obj)))
+    (when (string= name "__defaults__")
+      (return-from py-lookup-attr (py-callable-defaults obj)))
+    (when (string= name "__kwdefaults__")
+      (return-from py-lookup-attr (py-callable-kwdefaults obj)))
+    (when (string= name "__code__")
+      (return-from py-lookup-attr (py-callable-code-object obj)))
+    (when (string= name "__globals__")
+      (let ((module (py-callable-module obj)))
+        (return-from py-lookup-attr
+          (if (py-module-object-p module)
+              (py-module-dict module)
+              (make-py-dict-from-pairs)))))
+    (when (string= name "__closure__")
+      (return-from py-lookup-attr *py-none*))
+    (when (or (string= name "__name__") (string= name "__qualname__"))
+      (multiple-value-bind (attr found) (gethash name (py-callable-attrs obj))
+        (return-from py-lookup-attr (if found attr (py-callable-name obj)))))
+    (when (string= name "__get__")
+      (return-from py-lookup-attr
+        (make-py-callable
+         :name "__get__"
+         :fn (lambda (&rest args)
+               (multiple-value-bind (instance objtype)
+                   (case (length args)
+                     (2 (values (first args) (second args)))
+                     (3 (values (second args) (third args)))
+                     (otherwise
+                      (py-raise-type *py-type-error-type* "__get__ expected 2 or 3 arguments")))
+                 (case (py-callable-binding-kind obj)
+                   (:static-method obj)
+                   (:class-method
+                    (py-bound-callable-wrapper
+                     obj
+                     (if (eq instance *py-none*) objtype (py-type-of instance))))
+                   (otherwise
+                    (if (eq instance *py-none*)
+                        obj
+                        (py-bound-callable-wrapper obj instance)))))))))
+    (when (string= name "__func__")
+      (return-from py-lookup-attr (or (py-callable-underlying obj) obj)))
+    (when (string= name "__module__")
+      (multiple-value-bind (attr found) (gethash name (py-callable-attrs obj))
+        (when found
+          (return-from py-lookup-attr attr)))
+      (let ((module (py-callable-module obj)))
+        (return-from py-lookup-attr
+          (if (py-module-object-p module)
+              (py-module-object-name module)
+              "builtins"))))
+    (multiple-value-bind (attr found) (gethash name (py-callable-attrs obj))
+      (when found
+        (return-from py-lookup-attr attr))))
+  (when (py-cpython-object-p obj)
+    (when (string= name "__globals__")
+      (return-from py-lookup-attr (make-py-dict-from-pairs)))
+    (when (member name '("__name__" "__package__" "__file__" "__loader__" "__spec__") :test #'string=)
+      (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
+        (when found
+          (return-from py-lookup-attr attr))))
+    (unless *py-cpython-get-attr*
+      (py-raise-type *py-attribute-error-type* "CPython object bridge is not installed"))
+    (handler-case
+        (return-from py-lookup-attr (funcall *py-cpython-get-attr* obj name))
+      (py-exception (condition)
+        (when (string= name "__isabstractmethod__")
+          (return-from py-lookup-attr *py-false*))
+        (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
+          (when (and found
+                     (or (py-module-object-p attr)
+                         (py-cpython-object-p attr)))
+            (return-from py-lookup-attr attr)))
+        (error condition))))
+  (when (and (py-type-p obj) (string= name "__dict__"))
+    (return-from py-lookup-attr (py-type-dict obj)))
+  (when (and (py-type-p obj) (string= name "__bases__"))
+    (return-from py-lookup-attr (apply #'make-py-tuple (py-type-bases obj))))
+  (when (and (py-type-p obj) (string= name "__base__"))
+    (return-from py-lookup-attr (or (first (py-type-bases obj)) *py-none*)))
+  (when (and (py-type-p obj) (string= name "__mro__"))
+    (return-from py-lookup-attr (apply #'make-py-tuple (py-type-mro-list obj))))
+  (when (and (py-type-p obj) (string= name "__parameters__"))
+    (multiple-value-bind (metadata found) (gethash "__pydantic_generic_metadata__" (py-type-attrs obj))
+      (when found
+        (let ((parameters (py-pydantic-generic-metadata-parameters metadata)))
+          (when parameters
+            (return-from py-lookup-attr parameters))))))
   (when (and (py-object-p obj) (py-range-object-p obj))
     (cond
       ((string= name "start")
@@ -7857,10 +12180,28 @@
        (return-from py-lookup-attr (py-range-object-step obj)))))
   (when (and (py-type-p obj) (string= name "__name__"))
     (return-from py-lookup-attr (py-type-name obj)))
+  (when (and (py-type-p obj) (string= name "__new__"))
+    (multiple-value-bind (attr found) (py-find-type-attr obj name)
+      (return-from py-lookup-attr
+        (py-bind-descriptor-attr
+         (if found attr (py-type-attr *py-object-type* "__new__"))
+         obj
+         :class-access t))))
   (when (py-type-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
-        (return-from py-lookup-attr attr))))
+        (return-from py-lookup-attr
+          (if (py-callable-p attr)
+              (py-invoke-callable (py-lookup-attr attr "__get__") attr *py-none* obj)
+              (py-bind-descriptor-attr attr obj :class-access t)))))
+    (multiple-value-bind (attr found) (py-find-type-attr obj name)
+      (when found
+        (return-from py-lookup-attr
+          (if (py-callable-p attr)
+              (py-invoke-callable (py-lookup-attr attr "__get__") attr *py-none* obj)
+              (py-bind-descriptor-attr attr obj :class-access t)))))
+    (when (string= name "__module__")
+      (return-from py-lookup-attr "builtins")))
   (when (and (py-module-spec-object-p obj) (string= name "parent"))
     (return-from py-lookup-attr (py-module-spec-parent obj)))
   (when (and (py-module-spec-object-p obj) (string= name "cached"))
@@ -7873,6 +12214,10 @@
     (return-from py-lookup-attr (py-source-file-loader-dict obj)))
   (when (and (py-file-reader-object-p obj) (string= name "__dict__"))
     (return-from py-lookup-attr (py-file-reader-dict obj)))
+  (when (and (py-object-p obj) (not (py-type-p obj)) (string= name "__dict__"))
+    (return-from py-lookup-attr (make-py-dict-for-storage (py-object-attrs obj) obj)))
+  (when (and (py-property-object-p obj) (string= name "__isabstractmethod__"))
+    (return-from py-lookup-attr (py-property-isabstractmethod obj)))
   (when (and (py-path-object-p obj) (string= name "parent"))
     (return-from py-lookup-attr (py-path-parent obj)))
   (when (and (py-path-object-p obj) (string= name "suffix"))
@@ -7884,53 +12229,286 @@
   (when (py-object-p obj)
     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
       (when found
-        (return-from py-lookup-attr attr))))
+        (return-from py-lookup-attr attr)))
+    (when (and (not (py-cpython-object-p obj))
+               (not (string= name "__getattr__"))
+               *py-cpython-get-attr*)
+      (multiple-value-bind (validator marker-found)
+          (py-find-type-attr (py-type-of obj) "__pydantic_validator__")
+        (declare (ignore validator))
+        (when marker-found
+          (multiple-value-bind (proxy proxy-found) (gethash "__cpython_proxy__" (py-object-attrs obj))
+            (when (and proxy-found (py-cpython-object-p proxy))
+              (handler-case
+                  (return-from py-lookup-attr (funcall *py-cpython-get-attr* proxy name))
+                (py-exception () nil)))))))
+    (when (and (py-module-object-p obj) (not (string= name "__getattr__")))
+      (multiple-value-bind (getter found) (gethash "__getattr__" (py-object-attrs obj))
+        (when found
+          (return-from py-lookup-attr (py-invoke-callable getter name))))))
   (multiple-value-bind (attr found) (py-find-type-attr (py-type-of obj) name)
     (when found
-      (return-from py-lookup-attr attr)))
+      (when (py-object-p attr)
+        (multiple-value-bind (fget property-found) (gethash "__property_fget__" (py-object-attrs attr))
+          (when property-found
+            (return-from py-lookup-attr (py-invoke-callable fget obj)))))
+      (return-from py-lookup-attr (py-bind-descriptor-attr attr obj))))
+  (when (and (py-object-p obj)
+             (not (py-cpython-object-p obj))
+             (not (string= name "__getattr__"))
+             *py-cpython-get-attr*)
+    (multiple-value-bind (proxy proxy-found) (gethash "__cpython_proxy__" (py-object-attrs obj))
+      (when (and proxy-found (py-cpython-object-p proxy))
+        (handler-case
+            (return-from py-lookup-attr (funcall *py-cpython-get-attr* proxy name))
+          (py-exception () nil)))))
+  (when (and (py-object-p obj) (string= name "get"))
+    (multiple-value-bind (getter found) (py-find-type-attr (py-type-of obj) "__getitem__")
+      (declare (ignore getter))
+      (when found
+        (return-from py-lookup-attr
+          (lambda (&rest args)
+            (let* ((actual-args (if (and args (eq (first args) obj)) (rest args) args))
+                   (key (first actual-args))
+                   (default (if (rest actual-args) (second actual-args) *py-none*)))
+              (handler-case
+                  (py-getitem obj key)
+                (py-exception () default)
+                (error () default))))))))
+  (when (and (py-object-p obj) (not (string= name "__getattr__")))
+    (multiple-value-bind (getter found) (py-find-type-attr (py-type-of obj) "__getattr__")
+      (when found
+        (return-from py-lookup-attr (py-invoke-callable getter obj name)))))
+  (when (string= name "__doc__")
+    (return-from py-lookup-attr *py-none*))
+  (when (py-module-object-p obj)
+    (py-raise-type
+     *py-attribute-error-type*
+     (format nil "module '~A' has no attribute '~A'"
+             (py-module-object-name obj)
+             name)))
   (py-raise-type
    *py-attribute-error-type*
-   (format nil "Python object of type ~A has no attribute ~S"
+   (format nil "Python object of type ~A has no attribute ~S on ~A"
            (py-type-name (py-type-of obj))
-           name)))
+           name
+           (with-output-to-string (stream)
+             (py-repr obj stream)))))
+
+
+(defun py-lookup-attr-or-default (obj name default)
+  (cond
+    ((and (py-module-object-p obj) (not (string= name "__getattr__")))
+     (multiple-value-bind (attr found) (gethash name (py-object-attrs obj))
+       (if found attr default)))
+    (t
+     (handler-case
+         (py-lookup-attr obj name)
+       (py-exception () default)))))
+
+(defun py-type-annotation-names (type)
+  (multiple-value-bind (annotations found) (py-find-type-attr type "__annotations__")
+    (if (and found (py-dict-object-p annotations))
+        (let ((keys (py-dict-object-keys annotations)))
+          (loop for index from 0 below (fill-pointer keys)
+                collect (aref keys index)))
+        '())))
+
+(defun py-object-annotation-values (obj)
+  (loop for name in (py-type-annotation-names (py-type-of obj))
+        collect (py-lookup-attr obj name)))
+
+(defun py-object-init-callable-p (initializer)
+  (and (py-callable-p initializer)
+       (string= (py-callable-name initializer) "object.__init__")))
 
 (defun py-instantiate-type (type &rest args)
   (when (py-type-subtype-p type *py-base-exception-type*)
-    (return-from py-instantiate-type (apply #'make-py-exception type args)))
+    (let ((exception (apply #'make-py-exception type args)))
+      (multiple-value-bind (initializer found) (py-find-type-attr type "__init__")
+        (when (and found (not (py-object-init-callable-p initializer)))
+          (let ((result (apply #'py-invoke-callable initializer exception args)))
+            (unless (eq result *py-none*)
+              (error "__init__() should return None, not ~A"
+                     (py-type-name (py-type-of result)))))))
+      (return-from py-instantiate-type exception)))
   (when (eq type *py-source-file-loader-type*)
     (destructuring-bind (fullname path) args
       (return-from py-instantiate-type
         (make-clamp-source-file-loader fullname path))))
+  (when (eq type *py-extension-file-loader-type*)
+    (destructuring-bind (fullname path) args
+      (return-from py-instantiate-type
+        (make-clamp-extension-file-loader fullname path))))
+  (when (eq type *py-sourceless-file-loader-type*)
+    (destructuring-bind (fullname path) args
+      (return-from py-instantiate-type
+        (make-clamp-sourceless-file-loader fullname path))))
+  (when (eq type *py-file-finder-type*)
+    (destructuring-bind (search-path &rest loader-details) args
+      (return-from py-instantiate-type
+        (make-clamp-file-finder search-path loader-details))))
   (when (eq type *py-file-reader-type*)
     (let ((reader (make-py-file-reader-object :type *py-file-reader-type*)))
       (when args
         (apply (py-type-attr *py-file-reader-type* "__init__") reader args))
       (return-from py-instantiate-type reader)))
-  (let ((instance (make-py-instance type)))
+  (when (eq type *py-pkgutil-module-info-type*)
+    (destructuring-bind (module-finder name ispkg) args
+      (return-from py-instantiate-type
+        (py-make-pkgutil-module-info module-finder name ispkg))))
+  (when (py-type-subtype-p type *py-property-type*)
+    (return-from py-instantiate-type
+      (apply #'py-property-type-call type args)))
+  (let ((instance (if (and (boundp '*py-dict-type*)
+                           *py-dict-type*
+                           (py-type-subtype-p type *py-dict-type*))
+                      (make-py-dict-object :type type
+                                           :value (make-hash-table :test #'equal)
+                                           :size 0)
+                      (make-py-instance type))))
     (multiple-value-bind (initializer found) (py-find-type-attr type "__init__")
-      (when found
-        (let ((result (apply #'py-invoke-callable initializer instance args)))
-          (unless (eq result *py-none*)
-            (error "__init__() should return None, not ~A"
-                   (py-type-name (py-type-of result)))))))
+      (if (and found (not (py-object-init-callable-p initializer)))
+          (let ((result (apply #'py-invoke-callable initializer instance args)))
+            (unless (eq result *py-none*)
+              (error "__init__() should return None, not ~A"
+                     (py-type-name (py-type-of result)))))
+          (loop for name in (py-type-annotation-names type)
+                for value in args
+                do (setf (py-object-attr instance name) value))))
     instance))
+
+(defun py-native-keyword-call-args (args)
+  (loop for item in args
+        collect (if (keywordp item)
+                    (intern (string-upcase (py-keyword-argument-name item)) "KEYWORD")
+                    item)))
 
 (defun py-invoke-callable (callable &rest args)
   (cond
+    ((py-cpython-object-p callable)
+     (unless *py-cpython-call*
+       (error "CPython callable bridge is not installed"))
+     (apply *py-cpython-call* callable args))
     ((py-callable-p callable)
-     (apply (py-callable-fn callable) args))
+     (let* ((module (or (py-callable-module callable) *py-current-module*))
+            (*py-current-module* module)
+            (frame (py-make-frame module
+                                  (or (py-callable-name callable) "<lambda>")
+                                  (or (first *py-frame-stack*) *py-none*)))
+            (*py-frame-stack* (cons frame *py-frame-stack*)))
+       (apply (py-callable-fn callable) args)))
     ((functionp callable)
-     (apply callable args))
+     (apply callable (py-native-keyword-call-args args)))
     ((py-type-p callable)
-     (apply #'py-instantiate-type callable args))
+     (if (py-metaclass-call-p callable args)
+         (py-call-attr-expanded callable "__new__" args (make-py-dict-from-pairs))
+         (apply #'py-instantiate-type callable args)))
+    ((py-object-p callable)
+     (let ((call-method
+             (handler-case
+                 (py-lookup-attr callable "__call__")
+               (py-exception ()
+                 (error "Python attribute is not callable: ~S" callable))
+               (error ()
+                 (error "Python attribute is not callable: ~S" callable)))))
+       (apply #'py-invoke-callable call-method args)))
     (t
      (error "Python attribute is not callable: ~S" callable))))
+
+(defun py-iterable-to-list (iterable)
+  (let ((iterator (py-iter iterable))
+        (items '()))
+    (loop
+      (multiple-value-bind (item found) (py-next-item iterator)
+        (unless found
+          (return (nreverse items)))
+        (push item items)))))
+
+(defun py-kwargs-to-call-args (kwargs)
+  (cond
+    ((or (null kwargs) (eq kwargs *py-none*))
+     '())
+    ((py-dict-object-p kwargs)
+     (let ((storage (py-dict-storage kwargs "call expansion"))
+           (keys (py-dict-object-keys kwargs))
+           (result '()))
+       (loop for index from 0 below (fill-pointer keys)
+             for key = (aref keys index)
+             do (unless (stringp key)
+                  (py-raise-type *py-type-error-type* "keywords must be strings"))
+                (push (py-make-keyword-argument key) result)
+                (push (gethash key storage) result))
+       (nreverse result)))
+    (t
+     (py-raise-type *py-type-error-type* "** argument must be a mapping"))))
+
+(defun py-metaclass-call-p (callable positional)
+  (and (py-type-p callable)
+       (not (eq callable *py-type-type*))
+       (py-type-subtype-p callable *py-type-type*)
+       (>= (length positional) 3)
+       (stringp (first positional))
+       (or (py-tuple-object-p (second positional))
+           (py-list-object-p (second positional)))
+       (py-dict-object-p (third positional))))
+
+(defun py-invoke-callable-expanded (callable positional kwargs)
+  (cond
+    ((and (py-cpython-object-p callable) *py-cpython-call-expanded*)
+     (funcall *py-cpython-call-expanded* callable positional kwargs))
+    ((py-metaclass-call-p callable positional)
+     (py-call-attr-expanded callable "__new__" positional kwargs))
+    (t
+     (apply #'py-invoke-callable
+            callable
+            (append positional (py-kwargs-to-call-args kwargs))))))
+
+(defun py-callable-bind-receiver-p (callable obj)
+  (and (not (py-module-object-p obj))
+       (not (py-cpython-object-p obj))
+       (not (py-cpython-object-p callable))
+       (not (and (py-callable-p callable)
+                 (py-callable-underlying callable)))
+       (not (and (py-callable-p callable)
+                 (eq (py-callable-binding-kind callable) :static-method)))))
+
+(defun py-bind-context-exit-callable (manager exit)
+  (if (and (functionp exit)
+           (not (multiple-value-bind (direct found)
+                    (and (py-object-p manager)
+                         (gethash "__exit__" (py-object-attrs manager)))
+                  (and found (eq direct exit)))))
+      (lambda (exc-type exc-value traceback)
+        (py-invoke-callable exit manager exc-type exc-value traceback))
+      exit))
+
+(defun py-direct-instance-attr-p (obj name)
+  (and (py-object-p obj)
+       (not (py-type-p obj))
+       (not (py-module-object-p obj))
+       (multiple-value-bind (value found) (gethash name (py-object-attrs obj))
+         (declare (ignore value))
+         found)))
+
+(defun py-call-attr-expanded (obj name positional kwargs)
+  (let* ((direct-instance-attr (py-direct-instance-attr-p obj name))
+         (callable (py-lookup-attr obj name))
+         (all-positional (if (and (not direct-instance-attr)
+                                  (py-callable-bind-receiver-p callable obj))
+                             (cons obj positional)
+                             positional)))
+    (py-invoke-callable-expanded callable all-positional kwargs)))
 
 (defun py-callable (value)
   (py-bool
    (or (functionp value)
        (py-callable-p value)
-       (py-type-p value))))
+       (py-type-p value)
+       (and (py-cpython-object-p value)
+            (if *py-cpython-callable*
+                (funcall *py-cpython-callable* value)
+                t)))))
 
 (defun py-type-subtype-p (derived cls)
   (cond
@@ -7938,12 +12516,83 @@
     ((not (py-type-p derived)) nil)
     (t
      (loop for base in (py-type-bases derived)
-           thereis (py-type-subtype-p base cls)))))
+           thereis (and (py-type-p base)
+                        (py-type-subtype-p base cls))))))
+
+(defun py-normalize-isinstance-class (class-or-tuple)
+  (cond
+    ((functionp class-or-tuple) *py-never-type*)
+    ((py-callable-p class-or-tuple)
+     (let ((name (py-callable-name class-or-tuple)))
+       (cond
+         ((string= name "bool") *py-bool-type*)
+         ((string= name "int") *py-int-type*)
+         ((string= name "float") *py-float-type*)
+         ((string= name "str") *py-str-type*)
+         ((string= name "bytes") *py-bytes-type*)
+         ((string= name "object") *py-object-type*)
+         ((string= name "type") *py-type-type*)
+         ((string= name "list") *py-list-type*)
+         ((string= name "tuple") *py-tuple-type*)
+         ((string= name "dict") *py-dict-type*)
+         ((string= name "classmethod") *py-classmethod-type*)
+         ((string= name "staticmethod") *py-staticmethod-type*)
+         ((string= name "property") *py-property-type*)
+         (t class-or-tuple))))
+    (t class-or-tuple)))
+
+
+(defun py-cpython-function-type-p (class-or-tuple)
+  (and (py-cpython-object-p class-or-tuple)
+       (string= (with-output-to-string (stream)
+                  (py-display class-or-tuple stream))
+                "<class 'function'>")))
+
+(defun py-cpython-method-type-p (class-or-tuple)
+  (and (py-cpython-object-p class-or-tuple)
+       (string= (with-output-to-string (stream)
+                  (py-display class-or-tuple stream))
+                "<class 'method'>")))
+
+(defun py-cpython-code-type-p (class-or-tuple)
+  (and (py-cpython-object-p class-or-tuple)
+       (string= (with-output-to-string (stream)
+                  (py-display class-or-tuple stream))
+                "<class 'code'>")))
 
 (defun py-isinstance (obj class-or-tuple)
+  (setf class-or-tuple (py-normalize-isinstance-class class-or-tuple))
   (cond
+    ((and (py-callable-p obj)
+          (py-cpython-function-type-p class-or-tuple))
+     (py-bool (not (py-callable-underlying obj))))
+    ((and (py-callable-p obj)
+          (py-cpython-method-type-p class-or-tuple))
+     (py-bool (py-callable-underlying obj)))
+    ((and (py-object-p obj)
+          (py-cpython-code-type-p class-or-tuple))
+     (py-bool (py-truthy-p (py-lookup-attr-or-default obj "__clamp_code_object__" *py-false*))))
+    ((and *py-cpython-isinstance*
+          (py-exception-object-p obj)
+          (py-cpython-object-p class-or-tuple))
+     (multiple-value-bind (proxy found) (gethash "__cpython_proxy__" (py-object-attrs obj))
+       (py-bool
+        (and found
+             (py-cpython-object-p proxy)
+             (funcall *py-cpython-isinstance* proxy class-or-tuple)))))
+    ((and *py-cpython-isinstance*
+          (or (py-cpython-object-p obj)
+              (py-cpython-object-p class-or-tuple)))
+     (py-bool (funcall *py-cpython-isinstance* obj class-or-tuple)))
+    ((and (py-exception-object-p obj)
+          (member class-or-tuple (list *py-base-exception-type* *py-exception-type*) :test #'eq))
+     *py-true*)
     ((py-type-p class-or-tuple)
-     (py-bool (py-type-subtype-p (py-type-of obj) class-or-tuple)))
+     (py-bool
+      (if (and (eq class-or-tuple *py-type-type*)
+               (py-type-p obj))
+          t
+          (py-type-subtype-p (py-type-of obj) class-or-tuple))))
     ((py-tuple-object-p class-or-tuple)
      (let ((storage (py-object-value class-or-tuple))
            (size (or (py-object-size class-or-tuple) 0)))
@@ -7952,13 +12601,22 @@
               thereis (py-truthy-p
                        (py-isinstance obj (aref storage index)))))))
     (t
-     (error "isinstance() arg 2 must be a type or tuple of types"))))
+     (error "isinstance() arg 2 must be a type or tuple of types: ~A for obj ~A in module ~A"
+            (with-output-to-string (stream)
+              (py-repr class-or-tuple stream))
+            (with-output-to-string (stream)
+              (py-repr obj stream))
+            (if (py-module-object-p *py-current-module*)
+                (py-module-object-name *py-current-module*)
+                "<none>")))))
 
 (defun py-call-attr (obj name &rest args)
-  (let ((callable (py-lookup-attr obj name)))
-    (if (py-module-object-p obj)
-        (apply #'py-invoke-callable callable args)
-        (apply #'py-invoke-callable callable obj args))))
+  (let ((direct-instance-attr (py-direct-instance-attr-p obj name))
+        (callable (py-lookup-attr obj name)))
+    (if (and (not direct-instance-attr)
+             (py-callable-bind-receiver-p callable obj))
+        (apply #'py-invoke-callable callable obj args)
+        (apply #'py-invoke-callable callable args))))
 
 (defstruct (py-list-object (:include py-object))
   (allocated 0))
@@ -7993,6 +12651,10 @@
   namespace-dict
   (initializing nil))
 
+(defmethod print-object ((obj py-module-object) stream)
+  (print-unreadable-object (obj stream :type nil)
+    (format stream "module ~S" (py-module-object-name obj))))
+
 (defstruct (py-bytes-object (:include py-object)))
 
 
@@ -8011,7 +12673,8 @@
 
 (defstruct (py-zip-object (:include py-object))
   iterators
-  result)
+  result
+  strict)
 
 (defstruct (py-filter-object (:include py-object))
   predicate
@@ -8034,6 +12697,10 @@
 (defstruct (py-dict-object (:include py-object))
   (keys (make-array 0 :adjustable t :fill-pointer 0))
   namespace-owner)
+
+(defmethod print-object ((obj py-dict-object) stream)
+  (print-unreadable-object (obj stream :type nil)
+    (format stream "dict size=~A" (or (py-object-size obj) 0))))
 
 (defstruct (py-dict-key-iterator-object (:include py-object))
   dict
@@ -8069,6 +12736,18 @@
                 :sequence-length-fn
                 (lambda (obj)
                   (or (py-object-size obj) 0))))
+
+(setf *py-pkgutil-module-info-type*
+      (make-py-type :type *py-type-type*
+                    :name "ModuleInfo"
+                    :bases (list *py-tuple-type*)
+                    :basicsize 1
+                    :itemsize 1
+                    :sequence-length-fn
+                    (lambda (obj)
+                      (or (py-object-size obj) 0))))
+
+(setf (gethash "__module__" (py-object-attrs *py-pkgutil-module-info-type*)) "pkgutil")
 
 (defparameter *py-list-iterator-type*
   (make-py-type :type *py-type-type*
@@ -8142,7 +12821,8 @@
   (py-object-value obj))
 
 (defun py-tuple-storage (obj operation)
-  (unless (eq (py-object-type obj) *py-tuple-type*)
+  (unless (and (py-tuple-object-p obj)
+               (py-type-subtype-p (py-object-type obj) *py-tuple-type*))
     (error "~A only supports tuple objects, got ~S" operation obj))
   (py-object-value obj))
 
@@ -8152,19 +12832,35 @@
   (py-object-value obj))
 
 (defun py-dict-storage (obj operation)
-  (unless (eq (py-object-type obj) *py-dict-type*)
+  (unless (and (py-dict-object-p obj)
+               (py-type-subtype-p (py-object-type obj) *py-dict-type*))
     (error "~A only supports dict objects, got ~S" operation obj))
   (py-object-value obj))
 
+(defun py-dict-find-entry (obj key operation)
+  (let ((storage (py-dict-storage obj operation)))
+    (multiple-value-bind (value found) (gethash key storage)
+      (when found
+        (return-from py-dict-find-entry (values key value t))))
+    (let ((keys (py-dict-object-keys obj)))
+      (loop for index from 0 below (fill-pointer keys)
+            for candidate = (aref keys index)
+            do (when (handler-case
+                         (py-truthy-p (py-eq candidate key))
+                       (error () nil))
+                 (return-from py-dict-find-entry
+                   (values candidate (gethash candidate storage) t)))))
+    (values key nil nil)))
+
 (defun py-dict-set-entry (obj key value)
   (let ((storage (py-dict-storage obj "__setitem__")))
-    (multiple-value-bind (old-value found)
-        (gethash key storage)
+    (multiple-value-bind (stored-key old-value found)
+        (py-dict-find-entry obj key "__setitem__")
       (declare (ignore old-value))
       (unless found
         (vector-push-extend key (py-dict-object-keys obj))
         (incf (py-object-size obj)))
-      (setf (gethash key storage) value)))
+      (setf (gethash (if found stored-key key) storage) value)))
   (let ((owner (py-dict-object-namespace-owner obj)))
     (when (and owner (stringp key) (not (string= key "__dict__")))
       (py-sync-object-attr owner key value)))
@@ -8172,23 +12868,25 @@
 
 (defun py-dict-delete-entry (obj key)
   (let ((storage (py-dict-storage obj "__delitem__")))
-    (multiple-value-bind (old-value found)
-        (gethash key storage)
+    (multiple-value-bind (stored-key old-value found)
+        (py-dict-find-entry obj key "__delitem__")
       (declare (ignore old-value))
       (unless found
-        (error "~S" key))
-      (remhash key storage)
+        (py-raise (make-py-exception *py-key-error-type* (princ-to-string key))))
+      (remhash stored-key storage)
       (decf (py-object-size obj))
       (let* ((keys (py-dict-object-keys obj))
              (size (fill-pointer keys))
-             (position (position key keys :test #'equal :end size)))
+             (position (position stored-key keys :test #'equal :end size)))
         (when position
           (loop for index from position below (1- size)
                 do (setf (aref keys index) (aref keys (1+ index))))
           (vector-pop keys)))))
   (let ((owner (py-dict-object-namespace-owner obj)))
     (when (and owner (stringp key) (not (string= key "__dict__")))
-      (remhash key (py-object-attrs owner))))
+      (let ((attrs (py-namespace-owner-attrs owner)))
+        (when attrs
+          (remhash key attrs)))))
   *py-none*)
 
 (defun py-dict-clear (obj)
@@ -8249,6 +12947,11 @@
       (vector-push-extend name (py-dict-object-keys dict))
       (setf (py-object-size dict) (hash-table-count (py-object-attrs module))))))
 
+(defun py-callable-dict (callable)
+  (or (py-callable-namespace-dict callable)
+      (setf (py-callable-namespace-dict callable)
+            (make-py-dict-for-storage (py-callable-attrs callable) callable))))
+
 (defun py-module-dict (module)
   (or (py-module-object-namespace-dict module)
       (setf (py-module-object-namespace-dict module)
@@ -8277,6 +12980,51 @@
       (destructuring-bind (key value) pair
         (py-dict-set-entry dict key value)))
     dict))
+
+(defun py-dict (&rest args)
+  (let ((dict (make-py-dict-from-pairs))
+        (source-supplied nil)
+        (source *py-none*))
+    (loop while args
+          for item = (pop args)
+          do (cond
+               ((keywordp item)
+                (unless args
+                  (py-raise-type *py-type-error-type* "keyword argument has no value"))
+                (py-dict-set-entry dict (py-keyword-argument-name item) (pop args)))
+               ((not source-supplied)
+                (setf source item
+                      source-supplied t))
+               (t
+                (py-raise-type *py-type-error-type* "dict expected at most 1 positional argument"))))
+    (when source-supplied
+      (cond
+        ((py-dict-object-p source)
+         (py-dict-merge dict source))
+        (t
+         (let ((iterator (py-iter source)))
+           (loop
+             (multiple-value-bind (item found) (py-next-item iterator)
+               (unless found
+                 (return))
+               (let ((pair (py-iterable-to-list item)))
+                 (unless (= (length pair) 2)
+                   (py-raise-type *py-type-error-type* "dictionary update sequence element has length other than 2"))
+                 (py-dict-set-entry dict (first pair) (second pair)))))))))
+    dict))
+
+(defun py-dict-merge (target source)
+  (cond
+    ((or (null source) (eq source *py-none*)) target)
+    ((and (py-dict-object-p target) (py-dict-object-p source))
+     (let ((source-storage (py-dict-storage source "dict merge"))
+           (source-keys (py-dict-object-keys source)))
+       (loop for index from 0 below (fill-pointer source-keys)
+             for key = (aref source-keys index)
+             do (py-dict-set-entry target key (gethash key source-storage)))
+       target))
+    (t
+     (py-raise-type *py-type-error-type* "** argument must be a mapping"))))
 
 (defun make-py-bytes-from-vector (storage)
   (make-py-bytes-object :type *py-bytes-type*
@@ -8650,6 +13398,99 @@
                    (princ separator stream))
                  (princ item stream))))))
 
+(defun py-string-external-format (encoding)
+  (let ((normalized (if (eq encoding *py-none*) "utf-8" (py-string-lower encoding))))
+    (cond
+      ((member normalized '("utf-8" "utf8") :test #'string=) :utf-8)
+      ((member normalized '("ascii" "us-ascii") :test #'string=) :ascii)
+      (t (py-raise-type *py-lookup-error-type*
+                        (format nil "unknown encoding: ~A" encoding))))))
+
+(defun py-string-encode (value &optional (encoding "utf-8") (errors "strict"))
+  (declare (ignore errors))
+  (let* ((octets (sb-ext:string-to-octets
+                  value
+                  :external-format (py-string-external-format encoding)))
+         (storage (make-array (length octets) :element-type '(unsigned-byte 8))))
+    (loop for index from 0 below (length octets)
+          do (setf (aref storage index) (aref octets index)))
+    (make-py-bytes-from-vector storage)))
+
+(defun py-string-format-value (value)
+  (if (stringp value)
+      value
+      (py-str value)))
+
+(defun py-string-format-lookup (field positional keywords auto-index)
+  (let* ((colon (position #\: field))
+         (bang (position #\! field))
+         (end (cond
+                ((and colon bang) (min colon bang))
+                (colon colon)
+                (bang bang)
+                (t (length field))))
+         (name (subseq field 0 end))
+         (parts (split-string-on-char name #\.))
+         (root (first parts)))
+    (multiple-value-bind (value next-auto-index)
+        (cond
+          ((string= root "")
+           (values (nth auto-index positional) (1+ auto-index)))
+          ((every #'digit-char-p root)
+           (values (nth (parse-integer root) positional) auto-index))
+          (t
+           (multiple-value-bind (keyword-value found) (gethash root keywords)
+             (unless found
+               (py-raise-type *py-key-error-type* root))
+             (values keyword-value auto-index))))
+      (dolist (attr (rest parts))
+        (setf value (py-lookup-attr value attr)))
+      (values value next-auto-index))))
+
+(defun py-string-format (template &rest args)
+  (let ((positional '())
+        (keywords (make-hash-table :test #'equal)))
+    (loop while args
+          for item = (pop args)
+          do (if (keywordp item)
+                 (progn
+                   (unless args
+                     (py-raise-type *py-type-error-type* "keyword argument has no value"))
+                   (setf (gethash (py-keyword-argument-name item) keywords) (pop args)))
+                 (push item positional)))
+    (setf positional (nreverse positional))
+    (with-output-to-string (stream)
+      (loop with index = 0
+            with auto-index = 0
+            while (< index (length template))
+            for char = (char template index)
+            do (cond
+                 ((char= char #\{)
+                  (cond
+                    ((and (< (1+ index) (length template))
+                          (char= (char template (1+ index)) #\{))
+                     (write-char #\{ stream)
+                     (incf index 2))
+                    (t
+                     (let ((end (position #\} template :start (1+ index))))
+                       (unless end
+                         (py-raise-type *py-value-error-type* "Single '{' encountered in format string"))
+                       (multiple-value-bind (value next-auto-index)
+                           (py-string-format-lookup (subseq template (1+ index) end) positional keywords auto-index)
+                         (setf auto-index next-auto-index)
+                         (princ (py-string-format-value value) stream))
+                       (setf index (1+ end))))))
+                 ((char= char #\})
+                  (if (and (< (1+ index) (length template))
+                           (char= (char template (1+ index)) #\}))
+                      (progn
+                        (write-char #\} stream)
+                        (incf index 2))
+                      (py-raise-type *py-value-error-type* "Single '}' encountered in format string")))
+                 (t
+                  (write-char char stream)
+                  (incf index)))))))
+
 (defun py-string-expandtabs (value &optional (tabsize 8))
   (let ((normalized-tabsize (py-normalize-bool-number tabsize)))
     (unless (integerp normalized-tabsize)
@@ -8690,6 +13531,17 @@
              (string= value suffix :start1 (- value-size suffix-size)))
         (subseq value 0 (- value-size suffix-size))
         value)))
+
+(defun py-string-translate (value table)
+  (cond
+    ((stringp table)
+     (with-output-to-string (stream)
+       (loop for char across value
+             for code = (char-code char)
+             do (if (< code (length table))
+                    (write-char (char table code) stream)
+                    (write-char char stream)))))
+    (t value)))
 
 (defun py-string-replace (value old new &optional (count -1))
   (unless (stringp old)
@@ -9245,6 +14097,14 @@
       (lambda (obj iterable)
         (py-string-join obj iterable)))
 
+(setf (py-type-attr *py-str-type* "format")
+      (lambda (obj &rest args)
+        (apply #'py-string-format obj args)))
+
+(setf (py-type-attr *py-str-type* "encode")
+      (lambda (obj &optional (encoding "utf-8") (errors "strict"))
+        (py-string-encode obj encoding errors)))
+
 (setf (py-type-attr *py-str-type* "expandtabs")
       (lambda (obj &optional (tabsize 8))
         (py-string-expandtabs obj tabsize)))
@@ -9260,6 +14120,10 @@
 (setf (py-type-attr *py-str-type* "replace")
       (lambda (obj old new &optional (count -1))
         (py-string-replace obj old new count)))
+
+(setf (py-type-attr *py-str-type* "translate")
+      (lambda (obj table)
+        (py-string-translate obj table)))
 
 (setf (py-type-attr *py-str-type* "partition")
       (lambda (obj separator)
@@ -9392,6 +14256,10 @@
 (setf (py-type-attr *py-int-type* "bit_count")
       (lambda (obj)
         (py-int-bit-count obj)))
+
+(setf (py-type-attr *py-int-type* "to_bytes")
+      (lambda (obj &rest args)
+        (apply #'py-int-to-bytes obj args)))
 
 (setf (py-type-attr *py-int-type* "__round__")
       (lambda (obj &optional (ndigits *py-none*))
@@ -9714,18 +14582,19 @@
 
 (setf (py-type-attr *py-dict-type* "__contains__")
       (lambda (obj key)
-        (multiple-value-bind (value found)
-            (gethash key (py-dict-storage obj "__contains__"))
-          (declare (ignore value))
+        (multiple-value-bind (stored-key value found)
+            (py-dict-find-entry obj key "__contains__")
+          (declare (ignore stored-key value))
           (py-bool found))))
 
 (setf (py-type-attr *py-dict-type* "__getitem__")
       (lambda (obj key)
-        (multiple-value-bind (value found)
-            (gethash key (py-dict-storage obj "__getitem__"))
+        (multiple-value-bind (stored-key value found)
+            (py-dict-find-entry obj key "__getitem__")
+          (declare (ignore stored-key))
           (if found
               value
-              (error "~S" key)))))
+              (py-raise-type *py-key-error-type* (format nil "~S" key))))))
 
 (setf (py-type-attr *py-dict-type* "__setitem__")
       (lambda (obj key value)
@@ -9738,9 +14607,47 @@
 
 (setf (py-type-attr *py-dict-type* "get")
       (lambda (obj key &optional (default *py-none*))
-        (multiple-value-bind (value found)
-            (gethash key (py-dict-storage obj "get"))
+        (multiple-value-bind (stored-key value found)
+            (py-dict-find-entry obj key "get")
+          (declare (ignore stored-key))
           (if found value default))))
+
+(defun py-dict-keys-list (obj)
+  (let ((keys (py-dict-object-keys obj))
+        (items '()))
+    (loop for index from 0 below (fill-pointer keys)
+          do (push (aref keys index) items))
+    (apply #'make-py-list (nreverse items))))
+
+(defun py-dict-values-list (obj)
+  (let ((storage (py-dict-storage obj "values"))
+        (keys (py-dict-object-keys obj))
+        (items '()))
+    (loop for index from 0 below (fill-pointer keys)
+          for key = (aref keys index)
+          do (push (gethash key storage) items))
+    (apply #'make-py-list (nreverse items))))
+
+(defun py-dict-items-list (obj)
+  (let ((storage (py-dict-storage obj "items"))
+        (keys (py-dict-object-keys obj))
+        (items '()))
+    (loop for index from 0 below (fill-pointer keys)
+          for key = (aref keys index)
+          do (push (make-py-tuple key (gethash key storage)) items))
+    (apply #'make-py-list (nreverse items))))
+
+(setf (py-type-attr *py-dict-type* "keys")
+      (lambda (obj)
+        (py-dict-keys-list obj)))
+
+(setf (py-type-attr *py-dict-type* "values")
+      (lambda (obj)
+        (py-dict-values-list obj)))
+
+(setf (py-type-attr *py-dict-type* "items")
+      (lambda (obj)
+        (py-dict-items-list obj)))
 
 (defparameter +py-dict-pop-missing-default+ (gensym "PY-DICT-POP-MISSING-DEFAULT"))
 
@@ -9755,7 +14662,7 @@
             ((not (eq default +py-dict-pop-missing-default+))
              default)
             (t
-             (error "~S" key))))))
+             (py-raise-type *py-key-error-type* (format nil "~S" key)))))))
 
 (setf (py-type-attr *py-dict-type* "setdefault")
       (lambda (obj key &optional (default *py-none*))
@@ -9826,6 +14733,19 @@
 (setf (py-type-attr *py-bytes-type* "__iter__")
       (lambda (obj)
         (py-iter obj)))
+
+(setf (py-type-attr *py-bytes-type* "decode")
+      (lambda (obj &optional (encoding *py-none*) (errors *py-none*))
+        (declare (ignore errors))
+        (let ((normalized-encoding (if (or (eq encoding *py-none*)
+                                           (and (stringp encoding)
+                                                (member (string-downcase encoding)
+                                                        '("utf-8" "utf8")
+                                                        :test #'string=)))
+                                       :utf-8
+                                       :utf-8)))
+          (sb-ext:octets-to-string (py-bytes-storage obj "decode")
+                                   :external-format normalized-encoding))))
 
 (setf (py-type-attr *py-tuple-type* "__contains__")
       (lambda (obj value)
@@ -9947,6 +14867,148 @@
                               :size size
                               :value storage))))
 
+(defun py-union-expression-part (value)
+  (cond
+    ((stringp value) value)
+    ((py-type-p value) (py-type-name value))
+    ((py-callable-p value) (py-callable-name value))
+    ((py-cpython-object-p value)
+     (let ((display (if *py-cpython-display*
+                        (funcall *py-cpython-display* value)
+                        "")))
+       (if (and (>= (length display) 9)
+                (string= (subseq display 0 8) "<class '")
+                (char= (char display (1- (length display))) #\>))
+           (subseq display 8 (- (length display) 2))
+           display)))
+    (t nil)))
+
+(defun py-bitor (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (cond
+      ((and (integerp normalized-left) (integerp normalized-right))
+       (logior normalized-left normalized-right))
+      (t
+       (let ((left-result (handler-case
+                              (py-call-attr left "__or__" right)
+                            (error () *py-not-implemented*))))
+         (if (not (py-not-implemented-value-p left-result))
+             left-result
+             (let ((right-result (handler-case
+                                     (py-call-attr right "__ror__" left)
+                                   (error () *py-not-implemented*))))
+               (if (not (py-not-implemented-value-p right-result))
+                   right-result
+                   (let ((left-part (py-union-expression-part left))
+                         (right-part (py-union-expression-part right)))
+                     (if (and left-part right-part)
+                         (format nil "~A | ~A" left-part right-part)
+                         (if (or (py-type-p left) (py-cpython-object-p left)) left right)))))))))))
+
+(defun py-not-implemented-value-p (value)
+  (or (eq value *py-not-implemented*)
+      (and (py-cpython-object-p value)
+           (string= (with-output-to-string (stream) (py-display value stream))
+                    "NotImplemented"))))
+
+(defun py-iterable-intersection (left right)
+  (handler-case
+      (let ((left-items (py-iterable-to-list left))
+            (right-items (py-iterable-to-list right))
+            (result '()))
+        (dolist (left-item left-items)
+          (when (loop for right-item in right-items
+                      thereis (py-truthy-p (py-eq left-item right-item)))
+            (unless (loop for existing in result
+                          thereis (py-truthy-p (py-eq left-item existing)))
+              (push left-item result))))
+        (apply #'make-py-list (nreverse result)))
+    (error () *py-not-implemented*)))
+
+(defun py-bitand (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (cond
+      ((and (integerp normalized-left) (integerp normalized-right))
+       (logand normalized-left normalized-right))
+      (t
+       (let ((left-result (handler-case
+                              (py-call-attr left "__and__" right)
+                            (error () *py-not-implemented*))))
+         (if (not (py-not-implemented-value-p left-result))
+             left-result
+             (let ((right-result (handler-case
+                                     (py-call-attr right "__rand__" left)
+                                   (error () *py-not-implemented*))))
+               (if (not (py-not-implemented-value-p right-result))
+                   right-result
+                   (let ((intersection (py-iterable-intersection left right)))
+                     (if (not (py-not-implemented-value-p intersection))
+                         intersection
+                         (py-raise-type *py-type-error-type* "unsupported operand type(s) for &: operands")))))))))))
+
+(defun py-bitxor (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (cond
+      ((and (integerp normalized-left) (integerp normalized-right))
+       (logxor normalized-left normalized-right))
+      (t
+       (let ((left-result (handler-case
+                              (py-call-attr left "__xor__" right)
+                            (error () *py-not-implemented*))))
+         (if (not (py-not-implemented-value-p left-result))
+             left-result
+             (let ((right-result (handler-case
+                                     (py-call-attr right "__rxor__" left)
+                                   (error () *py-not-implemented*))))
+               (if (not (py-not-implemented-value-p right-result))
+                   right-result
+                   (py-raise-type *py-type-error-type* "unsupported operand type(s) for ^")))))))))
+
+(defun py-lshift (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (cond
+      ((and (integerp normalized-left) (integerp normalized-right))
+       (when (< normalized-right 0)
+         (py-raise-type *py-value-error-type* "negative shift count"))
+       (ash normalized-left normalized-right))
+      (t
+       (let ((left-result (handler-case
+                              (py-call-attr left "__lshift__" right)
+                            (error () *py-not-implemented*))))
+         (if (not (py-not-implemented-value-p left-result))
+             left-result
+             (let ((right-result (handler-case
+                                     (py-call-attr right "__rlshift__" left)
+                                   (error () *py-not-implemented*))))
+               (if (not (py-not-implemented-value-p right-result))
+                   right-result
+                   (py-raise-type *py-type-error-type* "unsupported operand type(s) for <<")))))))))
+
+(defun py-rshift (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (cond
+      ((and (integerp normalized-left) (integerp normalized-right))
+       (when (< normalized-right 0)
+         (py-raise-type *py-value-error-type* "negative shift count"))
+       (ash normalized-left (- normalized-right)))
+      (t
+       (let ((left-result (handler-case
+                              (py-call-attr left "__rshift__" right)
+                            (error () *py-not-implemented*))))
+         (if (not (py-not-implemented-value-p left-result))
+             left-result
+             (let ((right-result (handler-case
+                                     (py-call-attr right "__rrshift__" left)
+                                   (error () *py-not-implemented*))))
+               (if (not (py-not-implemented-value-p right-result))
+                   right-result
+                   (py-raise-type *py-type-error-type* "unsupported operand type(s) for >>")))))))))
+
 (defun py-add (left right)
   (let ((normalized-left (py-normalize-bool-number left))
         (normalized-right (py-normalize-bool-number right)))
@@ -9967,6 +15029,18 @@
                               :size (fill-pointer result-storage)
                               :value result-storage
                               :allocated (array-total-size result-storage))))
+      ((and (py-bytes-object-p left) (py-bytes-object-p right))
+       (let* ((left-size (or (py-object-size left) 0))
+              (right-size (or (py-object-size right) 0))
+              (result-storage (make-array (+ left-size right-size)
+                                          :element-type '(unsigned-byte 8))))
+         (loop for index from 0 below left-size
+               do (setf (aref result-storage index)
+                        (aref (py-bytes-storage left "+") index)))
+         (loop for index from 0 below right-size
+               do (setf (aref result-storage (+ left-size index))
+                        (aref (py-bytes-storage right "+") index)))
+         (make-py-bytes-from-vector result-storage)))
       ((and (py-tuple-object-p left) (py-tuple-object-p right))
        (let* ((left-size (or (py-object-size left) 0))
               (right-size (or (py-object-size right) 0))
@@ -9981,8 +15055,23 @@
          (make-py-tuple-object :type *py-tuple-type*
                                :size result-size
                                :value result-storage)))
+      ((and *py-cpython-add*
+            (or (py-cpython-object-p left) (py-cpython-object-p right)))
+       (funcall *py-cpython-add* left right))
       (t
        (error "Unsupported Python + between ~S and ~S" left right)))))
+
+(defun py-sub (left right)
+  (let ((normalized-left (py-normalize-bool-number left))
+        (normalized-right (py-normalize-bool-number right)))
+    (cond
+      ((and (numberp normalized-left) (numberp normalized-right))
+       (- normalized-left normalized-right))
+      ((and *py-cpython-sub*
+            (or (py-cpython-object-p left) (py-cpython-object-p right)))
+       (funcall *py-cpython-sub* left right))
+      (t
+       (error "Unsupported Python - between ~S and ~S" left right)))))
 
 (defun py-iadd (left right)
   (if (py-list-object-p left)
@@ -10049,6 +15138,18 @@
       (dotimes (_ repeat-count)
         (princ value stream)))))
 
+(defun py-bytes-repeat (value count)
+  (let* ((repeat-count (max count 0))
+         (input (py-bytes-storage value "*"))
+         (input-size (length input))
+         (result (make-array (* input-size repeat-count)
+                             :element-type '(unsigned-byte 8))))
+    (loop for repeat-index from 0 below repeat-count
+          do (loop for index from 0 below input-size
+                   do (setf (aref result (+ (* repeat-index input-size) index))
+                            (aref input index))))
+    (make-py-bytes-from-vector result)))
+
 (defun py-mul (left right)
   (let ((normalized-left (py-normalize-bool-number left))
         (normalized-right (py-normalize-bool-number right)))
@@ -10063,10 +15164,17 @@
        (py-tuple-repeat left normalized-right))
       ((and (integerp normalized-left) (py-tuple-object-p right))
        (py-tuple-repeat right normalized-left))
+      ((and (py-bytes-object-p left) (integerp normalized-right))
+       (py-bytes-repeat left normalized-right))
+      ((and (integerp normalized-left) (py-bytes-object-p right))
+       (py-bytes-repeat right normalized-left))
       ((and (stringp left) (integerp normalized-right))
        (py-string-repeat left normalized-right))
       ((and (integerp normalized-left) (stringp right))
        (py-string-repeat right normalized-left))
+      ((and *py-cpython-mul*
+            (or (py-cpython-object-p left) (py-cpython-object-p right)))
+       (funcall *py-cpython-mul* left right))
       (t
        (error "Unsupported Python * between ~S and ~S" left right)))))
 
@@ -10074,24 +15182,30 @@
   (let ((normalized-left (py-normalize-bool-number left))
         (normalized-right (py-normalize-bool-number right))
         (normalized-modulus (py-normalize-bool-number modulus)))
-    (unless (and (numberp normalized-left) (numberp normalized-right))
-      (error "Unsupported Python ** or pow() between ~S and ~S" left right))
-    (if (eq modulus *py-none*)
-        (let ((result (expt normalized-left normalized-right)))
-          (if (and (integerp normalized-left)
-                   (integerp normalized-right)
-                   (< normalized-right 0))
-              (float result)
-              result))
-        (progn
-          (unless (and (integerp normalized-left)
-                       (integerp normalized-right)
-                       (integerp normalized-modulus))
-            (error "pow() 3rd argument only supported for integers"))
-          (when (= normalized-modulus 0)
-            (error "pow() 3rd argument cannot be 0"))
-          (mod (expt normalized-left normalized-right)
-               normalized-modulus)))))
+    (cond
+      ((and (numberp normalized-left) (numberp normalized-right))
+       (if (eq modulus *py-none*)
+           (let ((result (expt normalized-left normalized-right)))
+             (if (and (integerp normalized-left)
+                      (integerp normalized-right)
+                      (< normalized-right 0))
+                 (float result)
+                 result))
+           (progn
+             (unless (and (integerp normalized-left)
+                          (integerp normalized-right)
+                          (integerp normalized-modulus))
+               (error "pow() 3rd argument only supported for integers"))
+             (when (= normalized-modulus 0)
+               (error "pow() 3rd argument cannot be 0"))
+             (mod (expt normalized-left normalized-right)
+                  normalized-modulus))))
+      ((and *py-cpython-pow*
+            (eq modulus *py-none*)
+            (or (py-cpython-object-p left) (py-cpython-object-p right)))
+       (funcall *py-cpython-pow* left right))
+      (t
+       (error "Unsupported Python ** or pow() between ~S and ~S" left right)))))
 
 (defun py-truediv (left right)
   (let ((normalized-left (py-normalize-bool-number left))
@@ -10101,26 +15215,41 @@
        (py-path-joinpath left right))
       ((and (numberp normalized-left) (numberp normalized-right))
        (float (/ normalized-left normalized-right)))
+      ((and *py-cpython-truediv*
+            (or (py-cpython-object-p left) (py-cpython-object-p right)))
+       (funcall *py-cpython-truediv* left right))
       (t
        (error "Unsupported Python / between ~S and ~S" left right)))))
 
 (defun py-floordiv (left right)
   (let ((normalized-left (py-normalize-bool-number left))
         (normalized-right (py-normalize-bool-number right)))
-    (if (and (numberp normalized-left) (numberp normalized-right))
-        (floor normalized-left normalized-right)
-        (error "Unsupported Python // between ~S and ~S" left right))))
+    (cond
+      ((and (numberp normalized-left) (numberp normalized-right))
+       (floor normalized-left normalized-right))
+      ((and *py-cpython-floordiv*
+            (or (py-cpython-object-p left) (py-cpython-object-p right)))
+       (funcall *py-cpython-floordiv* left right))
+      (t
+       (error "Unsupported Python // between ~S and ~S" left right)))))
 
 (defun py-mod (left right)
   (let ((normalized-left (py-normalize-bool-number left))
         (normalized-right (py-normalize-bool-number right)))
-    (if (and (numberp normalized-left) (numberp normalized-right))
-        (mod normalized-left normalized-right)
-        (error "Unsupported Python % between ~S and ~S" left right))))
+    (cond
+      ((and (numberp normalized-left) (numberp normalized-right))
+       (mod normalized-left normalized-right))
+      (*py-cpython-mod*
+       (funcall *py-cpython-mod* left right))
+      (t
+       (error "Unsupported Python % between ~S and ~S" left right)))))
 
 (defun py-divmod (left right)
-  (make-py-tuple (py-floordiv left right)
-                 (py-mod left right)))
+  (if (and *py-cpython-divmod*
+           (or (py-cpython-object-p left) (py-cpython-object-p right)))
+      (funcall *py-cpython-divmod* left right)
+      (make-py-tuple (py-floordiv left right)
+                     (py-mod left right))))
 
 (defun py-number-to-base (value base prefix)
   (let ((normalized-value (py-normalize-bool-number value)))
@@ -10157,6 +15286,19 @@
                (length value))
         (error "ord() expected string of length 1, got ~S" value)))
   (char-code (char value 0)))
+
+(defun py-matmul (left right)
+  (let ((left-result (handler-case
+                         (py-call-attr left "__matmul__" right)
+                       (error () *py-not-implemented*))))
+    (if (not (py-not-implemented-value-p left-result))
+        left-result
+        (let ((right-result (handler-case
+                                (py-call-attr right "__rmatmul__" left)
+                              (error () *py-not-implemented*))))
+          (if (not (py-not-implemented-value-p right-result))
+              right-result
+              (py-raise-type *py-type-error-type* "unsupported operand type(s) for @"))))))
 
 (defun py-imul (left right)
   (let ((normalized-right (py-normalize-bool-number right)))
@@ -10228,18 +15370,34 @@
      :index normalized-start
      :result (make-py-tuple *py-none* *py-none*))))
 
-(defun py-zip (&rest iterables)
-  (let ((iterator-tuple
-          (apply #'make-py-tuple
-                 (loop for iterable in iterables
-                       collect (py-iter iterable))))
-        (result-tuple
-          (apply #'make-py-tuple
-                 (loop for _ in iterables
-                       collect *py-none*))))
-    (make-py-zip-object :type *py-zip-type*
-                        :iterators iterator-tuple
-                        :result result-tuple)))
+(defun py-zip (&rest args)
+  (let ((strict nil)
+        (iterables '()))
+    (loop while args
+          for item = (pop args)
+          do (cond
+               ((keywordp item)
+                (let ((name (py-keyword-argument-name item)))
+                  (unless (string= name "strict")
+                    (py-raise-type *py-type-error-type* (format nil "zip() got an unexpected keyword argument '~A'" name)))
+                  (unless args
+                    (py-raise-type *py-type-error-type* "zip() keyword argument strict has no value"))
+                  (setf strict (py-truthy-p (pop args)))))
+               (t
+                (push item iterables))))
+    (setf iterables (nreverse iterables))
+    (let ((iterator-tuple
+            (apply #'make-py-tuple
+                   (loop for iterable in iterables
+                         collect (py-iter iterable))))
+          (result-tuple
+            (apply #'make-py-tuple
+                   (loop for _ in iterables
+                         collect *py-none*))))
+      (make-py-zip-object :type *py-zip-type*
+                          :iterators iterator-tuple
+                          :result result-tuple
+                          :strict strict))))
 
 (defun py-filter (predicate iterable)
   (make-py-filter-object :type *py-filter-type*
@@ -10342,6 +15500,9 @@
 (defun py-iter (obj)
   (cond
     ((py-iterator-p obj) obj)
+    ((py-generator-object-p obj) obj)
+    ((and (py-cpython-object-p obj) *py-cpython-iter*)
+     (funcall *py-cpython-iter* obj))
     ((stringp obj)
      (make-py-string-iterator-object :type *py-string-iterator-type*
                                      :sequence obj
@@ -10368,6 +15529,16 @@
                                        :index 0
                                        :used (or (py-object-size obj) 0)
                                        :remaining (or (py-object-size obj) 0)))
+    ((py-type-p obj)
+     (let ((members (handler-case
+                        (py-lookup-attr obj "__clamp_enum_members__")
+                      (py-exception () nil)
+                      (error () nil))))
+       (if (and members (not (eq members *py-none*)))
+           (py-iter members)
+           (error "Python object of type ~A is not iterable" (py-type-name (py-type-of obj))))))
+    ((and (py-object-p obj) (py-type-annotation-names (py-type-of obj)))
+     (py-iter (apply #'make-py-tuple (py-object-annotation-values obj))))
     (t
      (error "Python object of type ~A is not iterable"
             (if (py-object-p obj)
@@ -10402,10 +15573,20 @@
                                 (py-range-object-step obj))
                              (- (py-range-object-step obj))))
         :index 0)))
+    ((py-cpython-object-p obj)
+     (handler-case
+         (py-call-attr obj "__reversed__")
+       (py-exception ()
+         (py-reversed (apply #'make-py-list (py-iterable-to-list obj))))
+       (error ()
+         (py-reversed (apply #'make-py-list (py-iterable-to-list obj))))))
     (t
      (error "Python object of type ~A is not reversible"
             (if (py-object-p obj)
-                (py-type-name (py-type-of obj))
+                (let ((type (py-type-of obj)))
+                  (if (py-type-p type)
+                      (py-type-name type)
+                      (with-output-to-string (stream) (py-display type stream))))
                 (type-of obj))))))
 
 (defun py-extreme (operation args)
@@ -10458,16 +15639,43 @@
           (return result))
         (setf result (py-add result item))))))
 
-(defun py-sorted (iterable)
-  (let ((result (make-py-list))
-        (iterator (py-iter iterable)))
-    (loop
-      (multiple-value-bind (item found) (py-next-item iterator)
-        (unless found
-          (return))
-        (py-append result item)))
-    (py-call-attr result "sort")
-    result))
+(defun py-sorted (iterable &rest args)
+  (let ((key *py-none*)
+        (reverse nil))
+    (loop while args
+          for item = (pop args)
+          do (cond
+               ((keywordp item)
+                (unless args
+                  (py-raise-type *py-type-error-type* "keyword argument has no value"))
+                (let ((name (py-keyword-argument-name item))
+                      (value (pop args)))
+                  (cond
+                    ((string= name "key")
+                     (setf key value))
+                    ((string= name "reverse")
+                     (setf reverse (py-truthy-p value)))
+                    (t
+                     (py-raise-type *py-type-error-type*
+                                    (format nil "sorted() got an unexpected keyword argument '~A'" name))))))
+               (t
+                (py-raise-type *py-type-error-type* "sorted() expected at most 1 positional argument"))))
+    (let ((result (make-py-list))
+          (iterator (py-iter iterable)))
+      (loop
+        (multiple-value-bind (item found) (py-next-item iterator)
+          (unless found
+            (return))
+          (py-append result item)))
+      (let ((storage (py-list-storage result "sorted")))
+        (stable-sort storage
+                     (lambda (left right)
+                       (let ((left-key (if (eq key *py-none*) left (py-invoke-callable key left)))
+                             (right-key (if (eq key *py-none*) right (py-invoke-callable key right))))
+                         (if reverse
+                             (py-truthy-p (py-lt right-key left-key))
+                             (py-truthy-p (py-lt left-key right-key)))))))
+      result)))
 
 (defun py-list (&optional (iterable *py-none*))
   (let ((result (make-py-list)))
@@ -10511,6 +15719,10 @@
 
 (defun py-next (iterator)
   (cond
+    ((and (py-cpython-object-p iterator) *py-cpython-next*)
+     (funcall *py-cpython-next* iterator))
+    ((py-generator-object-p iterator)
+     (py-generator-next iterator))
     ((py-forward-list-iterator-p iterator)
      (let* ((sequence (py-list-iterator-object-sequence iterator))
             (index (py-list-iterator-object-index iterator))
@@ -10597,15 +15809,24 @@
        result))
     ((py-zip-object-p iterator)
      (let* ((iterators (py-zip-object-iterators iterator))
-            (iterator-count (or (py-object-size iterators) 0)))
+            (iterator-count (or (py-object-size iterators) 0))
+            (items '())
+            (exhausted nil))
        (when (= iterator-count 0)
          (py-raise *py-stop-iteration*))
-       (let ((items
-               (loop for index from 0 below iterator-count
-                     collect (py-next (aref (py-object-value iterators) index)))))
-         (let ((result (apply #'make-py-tuple items)))
-           (setf (py-zip-object-result iterator) result)
-           result))))
+       (loop for index from 0 below iterator-count
+             do (multiple-value-bind (item found)
+                    (py-next-item (aref (py-object-value iterators) index))
+                  (if found
+                      (push item items)
+                      (setf exhausted t))))
+       (when exhausted
+         (when (and (py-zip-object-strict iterator) items)
+           (py-raise-type *py-value-error-type* "zip() argument lengths differ"))
+         (py-raise *py-stop-iteration*))
+       (let ((result (apply #'make-py-tuple (nreverse items))))
+         (setf (py-zip-object-result iterator) result)
+         result)))
     ((py-filter-object-p iterator)
      (loop
        (let* ((item (py-next (py-filter-object-iterator iterator)))
@@ -11075,11 +16296,14 @@
                  (concatenate 'string mantissa "e" (write-to-string exponent))))
            raw)))
     (t (write-to-string value))))
-
 (defun py-repr (value &optional (stream *standard-output*))
   (cond
     ((py-type-p value)
      (format stream "<class '~A'>" (py-type-name value)))
+    ((py-cpython-object-p value)
+     (if *py-cpython-repr*
+         (princ (funcall *py-cpython-repr* value) stream)
+         (princ "<CPython object>" stream)))
     ((stringp value) (py-string-repr value stream))
     ((py-list-object-p value)
      (py-list-repr value stream))
@@ -11143,6 +16367,10 @@
     ((py-range-object-p value) (py-repr value stream))
     ((py-range-iterator-p value) (princ "<range_iterator>" stream))
     ((py-dict-key-iterator-p value) (princ "<dict_keyiterator>" stream))
+    ((py-cpython-object-p value)
+     (if *py-cpython-display*
+         (princ (funcall *py-cpython-display* value) stream)
+         (princ "<CPython object>" stream)))
     ((py-type-p value) (py-repr value stream))
     ((py-list-object-p value) (py-repr value stream))
     ((py-bytes-object-p value) (py-repr value stream))
@@ -11164,12 +16392,41 @@
   (py-call-attr obj "pop" index))
 
 (defun py-getitem (obj index)
-  (if (stringp obj)
-      (py-string-getitem obj index)
-      (py-call-attr obj "__getitem__" index)))
+  (cond
+    ((stringp obj)
+     (py-string-getitem obj index))
+    ((and (py-cpython-object-p obj) *py-cpython-getitem*)
+     (funcall *py-cpython-getitem* obj index))
+    ((and *py-cpython-generic-alias*
+          (py-callable-p obj)
+          (member (py-callable-name obj) '("list" "tuple" "dict") :test #'string=))
+     (funcall *py-cpython-generic-alias* obj index))
+    ((py-type-p obj)
+     (multiple-value-bind (attr found) (py-find-type-attr obj "__class_getitem__")
+       (cond
+         ((py-pydantic-generic-model-type-p obj)
+          (py-pydantic-generic-submodel obj index))
+         (found
+          (py-invoke-callable
+           (if (and (py-callable-p attr)
+                    (not (eq (py-callable-binding-kind attr) :static-method)))
+               (py-bound-callable-wrapper attr obj)
+               (py-bind-descriptor-attr attr obj :class-access t))
+           index))
+         ((and *py-cpython-generic-alias*
+               (member obj (list *py-list-type* *py-tuple-type* *py-dict-type*)
+                       :test #'eq))
+          (funcall *py-cpython-generic-alias* obj index))
+         (t obj))))
+    (t
+     (py-call-attr obj "__getitem__" index))))
 
 (defun py-setitem (obj index value)
-  (py-call-attr obj "__setitem__" index value))
+  (if (and (py-cpython-object-p obj) *py-cpython-setitem*)
+      (funcall *py-cpython-setitem* obj index value)
+      (py-call-attr obj "__setitem__" index value)))
 
 (defun py-delitem (obj index)
-  (py-call-attr obj "__delitem__" index))
+  (if (and (py-cpython-object-p obj) *py-cpython-delitem*)
+      (funcall *py-cpython-delitem* obj index)
+      (py-call-attr obj "__delitem__" index)))
