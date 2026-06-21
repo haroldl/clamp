@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import socket
 import subprocess
 import sys
@@ -115,7 +116,7 @@ EXAMPLE_135 = TEST_DIR / "example_135.py"
 EXAMPLE_137 = TEST_DIR / "example_137.py"
 EXAMPLE_144 = TEST_DIR / "example_144.py"
 CPYTHON_314 = Path.home() / "local" / "Python-3.14.5" / "python"
-PYDANTIC_MAIN = Path.home() / "local" / "pydantic-main"
+PYDANTIC_MAIN = Path(os.environ.get("PYDANTIC_MAIN", "~/local/pydantic-main")).expanduser()
 PYDANTIC_CORE_PYTHON = PYDANTIC_MAIN / "pydantic-core" / "python"
 
 

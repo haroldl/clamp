@@ -1,9 +1,12 @@
 import sys
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass as std_dataclass, field as dataclass_field, is_dataclass
+from os import environ
+from pathlib import Path
 
-sys.path.insert(0, "/home/harold/local/pydantic-main/pydantic-core/python")
-sys.path.insert(0, "/home/harold/local/pydantic-main")
+PYDANTIC_MAIN = Path(environ.get("PYDANTIC_MAIN", "~/local/pydantic-main")).expanduser()
+sys.path.insert(0, str(PYDANTIC_MAIN / "pydantic-core" / "python"))
+sys.path.insert(0, str(PYDANTIC_MAIN))
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, RootModel, TypeAdapter, computed_field, field_serializer, field_validator, model_validator, validate_call
 from pydantic_core import SchemaValidator, ValidationError

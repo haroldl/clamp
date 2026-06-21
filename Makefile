@@ -1,5 +1,7 @@
 .PHONY: all clean run deps test
 
+PYDANTIC_MAIN ?= $(HOME)/local/pydantic-main
+
 all: clamp
 
 clamp: clamp.lisp clamp-internals.lisp clamp_compiler.py clamp-builtins.lisp
@@ -15,4 +17,4 @@ deps: requirements.txt
 	pip install -r requirements.txt
 
 test:
-	pytest test/
+	PYDANTIC_MAIN="$(PYDANTIC_MAIN)" pytest test/
